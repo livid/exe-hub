@@ -84,29 +84,34 @@ func TestIngestFeedAndReplies(t *testing.T) {
 	p2 := ingest(t, s, bob, "post.create", map[string]string{"text": "second"})
 	r1 := ingest(t, s, bob, "post.create", map[string]string{"text": "re: first", "reply_to": p1})
 
-	feed, err := s.Feed("", 50)
+	// the home feed hides replies; replies=1 shows everything
+	feed, err := s.Feed("", 50, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(feed) != 3 {
-		t.Fatalf("feed len %d, want 3", len(feed))
+	if len(feed) != 2 {
+		t.Fatalf("feed len %d, want 2 (reply hidden)", len(feed))
 	}
-	if feed[0].ID != r1 || feed[2].ID != p1 {
-		t.Fatalf("feed order wrong: %v", []string{feed[0].ID, feed[1].ID, feed[2].ID})
+	if feed[0].ID != p2 || feed[1].ID != p1 {
+		t.Fatalf("feed order wrong: %v", []string{feed[0].ID, feed[1].ID})
 	}
-	if feed[2].AuthorName != "Alice" {
-		t.Fatalf("author name not joined: %q", feed[2].AuthorName)
+	if feed[1].AuthorName != "Alice" {
+		t.Fatalf("author name not joined: %q", feed[1].AuthorName)
 	}
-	if feed[2].Replies != 1 {
-		t.Fatalf("reply count %d, want 1", feed[2].Replies)
+	if feed[1].Replies != 1 {
+		t.Fatalf("reply count %d, want 1", feed[1].Replies)
+	}
+	all, err := s.Feed("", 50, true)
+	if err != nil || len(all) != 3 || all[0].ID != r1 {
+		t.Fatalf("replies=1 feed: %v len %d", err, len(all))
 	}
 
-	// keyset pagination: page of 2, then the rest
-	page, err := s.Feed("", 2)
-	if err != nil || len(page) != 2 {
+	// keyset pagination: page of 1, then the rest
+	page, err := s.Feed("", 1, false)
+	if err != nil || len(page) != 1 {
 		t.Fatalf("page1: %v len %d", err, len(page))
 	}
-	page2, err := s.Feed(page[1].ID, 2)
+	page2, err := s.Feed(page[0].ID, 2, false)
 	if err != nil || len(page2) != 1 || page2[0].ID != p1 {
 		t.Fatalf("page2 wrong: %v", page2)
 	}
@@ -183,7 +188,7 @@ func TestDeleteOwnershipAndPins(t *testing.T) {
 	if len(unpin) != 1 || unpin[0] != "bafytestcid234567" {
 		t.Fatalf("unpin %v", unpin)
 	}
-	if feed, _ := s.Feed("", 50); len(feed) != 0 {
+	if feed, _ := s.Feed("", 50, false); len(feed) != 0 {
 		t.Fatalf("post still in feed after delete")
 	}
 	// the log still holds the embed post whose pin row is now gone —
@@ -266,7 +271,7 @@ func TestRebuild(t *testing.T) {
 	if err := s.Rebuild(); err != nil {
 		t.Fatal(err)
 	}
-	feed, err := s.Feed("", 50)
+	feed, err := s.Feed("", 50, false)
 	if err != nil || len(feed) != 1 || feed[0].ID != p1 {
 		t.Fatalf("rebuilt feed wrong: %v %v", feed, err)
 	}

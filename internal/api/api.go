@@ -320,7 +320,8 @@ func (s *Server) writeFeed(w http.ResponseWriter, posts []store.FeedPost, err er
 }
 
 func (s *Server) handleFeed(w http.ResponseWriter, r *http.Request) {
-	posts, err := s.St.Feed(r.URL.Query().Get("before"), limitParam(r))
+	posts, err := s.St.Feed(r.URL.Query().Get("before"), limitParam(r),
+		r.URL.Query().Get("replies") == "1")
 	s.writeFeed(w, posts, err)
 }
 

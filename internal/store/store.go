@@ -430,13 +430,15 @@ func (s *Store) cursor(before string) (int64, string, error) {
 }
 
 // Feed is the aggregated timeline, newest first, keyset-paginated.
-func (s *Store) Feed(before string, limit int) ([]FeedPost, error) {
+// Replies are excluded unless withReplies — they belong to their thread,
+// not the home feed.
+func (s *Store) Feed(before string, limit int, withReplies bool) ([]FeedPost, error) {
 	recv, bid, err := s.cursor(before)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(feedQuery+`WHERE (p.received, p.id) < (?, ?) ORDER BY p.received DESC, p.id DESC LIMIT ?`,
-		recv, bid, limit)
+	rows, err := s.db.Query(feedQuery+`WHERE (? OR p.reply_to = '') AND (p.received, p.id) < (?, ?) ORDER BY p.received DESC, p.id DESC LIMIT ?`,
+		withReplies, recv, bid, limit)
 	if err != nil {
 		return nil, err
 	}

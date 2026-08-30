@@ -196,7 +196,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication.
 - `GET  /v1/seq?author=<pubkey b64>` — the author's last accepted seq;
   clients fetch it to number their next message.
-- `GET  /v1/feed?before=<id>&limit=` — aggregated feed.
+- `GET  /v1/feed?before=<id>&limit=` — aggregated feed. Replies are
+  excluded (they belong to their thread; reply counts on the parents keep
+  them discoverable) unless `replies=1` is passed.
 - `GET  /v1/profile/{id}` — profile info.
 - `GET  /v1/profile/{id}/feed` — one author's feed.
 - `GET  /v1/post/{id}` — one post plus its replies (oldest-first, keyset-
