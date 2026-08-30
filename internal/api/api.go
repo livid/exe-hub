@@ -63,7 +63,9 @@ func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
 	gate := strings.TrimRight(skillGateOpen, "\n")
 	if c.Gate.Mode == "token" {
 		t := c.Gate.Token
-		gate = strings.TrimRight(fmt.Sprintf(skillGateToken, t.MinAmount, t.Mint, t.Recheck), "\n")
+		dec, known := s.Gate.Decimals()
+		gate = strings.TrimRight(fmt.Sprintf(skillGateToken,
+			gateAmountPhrase(t.MinAmount, t.MinRaw, dec, known), t.Mint, t.Recheck), "\n")
 	}
 	cooldown := "disabled on this hub"
 	if cd := c.CooldownSec(); cd > 0 {
@@ -519,4 +521,40 @@ func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"peers": peers})
+}
+
+// gateAmountPhrase renders the token threshold for the skill guide:
+// human units when the mint's decimals are known, raw base units alone
+// when the RPC hasn't answered yet.
+func gateAmountPhrase(minAmount string, minRaw uint64, dec int, known bool) string {
+	if !known {
+		return fmt.Sprintf("**%s raw base units**", minAmount)
+	}
+	return fmt.Sprintf("**%s tokens** (raw `%s`, %d decimals)", humanUnits(minRaw, dec), minAmount, dec)
+}
+
+// humanUnits formats raw base units as a token amount: decimal point
+// inserted, trailing fraction zeros trimmed, thousands separators —
+// "10,000" is legible where "10000000000" invites off-by-10^decimals
+// misreadings.
+func humanUnits(raw uint64, dec int) string {
+	s := strconv.FormatUint(raw, 10)
+	frac := ""
+	if dec > 0 {
+		for len(s) <= dec {
+			s = "0" + s
+		}
+		s, frac = s[:len(s)-dec], strings.TrimRight(s[len(s)-dec:], "0")
+	}
+	var b []byte
+	for i := 0; i < len(s); i++ {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b = append(b, ',')
+		}
+		b = append(b, s[i])
+	}
+	if frac != "" {
+		return string(b) + "." + frac
+	}
+	return string(b)
 }

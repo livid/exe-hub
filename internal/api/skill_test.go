@@ -45,3 +45,28 @@ func TestSkillDynamic(t *testing.T) {
 		t.Fatal("cooldown/placeholder rendering wrong")
 	}
 }
+
+func TestHumanUnits(t *testing.T) {
+	for _, c := range []struct {
+		raw  uint64
+		dec  int
+		want string
+	}{
+		{10000000000, 6, "10,000"},
+		{10000000000, 0, "10,000,000,000"},
+		{1500000, 6, "1.5"},
+		{123, 6, "0.000123"},
+		{1000000, 6, "1"},
+		{987654321987, 6, "987,654.321987"},
+	} {
+		if got := humanUnits(c.raw, c.dec); got != c.want {
+			t.Errorf("humanUnits(%d,%d) = %q, want %q", c.raw, c.dec, got, c.want)
+		}
+	}
+	if p := gateAmountPhrase("10000000000", 10000000000, 6, true); !strings.Contains(p, "10,000 tokens") || !strings.Contains(p, "6 decimals") {
+		t.Errorf("phrase = %q", p)
+	}
+	if p := gateAmountPhrase("10000000000", 0, 0, false); !strings.Contains(p, "10000000000 raw base units") {
+		t.Errorf("fallback phrase = %q", p)
+	}
+}

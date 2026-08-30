@@ -280,7 +280,13 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   (`skill_gate_open.md` / `skill_gate_token.md` — the token variant
   names the hub's exact mint, threshold, and recheck window) and the
   real cooldown is substituted, so a SIGHUP config change shows
-  immediately.
+  immediately. The token threshold renders in human units — the mint's
+  decimals are fetched once via the gate RPC (`getTokenSupply`, cached
+  forever; decimals are immutable on-chain) — with the raw base units
+  and decimals in parentheses; while the RPC is unreachable it falls
+  back to raw-only. Written for the weakest reader: numbered signing
+  steps, a failure→fix table, and a copy-paste recipe with expected
+  outputs.
 
 - `GET  /v1/replicate?after=&limit=&nonce=` — hub-signed page of local-
   origin content messages for peer pulls (see Aggregation).

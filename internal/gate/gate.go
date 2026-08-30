@@ -32,12 +32,54 @@ type Gate struct {
 	cfg    *config.Holder
 	client *http.Client
 
-	mu    sync.Mutex
-	cache map[string]verdict // solana address -> last verdict
+	mu       sync.Mutex
+	cache    map[string]verdict // solana address -> last verdict
+	decimals map[string]int     // mint -> decimals; immutable on-chain, so cached forever
 }
 
 func New(cfg *config.Holder) *Gate {
-	return &Gate{cfg: cfg, client: &http.Client{Timeout: 15 * time.Second}, cache: map[string]verdict{}}
+	return &Gate{cfg: cfg, client: &http.Client{Timeout: 15 * time.Second},
+		cache: map[string]verdict{}, decimals: map[string]int{}}
+}
+
+// Decimals returns the configured mint's on-chain decimal places (via
+// getTokenSupply, cached forever — a mint's decimals are immutable). ok is
+// false in open mode or while the RPC is unreachable with no cached value;
+// callers fall back to raw base units.
+func (g *Gate) Decimals() (dec int, ok bool) {
+	c := g.cfg.Get()
+	if c.Gate.Mode != "token" {
+		return 0, false
+	}
+	t := &c.Gate.Token
+	g.mu.Lock()
+	dec, cached := g.decimals[t.Mint]
+	g.mu.Unlock()
+	if cached {
+		return dec, true
+	}
+	req, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "getTokenSupply", "params": []any{t.Mint},
+	})
+	resp, err := g.client.Post(t.RPCURL, "application/json", bytes.NewReader(req))
+	if err != nil {
+		return 0, false
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Result struct {
+			Value struct {
+				Decimals *int `json:"decimals"`
+			} `json:"value"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || out.Result.Value.Decimals == nil {
+		return 0, false
+	}
+	g.mu.Lock()
+	g.decimals[t.Mint] = *out.Result.Value.Decimals
+	g.mu.Unlock()
+	return *out.Result.Value.Decimals, true
 }
 
 // Check returns nil if pub may write under the current gate config.
