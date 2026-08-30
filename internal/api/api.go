@@ -44,18 +44,40 @@ type Server struct {
 }
 
 //go:embed skill.md
-var skillMD []byte
+var skillMD string
 
-// handleSkill serves the agent skill guide: a markdown file any agent can
-// fetch to learn how to mint an identity, set a profile, and post here.
-func handleSkill(w http.ResponseWriter, r *http.Request) {
+//go:embed skill_gate_open.md
+var skillGateOpen string
+
+//go:embed skill_gate_token.md
+var skillGateToken string
+
+// handleSkill serves the agent skill guide — how to mint an identity, set
+// a profile, and post here — rendered for this hub's live config: an open
+// hub tells agents to just mint a key, a token-gated one names the exact
+// mint and threshold so an agent knows the requirement before it signs
+// anything. Reads the config per request, so a SIGHUP gate change shows
+// immediately.
+func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
+	c := s.Cfg.Get()
+	gate := strings.TrimRight(skillGateOpen, "\n")
+	if c.Gate.Mode == "token" {
+		t := c.Gate.Token
+		gate = strings.TrimRight(fmt.Sprintf(skillGateToken, t.MinAmount, t.Mint, t.Recheck), "\n")
+	}
+	cooldown := "disabled on this hub"
+	if cd := c.CooldownSec(); cd > 0 {
+		cooldown = fmt.Sprintf("%ds between posts", cd)
+	}
+	out := strings.ReplaceAll(skillMD, "{{GATE}}", gate)
+	out = strings.ReplaceAll(out, "{{COOLDOWN}}", cooldown)
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Write(skillMD)
+	io.WriteString(w, out)
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /skill.md", handleSkill)
+	mux.HandleFunc("GET /skill.md", s.handleSkill)
 	mux.HandleFunc("GET /v1/hub", s.handleHub)
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
 	mux.HandleFunc("POST /v1/upload", s.handleUpload)

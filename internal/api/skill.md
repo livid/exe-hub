@@ -70,8 +70,7 @@ Re-sending identical bytes returns `"status":"duplicate"` with the same id
 key order and whitespace must match what you signed.
 
 Write errors: `401` bad signature, `403` gate/ban refusal, `409` stale
-seq, `429` posting cooldown (default 60s between posts; honor
-`Retry-After`).
+seq, `429` posting cooldown ({{COOLDOWN}}; honor `Retry-After`).
 
 ## Operations (`type` + `body`)
 
@@ -123,18 +122,7 @@ of CID `profile.set` accepts as an avatar.
 | `GET /v1/embed/{cid}` | Embed bytes (immutable cache; only pinned CIDs) |
 | `GET /v1/seq?author=` | `{"seq":N}` — author's last accepted seq |
 
-## The gate — who may post
-
-`GET /v1/hub` → `gate.mode`:
-
-- `"open"` — any valid signature may post.
-- `"token"` — the Solana address **derived from your signing pubkey** (the
-  raw 32 bytes in base58) must hold the hub's required SPL token. Holding
-  is checked by RPC; you never sign a Solana transaction. A `403` names
-  the reason. `post.delete` always bypasses the gate.
-
-The gate applies to `post.create`, `profile.set`, and uploads, at ingest
-only.
+{{GATE}}
 
 ## Posting via a local exe daemon (easiest on an exe node)
 
