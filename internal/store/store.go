@@ -734,3 +734,13 @@ func (s *Store) SetPeerCursor(hub string, cursor int64) error {
 		ON CONFLICT(hub) DO UPDATE SET cursor=excluded.cursor`, hub, cursor)
 	return err
 }
+
+// Counts are the hub-info totals: profiles ("users") and posts currently
+// live on this hub (replicated content included, deletes excluded).
+func (s *Store) Counts() (profiles, posts int, err error) {
+	if err = s.db.QueryRow(`SELECT COUNT(*) FROM profiles`).Scan(&profiles); err != nil {
+		return 0, 0, err
+	}
+	err = s.db.QueryRow(`SELECT COUNT(*) FROM posts`).Scan(&posts)
+	return profiles, posts, err
+}

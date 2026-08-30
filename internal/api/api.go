@@ -121,11 +121,17 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 
 func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
 	c := s.Cfg.Get()
+	profiles, posts, err := s.St.Counts()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":                s.Hub.ID,
 		"pubkey":            s.Hub.PubKey(),
 		"gate":              map[string]string{"mode": c.Gate.Mode},
 		"allow_replication": c.Replicable(),
+		"stats":             map[string]int{"profiles": profiles, "posts": posts},
 	})
 }
 

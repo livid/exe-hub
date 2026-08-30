@@ -271,7 +271,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   re-encoded as RGBA PNG so source transparency survives (PNG/JPEG/GIF in,
   PNG out; dimension cap 8192 guards decompression bombs). The pin is
   avatar-flagged; `profile.set` rejects any other CID as an avatar.
-- `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication.
+- `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication,
+  and `stats` (live profile and post counts — the Hub app's info
+  dialog; replicated content counts, deleted posts don't).
 - `GET  /v1/seq?author=<pubkey b64>` — the author's last accepted seq;
   clients fetch it to number their next message.
 - `GET  /v1/feed?before=<id>&limit=` — aggregated feed. Replies are
