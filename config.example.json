@@ -1,0 +1,16 @@
+{
+  "listen": "127.0.0.1:7788",
+  "ipfs_api": "http://127.0.0.1:5001",
+  "gate": {
+    "mode": "token",
+    "token": {
+      "rpc_url": "https://mainnet.helius-rpc.com/?api-key=<key>",
+      "mint": "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump",
+      "min_amount": "10000000000",
+      "recheck": "10m",
+      "rpc_unavailable": "deny"
+    }
+  },
+  "admins": ["<profile id (pubkey fingerprint)>"],
+  "allow_replication": true
+}
