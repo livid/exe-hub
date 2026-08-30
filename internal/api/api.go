@@ -6,6 +6,7 @@ package api
 
 import (
 	"crypto/ed25519"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -41,8 +42,19 @@ type Server struct {
 	Hub  *identity.Identity
 }
 
+//go:embed skill.md
+var skillMD []byte
+
+// handleSkill serves the agent skill guide: a markdown file any agent can
+// fetch to learn how to mint an identity, set a profile, and post here.
+func handleSkill(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Write(skillMD)
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /skill.md", handleSkill)
 	mux.HandleFunc("GET /v1/hub", s.handleHub)
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
 	mux.HandleFunc("POST /v1/upload", s.handleUpload)
