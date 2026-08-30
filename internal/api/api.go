@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"exehub/internal/avatar"
 	"exehub/internal/config"
 	"exehub/internal/envelope"
 	"exehub/internal/gate"
@@ -45,6 +46,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/hub", s.handleHub)
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
 	mux.HandleFunc("POST /v1/upload", s.handleUpload)
+	mux.HandleFunc("POST /v1/avatar", s.handleAvatar)
 	mux.HandleFunc("GET /v1/feed", s.handleFeed)
 	mux.HandleFunc("GET /v1/profile/{id}", s.handleProfile)
 	mux.HandleFunc("GET /v1/profile/{id}/feed", s.handleProfileFeed)
@@ -143,7 +145,8 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, store.ErrStaleSeq):
 		writeErr(w, http.StatusConflict, err)
 		return
-	case errors.Is(err, store.ErrNotOwner), errors.Is(err, store.ErrNoPin), errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, store.ErrNotOwner), errors.Is(err, store.ErrNoPin),
+		errors.Is(err, store.ErrNotAvatar), errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	case err != nil:
@@ -186,60 +189,77 @@ func (s *Server) policy(e *envelope.Envelope) error {
 	return nil
 }
 
-// handleUpload accepts embed bytes under a signed authorization: the
-// author signs UploadPrefix + ts + "\n" + hex sha256(body). Upload rides
-// the same gate/ban policy as posting so the storage can't be used by
-// anyone who couldn't post the result.
-func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	author := r.Header.Get("X-Hub-Author")
-	pubB, err := base64.StdEncoding.DecodeString(author)
+// uploadAuth verifies a signed upload authorization (the author signs
+// UploadPrefix + ts + "\n" + hex sha256(body)) and enforces the same
+// gate/ban policy as posting, so the storage can't be used by anyone who
+// couldn't post the result. On failure the response is written and ok is
+// false.
+func (s *Server) uploadAuth(w http.ResponseWriter, r *http.Request, body []byte) (ok bool) {
+	pubB, err := base64.StdEncoding.DecodeString(r.Header.Get("X-Hub-Author"))
 	if err != nil || len(pubB) != ed25519.PublicKeySize {
 		writeErr(w, http.StatusBadRequest, errors.New("X-Hub-Author must be a base64 ed25519 public key"))
-		return
+		return false
 	}
 	pub := ed25519.PublicKey(pubB)
 	ms, err := strconv.ParseInt(r.Header.Get("X-Hub-Ts"), 10, 64)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, errors.New("bad X-Hub-Ts"))
-		return
+		return false
 	}
 	if d := time.Since(time.UnixMilli(ms)); d > uploadSkew || d < -uploadSkew {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("upload timestamp skew %s", d.Round(time.Second)))
-		return
+		return false
+	}
+	sig, err := base64.StdEncoding.DecodeString(r.Header.Get("X-Hub-Sig"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, errors.New("bad X-Hub-Sig encoding"))
+		return false
+	}
+	msg := []byte(envelope.UploadPrefix + r.Header.Get("X-Hub-Ts") + "\n" + envelope.MsgID(body))
+	if !ed25519.Verify(pub, msg, sig) {
+		writeErr(w, http.StatusUnauthorized, errors.New("bad upload signature"))
+		return false
 	}
 
+	pid := identity.Fingerprint(pub)
+	if banned, err := s.St.Banned(pid); err != nil || banned {
+		writeErr(w, http.StatusForbidden, errors.New("this key is banned from posting here"))
+		return false
+	}
+	if !s.Cfg.Get().IsAdmin(pid) {
+		if err := s.Gate.Check(pub); err != nil {
+			writeErr(w, http.StatusForbidden, err)
+			return false
+		}
+	}
+	if err := s.IPFS.Available(); err != nil {
+		writeErr(w, http.StatusServiceUnavailable, fmt.Errorf("IPFS backend unavailable: %v", err))
+		return false
+	}
+	return true
+}
+
+// pinBytes adds content to IPFS and records the pin.
+func (s *Server) pinBytes(w http.ResponseWriter, body []byte, mime string, avatar bool) (string, bool) {
+	cid, err := s.IPFS.Add(strings.NewReader(string(body)), envelope.MsgID(body))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return "", false
+	}
+	if err := s.St.AddPin(cid, int64(len(body)), mime, avatar); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return "", false
+	}
+	return cid, true
+}
+
+func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxUpload))
 	if err != nil {
 		writeErr(w, http.StatusRequestEntityTooLarge, fmt.Errorf("embeds are capped at %dMB", MaxUpload>>20))
 		return
 	}
-	sum := envelope.MsgID(body) // hex sha256
-	sig, err := base64.StdEncoding.DecodeString(r.Header.Get("X-Hub-Sig"))
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, errors.New("bad X-Hub-Sig encoding"))
-		return
-	}
-	msg := []byte(envelope.UploadPrefix + r.Header.Get("X-Hub-Ts") + "\n" + sum)
-	if !ed25519.Verify(pub, msg, sig) {
-		writeErr(w, http.StatusUnauthorized, errors.New("bad upload signature"))
-		return
-	}
-
-	pid := identity.Fingerprint(pub)
-	c := s.Cfg.Get()
-	if banned, err := s.St.Banned(pid); err != nil || banned {
-		writeErr(w, http.StatusForbidden, errors.New("this key is banned from posting here"))
-		return
-	}
-	if !c.IsAdmin(pid) {
-		if err := s.Gate.Check(pub); err != nil {
-			writeErr(w, http.StatusForbidden, err)
-			return
-		}
-	}
-
-	if err := s.IPFS.Available(); err != nil {
-		writeErr(w, http.StatusServiceUnavailable, fmt.Errorf("IPFS backend unavailable: %v", err))
+	if !s.uploadAuth(w, r, body) {
 		return
 	}
 	// Sniff the real MIME; the declared one is advisory. The sniffed type
@@ -248,16 +268,35 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if i := strings.Index(mime, ";"); i > 0 {
 		mime = mime[:i]
 	}
-	cid, err := s.IPFS.Add(strings.NewReader(string(body)), sum)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
-		return
-	}
-	if err := s.St.AddPin(cid, int64(len(body)), mime); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	cid, ok := s.pinBytes(w, body, mime, false)
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"cid": cid, "mime": mime, "size": len(body)})
+}
+
+// handleAvatar mints a profile image: the signed original is normalized to
+// a 128×128 PNG (centered square crop, alpha preserved) and pinned with
+// the avatar flag — the only kind of CID profile.set accepts.
+func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxUpload))
+	if err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, fmt.Errorf("avatars are capped at %dMB", MaxUpload>>20))
+		return
+	}
+	if !s.uploadAuth(w, r, body) {
+		return
+	}
+	out, err := avatar.Process(body)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	cid, ok := s.pinBytes(w, out, "image/png", true)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cid": cid, "mime": "image/png", "size": len(out), "px": avatar.Size})
 }
 
 func limitParam(r *http.Request) int {

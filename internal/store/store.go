@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -21,6 +22,7 @@ var (
 	ErrStaleSeq  = errors.New("stale seq")
 	ErrNotOwner  = errors.New("not the author of that post")
 	ErrNoPin     = errors.New("embed CID not uploaded to this hub")
+	ErrNotAvatar = errors.New("avatar must be a CID from /v1/avatar")
 	ErrNotFound  = errors.New("not found")
 )
 
@@ -90,11 +92,12 @@ CREATE TABLE IF NOT EXISTS embeds (
 );
 
 CREATE TABLE IF NOT EXISTS pins (
-  cid     TEXT PRIMARY KEY,
-  size    INTEGER NOT NULL,
-  mime    TEXT NOT NULL,
-  refs    INTEGER NOT NULL DEFAULT 0,
-  created INTEGER NOT NULL
+  cid       TEXT PRIMARY KEY,
+  size      INTEGER NOT NULL,
+  mime      TEXT NOT NULL,
+  refs      INTEGER NOT NULL DEFAULT 0,
+  is_avatar INTEGER NOT NULL DEFAULT 0,  -- minted by /v1/avatar: 128×128 PNG
+  created   INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS bans (
@@ -108,7 +111,15 @@ CREATE TABLE IF NOT EXISTS seqs (
   author TEXT PRIMARY KEY,
   seq    INTEGER NOT NULL
 );`)
-	return err
+	if err != nil {
+		return err
+	}
+	// migration for pre-avatar databases; harmless once applied
+	if _, err := s.db.Exec(`ALTER TABLE pins ADD COLUMN is_avatar INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	return nil
 }
 
 // Ingest applies one verified message atomically: seq check, semantic
@@ -141,7 +152,7 @@ func (s *Store) Ingest(raw, sig []byte, e *envelope.Envelope, op any) (id string
 		return "", nil, fmt.Errorf("%w: got %d, have %d", ErrStaleSeq, e.Seq, last)
 	}
 
-	if unpin, err = apply(tx, id, e, op, now); err != nil {
+	if unpin, err = apply(tx, id, e, op, now, false); err != nil {
 		return "", nil, err
 	}
 
@@ -157,15 +168,48 @@ func (s *Store) Ingest(raw, sig []byte, e *envelope.Envelope, op any) (id string
 }
 
 // apply materializes one op into the derived tables. Shared by Ingest and
-// Rebuild so replay can never drift from live ingestion.
-func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64) (unpin []string, err error) {
+// Rebuild so replay can never drift from live ingestion. replay relaxes
+// pin-existence checks: a logged message passed them on the day it was
+// accepted, and its pins may since have been legitimately released — the
+// refcount math still lands on the live totals because increments and
+// decrements are both skipped for rows that no longer exist.
+func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, replay bool) (unpin []string, err error) {
 	pid := e.ProfileID()
 	switch v := op.(type) {
 	case *envelope.ProfileSet:
-		_, err = tx.Exec(`INSERT INTO profiles (id, pubkey, name, bio, avatar, created, updated) VALUES (?,?,?,?,?,?,?)
+		var old string
+		if err := tx.QueryRow(`SELECT avatar FROM profiles WHERE id=?`, pid).Scan(&old); err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		// The avatar must be a hub-minted 128×128 PNG (an avatar-flagged
+		// pin), refcounted like a post embed so GC stays honest.
+		if v.Avatar != "" && v.Avatar != old {
+			if !replay {
+				var isAvatar int
+				err := tx.QueryRow(`SELECT is_avatar FROM pins WHERE cid=?`, v.Avatar).Scan(&isAvatar)
+				if err == sql.ErrNoRows {
+					return nil, ErrNoPin
+				}
+				if err != nil {
+					return nil, err
+				}
+				if isAvatar == 0 {
+					return nil, ErrNotAvatar
+				}
+			}
+			if _, err := tx.Exec(`UPDATE pins SET refs=refs+1 WHERE cid=?`, v.Avatar); err != nil {
+				return nil, err
+			}
+		}
+		if _, err = tx.Exec(`INSERT INTO profiles (id, pubkey, name, bio, avatar, created, updated) VALUES (?,?,?,?,?,?,?)
 			ON CONFLICT(id) DO UPDATE SET name=excluded.name, bio=excluded.bio, avatar=excluded.avatar, updated=excluded.updated`,
-			pid, e.Author, v.Name, v.Bio, v.Avatar, received, received)
-		return nil, err
+			pid, e.Author, v.Name, v.Bio, v.Avatar, received, received); err != nil {
+			return nil, err
+		}
+		if old != "" && old != v.Avatar {
+			unpin, err = dropRef(tx, old, unpin)
+		}
+		return unpin, err
 	case *envelope.PostCreate:
 		if _, err = tx.Exec(`INSERT INTO posts (id, author, text, reply_to, ts, received) VALUES (?,?,?,?,?,?)`,
 			id, pid, v.Text, v.ReplyTo, e.TS, received); err != nil {
@@ -178,7 +222,7 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64) 
 			if err != nil {
 				return nil, err
 			}
-			if k, _ := res.RowsAffected(); k == 0 {
+			if k, _ := res.RowsAffected(); k == 0 && !replay {
 				return nil, ErrNoPin
 			}
 			if _, err = tx.Exec(`INSERT INTO embeds (post, idx, cid, mime, filename, alt) VALUES (?,?,?,?,?,?)`,
@@ -214,15 +258,8 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64) 
 		}
 		rows.Close()
 		for _, c := range cids {
-			var refs int
-			if err := tx.QueryRow(`UPDATE pins SET refs=refs-1 WHERE cid=? RETURNING refs`, c).Scan(&refs); err != nil {
+			if unpin, err = dropRef(tx, c, unpin); err != nil {
 				return nil, err
-			}
-			if refs <= 0 {
-				if _, err := tx.Exec(`DELETE FROM pins WHERE cid=?`, c); err != nil {
-					return nil, err
-				}
-				unpin = append(unpin, c)
 			}
 		}
 		if _, err := tx.Exec(`DELETE FROM embeds WHERE post=?`, v.Post); err != nil {
@@ -240,6 +277,25 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64) 
 		return nil, err
 	}
 	return nil, fmt.Errorf("apply: unhandled op %T", op)
+}
+
+// dropRef decrements a pin's refcount, deleting the row and queuing the
+// CID for unpinning when it hits zero.
+func dropRef(tx *sql.Tx, cid string, unpin []string) ([]string, error) {
+	var refs int
+	if err := tx.QueryRow(`UPDATE pins SET refs=refs-1 WHERE cid=? RETURNING refs`, cid).Scan(&refs); err != nil {
+		if err == sql.ErrNoRows {
+			return unpin, nil // already gone; nothing to release
+		}
+		return nil, err
+	}
+	if refs <= 0 {
+		if _, err := tx.Exec(`DELETE FROM pins WHERE cid=?`, cid); err != nil {
+			return nil, err
+		}
+		unpin = append(unpin, cid)
+	}
+	return unpin, nil
 }
 
 // Rebuild drops every derived table (pins excepted — uploads aren't in the
@@ -289,7 +345,7 @@ func (s *Store) Rebuild() error {
 		if err != nil {
 			return fmt.Errorf("rebuild %s: %w", m.id, err)
 		}
-		if _, err := apply(tx, m.id, e, op, m.received); err != nil {
+		if _, err := apply(tx, m.id, e, op, m.received, true); err != nil {
 			return fmt.Errorf("rebuild %s: %w", m.id, err)
 		}
 		if _, err := tx.Exec(`INSERT INTO seqs (author, seq) VALUES (?,?) ON CONFLICT(author) DO UPDATE SET seq=excluded.seq`,
@@ -490,10 +546,18 @@ type Pin struct {
 	MIME string
 }
 
-// AddPin records an upload (refs 0 until a post references it).
-func (s *Store) AddPin(cid string, size int64, mime string) error {
-	_, err := s.db.Exec(`INSERT INTO pins (cid, size, mime, refs, created) VALUES (?,?,?,0,?)
-		ON CONFLICT(cid) DO NOTHING`, cid, size, mime, time.Now().UnixMilli())
+// AddPin records an upload (refs 0 until a post or profile references it).
+// avatar marks a hub-minted 128×128 PNG, the only kind profile.set accepts.
+func (s *Store) AddPin(cid string, size int64, mime string, avatar bool) error {
+	av := 0
+	if avatar {
+		av = 1
+	}
+	// An avatar re-mint of bytes already pinned as a plain upload must end
+	// up avatar-flagged, or profile.set would reject the hub's own output.
+	_, err := s.db.Exec(`INSERT INTO pins (cid, size, mime, refs, is_avatar, created) VALUES (?,?,?,0,?,?)
+		ON CONFLICT(cid) DO UPDATE SET is_avatar = MAX(is_avatar, excluded.is_avatar)`,
+		cid, size, mime, av, time.Now().UnixMilli())
 	return err
 }
 

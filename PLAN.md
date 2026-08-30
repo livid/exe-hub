@@ -79,8 +79,11 @@ replication mechanics come later:
 
 Envelope: `{type, author (pubkey b64), seq, ts, body}`.
 
-- `profile.set` — create/update profile (display name, bio, avatar…).
-  Last-write-wins by `seq`.
+- `profile.set` — create/update profile (display name, bio, avatar).
+  Last-write-wins by `seq`. The avatar is a CID, but only one minted by
+  `POST /v1/avatar` (a hub-normalized 128×128 PNG) is accepted; avatar
+  pins are refcounted like embeds, and replacing an avatar releases the
+  old pin.
 - `post.create` — text + up to 4 embeds. Post ID = the message's content
   hash (unforgeable reference). Optional `reply_to`: the post ID this post
   replies to. Content-hash IDs make the reference hub-independent, so
@@ -184,6 +187,12 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   (headers `X-Hub-Author`/`X-Hub-Ts`/`X-Hub-Sig`, ±10 min skew), and the
   same gate/ban policy as posting applies — otherwise anyone could use the
   hub as free pinned storage.
+- `POST /v1/avatar` — profile image minting: same signed authorization and
+  gate/ban policy as `/v1/upload`, but the hub normalizes the image before
+  pinning — largest centered square crop, CatmullRom scale to 128×128,
+  re-encoded as RGBA PNG so source transparency survives (PNG/JPEG/GIF in,
+  PNG out; dimension cap 8192 guards decompression bombs). The pin is
+  avatar-flagged; `profile.set` rejects any other CID as an avatar.
 - `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication.
 - `GET  /v1/seq?author=<pubkey b64>` — the author's last accepted seq;
   clients fetch it to number their next message.
@@ -215,6 +224,11 @@ Implementation decisions (v1):
   unreachable, uploads/embeds return 503 and everything else still works).
 - Storage: Go `modernc.org/sqlite` (pure Go, no CGO), WAL, single writer
   conn.
+- Rebuild replays with relaxed pin checks: pin existence is ingest-time
+  policy, and a logged message's pins may since have been legitimately
+  released (post deleted, avatar replaced) — refcounts still land on live
+  totals because increments and decrements are both skipped for rows that
+  no longer exist.
 
 ## Client wiring (exe side) — built
 
@@ -222,8 +236,9 @@ Implementation decisions (v1):
   (`internal/server/hub.go`): `GET /v1/hub/whoami` (this node's profile
   id/pubkey), `POST /v1/hub/publish` ({hub, type, body} → daemon fetches
   the seq, signs, forwards, relays the hub's answer verbatim so gate
-  denials surface in the app), and `POST /v1/hub/upload?hub=` (signs the
-  digest, forwards the bytes).
+  denials surface in the app), and `POST /v1/hub/upload?hub=` /
+  `POST /v1/hub/avatar?hub=` (sign the digest, forward the bytes to the
+  hub's upload or avatar minter).
 - Reads go straight from the app to the hub (public + CORS).
 - The client is **Hub**, a system app shipped inside the exe binary
   (`internal/server/sysapps/Hub/`, served via a new embedded-apps

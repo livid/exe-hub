@@ -154,7 +154,7 @@ func TestDeleteOwnershipAndPins(t *testing.T) {
 	s := openTest(t)
 	alice, mallory := newAuthor(t), newAuthor(t)
 
-	if err := s.AddPin("bafytestcid234567", 100, "image/png"); err != nil {
+	if err := s.AddPin("bafytestcid234567", 100, "image/png", false); err != nil {
 		t.Fatal(err)
 	}
 	p := ingest(t, s, alice, "post.create", map[string]any{
@@ -185,6 +185,59 @@ func TestDeleteOwnershipAndPins(t *testing.T) {
 	}
 	if feed, _ := s.Feed("", 50); len(feed) != 0 {
 		t.Fatalf("post still in feed after delete")
+	}
+	// the log still holds the embed post whose pin row is now gone —
+	// rebuild must replay through it (pin checks are ingest-time policy)
+	if err := s.Rebuild(); err != nil {
+		t.Fatalf("rebuild after embed delete: %v", err)
+	}
+}
+
+func TestAvatarPins(t *testing.T) {
+	s := openTest(t)
+	a := newAuthor(t)
+	if err := s.AddPin("bafyavatarone2345", 50, "image/png", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPin("bafyavatartwo2345", 50, "image/png", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPin("bafyplainpng23456", 50, "image/png", false); err != nil {
+		t.Fatal(err)
+	}
+
+	// a plain (non-avatar) pin is rejected as a profile image
+	raw, sig, e, op := a.msg(t, "profile.set", map[string]string{"name": "A", "avatar": "bafyplainpng23456"})
+	if _, _, err := s.Ingest(raw, sig, e, op); !errors.Is(err, ErrNotAvatar) {
+		t.Fatalf("want ErrNotAvatar, got %v", err)
+	}
+	a.seq--
+
+	ingest(t, s, a, "profile.set", map[string]string{"name": "A", "avatar": "bafyavatarone2345"})
+	// replacing the avatar releases the old pin (refs hit 0 → unpin)
+	raw, sig, e, op = a.msg(t, "profile.set", map[string]string{"name": "A", "avatar": "bafyavatartwo2345"})
+	_, unpin, err := s.Ingest(raw, sig, e, op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpin) != 1 || unpin[0] != "bafyavatarone2345" {
+		t.Fatalf("unpin %v, want the replaced avatar", unpin)
+	}
+	// re-setting the same avatar must not double-count or release it
+	raw, sig, e, op = a.msg(t, "profile.set", map[string]string{"name": "A renamed", "avatar": "bafyavatartwo2345"})
+	if _, unpin, err = s.Ingest(raw, sig, e, op); err != nil || len(unpin) != 0 {
+		t.Fatalf("same-avatar update: unpin=%v err=%v", unpin, err)
+	}
+	p, err := s.Profile(a.id())
+	if err != nil || p.Avatar != "bafyavatartwo2345" || p.Name != "A renamed" {
+		t.Fatalf("profile %+v %v", p, err)
+	}
+	if err := s.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = s.Profile(a.id())
+	if p.Avatar != "bafyavatartwo2345" {
+		t.Fatalf("avatar lost in rebuild: %+v", p)
 	}
 }
 
