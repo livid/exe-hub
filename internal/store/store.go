@@ -524,22 +524,3 @@ func (s *Store) SweepStaged(cutoff time.Time) ([]string, error) {
 	}
 	return cids, rows.Err()
 }
-
-// Bans lists active bans (for an admin/debug view).
-func (s *Store) Bans() ([]map[string]any, error) {
-	rows, err := s.db.Query(`SELECT target, reason, by, ts FROM bans ORDER BY ts DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var target, reason, by string
-		var ts int64
-		if err := rows.Scan(&target, &reason, &by, &ts); err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{"target": target, "reason": reason, "by": by, "ts": ts})
-	}
-	return out, rows.Err()
-}

@@ -5,7 +5,7 @@ Storage is SQLite. Writes arrive as ed25519-signed messages; reads are public
 HTTP. Embeds live in IPFS. Who may post is controlled by a JSON config —
 open by default, optionally gated by holding an SPL token on Solana.
 
-Status: design agreed, not yet built.
+Status: v1 built and running (daemon + exe integration + Hub webui app).
 
 **This file is the single source of truth for the project design.** Update
 it whenever a decision changes; code follows the plan, not the other way
@@ -179,22 +179,59 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 ## HTTP API
 
 - `POST /v1/msg` — all mutations (signed envelope).
-- `POST /v1/upload` — embed bytes → CID.
+- `POST /v1/upload` — embed bytes → CID. **Uploads are signed too**: the
+  author signs `"exe-hub:v1\nupload\n" + ts + "\n" + hex sha256(body)`
+  (headers `X-Hub-Author`/`X-Hub-Ts`/`X-Hub-Sig`, ±10 min skew), and the
+  same gate/ban policy as posting applies — otherwise anyone could use the
+  hub as free pinned storage.
+- `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication.
+- `GET  /v1/seq?author=<pubkey b64>` — the author's last accepted seq;
+  clients fetch it to number their next message.
 - `GET  /v1/feed?before=<id>&limit=` — aggregated feed.
 - `GET  /v1/profile/{id}` — profile info.
 - `GET  /v1/profile/{id}/feed` — one author's feed.
-- `GET  /v1/post/{id}` — one post plus its replies (keyset-paginated).
-- `GET  /v1/embed/{cid}` — embed bytes proxy.
+- `GET  /v1/post/{id}` — one post plus its replies (oldest-first, keyset-
+  paginated via `after=`).
+- `GET  /v1/embed/{cid}` — embed bytes proxy (pinned CIDs only, immutable
+  cache headers; inline disposition for image/video/audio, attachment
+  otherwise).
 
-Reads are public; writes authenticate by signature alone.
+Reads are public with `Access-Control-Allow-Origin: *` (auth is
+per-request signatures, never cookies, so open CORS is safe) — the webui
+app reads hubs directly from the browser. Writes authenticate by
+signature alone. `peer.add`/`peer.remove` return 501 until aggregation.
 
-## Client wiring (exe side)
+Implementation decisions (v1):
 
-- The browser Feed app never holds the key. The exe daemon grows a small
-  `POST /v1/hub/publish`: the app submits an op, the daemon signs with the
-  peer identity and forwards to the hub — same pattern as every other app
-  (apps talk only to their own daemon).
-- Reads can go straight from the Feed app to the hub.
+- Config-assigned admins bypass the token gate for their own writes too —
+  it's their hub; the gate is for strangers.
+- The upload's declared MIME is advisory: the hub sniffs the real type and
+  the sniffed type is what `/v1/embed` serves with.
+- Staged uploads (refcount 0) that no post references within 24h are swept
+  and unpinned hourly.
+- Content caps: post text 8KB, name 64B, bio 1KB, alt 512B, filename 128B,
+  envelope 64KB, 4 embeds × 8MB.
+- Config also carries `listen` and `ipfs_api` (kubo RPC endpoint; when
+  unreachable, uploads/embeds return 503 and everything else still works).
+- Storage: Go `modernc.org/sqlite` (pure Go, no CGO), WAL, single writer
+  conn.
+
+## Client wiring (exe side) — built
+
+- The browser app never holds the key. The exe daemon has three routes
+  (`internal/server/hub.go`): `GET /v1/hub/whoami` (this node's profile
+  id/pubkey), `POST /v1/hub/publish` ({hub, type, body} → daemon fetches
+  the seq, signs, forwards, relays the hub's answer verbatim so gate
+  denials surface in the app), and `POST /v1/hub/upload?hub=` (signs the
+  digest, forwards the bytes).
+- Reads go straight from the app to the hub (public + CORS).
+- The client is **Hub**, a system app shipped inside the exe binary
+  (`internal/server/sysapps/Hub/`, served via a new embedded-apps
+  fallback: disk bundles in ~/.exe/apps or apps_dirs override same-named
+  embedded ones). On first start it asks for a hub address, verifies it
+  with `GET /v1/hub`, and stores it in the app's data
+  (`appdata/Hub/config.json`). Feed + thread views, composer with up to 4
+  attachments, profile editor, armed-confirm deletes of own posts.
 
 ## Open questions
 
