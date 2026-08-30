@@ -534,6 +534,15 @@ func (s *Store) Seq(author string) (int64, error) {
 	return n, err
 }
 
+// LastPost is when the author's latest post.create was accepted (0 if
+// never). It reads the append-only log, not the posts table, so deleting
+// a post can't reset a cooldown.
+func (s *Store) LastPost(author string) (int64, error) {
+	var t sql.NullInt64
+	err := s.db.QueryRow(`SELECT MAX(received) FROM messages WHERE author=? AND type='post.create'`, author).Scan(&t)
+	return t.Int64, err
+}
+
 func (s *Store) Banned(profileID string) (bool, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM bans WHERE target=?`, profileID).Scan(&n)

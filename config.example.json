@@ -12,5 +12,6 @@
     }
   },
   "admins": ["<profile id (pubkey fingerprint)>"],
-  "allow_replication": true
+  "allow_replication": true,
+  "cooldown": 60
 }

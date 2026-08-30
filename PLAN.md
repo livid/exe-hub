@@ -124,7 +124,8 @@ feed ordering uses hub receive time.
     }
   },
   "admins": ["<profile id (pubkey fingerprint)>"],
-  "allow_replication": true
+  "allow_replication": true,
+  "cooldown": 60
 }
 ```
 
@@ -149,6 +150,12 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - Gate applies to `post.create` and `profile.set` at ingest only — never
   retroactive; a balance dropping doesn't vaporize history. `post.delete`
   bypasses the gate.
+- **Post cooldown**: `cooldown` seconds must pass between an author's
+  posts (`post.create`, replies included; `profile.set` is exempt).
+  Absent = 60, `0` disables, admins are exempt. A too-soon post gets
+  HTTP 429 with a `Retry-After` header. The clock reads the append-only
+  log's last accepted `post.create`, so deleting a post can't reset it.
+  Hot-reloadable like the rest of the config.
 - **Moderation — bans live in SQLite, not config.** `admins` in the config
   names who may moderate; bans themselves arrive as signed `ban.set` /
   `ban.lift` messages through `/v1/msg` like every other mutation, land in

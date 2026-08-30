@@ -37,9 +37,22 @@ type Config struct {
 	IPFSAPI string `json:"ipfs_api"`
 	Gate    Gate   `json:"gate"`
 	// Admins are profile ids (pubkey fingerprints). They may issue ban ops
-	// and their own writes bypass the token gate.
+	// and their own writes bypass the token gate and the post cooldown.
 	Admins           []string `json:"admins"`
 	AllowReplication *bool    `json:"allow_replication"` // nil = default true
+	// Cooldown is the minimum seconds between an author's posts
+	// (post.create, replies included). Absent = 60; 0 disables.
+	Cooldown *int `json:"cooldown"`
+}
+
+func (c *Config) CooldownSec() int {
+	if c.Cooldown == nil {
+		return 60
+	}
+	if *c.Cooldown < 0 {
+		return 0
+	}
+	return *c.Cooldown
 }
 
 func (c *Config) Replicable() bool {

@@ -133,6 +133,12 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.policy(e); err != nil {
+		var cd *cooldownError
+		if errors.As(err, &cd) {
+			w.Header().Set("Retry-After", strconv.Itoa(cd.wait))
+			writeErr(w, http.StatusTooManyRequests, err)
+			return
+		}
 		writeErr(w, http.StatusForbidden, err)
 		return
 	}
@@ -161,9 +167,17 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "accepted"})
 }
 
-// policy enforces who may write: bans and the token gate for content ops,
-// admin identity for moderation ops. post.delete passes untouched — one
-// may always remove one's own posts (ownership is checked in the store).
+// cooldownError carries the wait so the handler can send Retry-After.
+type cooldownError struct{ wait int }
+
+func (e *cooldownError) Error() string {
+	return fmt.Sprintf("posting cooldown: try again in %ds", e.wait)
+}
+
+// policy enforces who may write: bans, the post cooldown, and the token
+// gate for content ops; admin identity for moderation ops. post.delete
+// passes untouched — one may always remove one's own posts (ownership is
+// checked in the store).
 func (s *Server) policy(e *envelope.Envelope) error {
 	c := s.Cfg.Get()
 	pid := e.ProfileID()
@@ -181,10 +195,20 @@ func (s *Server) policy(e *envelope.Envelope) error {
 		if banned {
 			return errors.New("this key is banned from posting here")
 		}
-		if !admin {
-			pub, _ := e.Pub()
-			return s.Gate.Check(pub)
+		if admin {
+			return nil
 		}
+		if cd := c.CooldownSec(); cd > 0 && e.Type == "post.create" {
+			last, err := s.St.LastPost(e.Author)
+			if err != nil {
+				return err
+			}
+			if wait := int64(cd)*1000 - (time.Now().UnixMilli() - last); last > 0 && wait > 0 {
+				return &cooldownError{wait: int((wait + 999) / 1000)}
+			}
+		}
+		pub, _ := e.Pub()
+		return s.Gate.Check(pub)
 	}
 	return nil
 }
