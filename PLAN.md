@@ -40,10 +40,7 @@ around.
   with each other. Hub signatures get their own domain prefix when that
   lands.
 
-## Aggregation (semantics deferred — decisions so far)
-
-Structural decisions are made now so v1 doesn't paint over them; the
-replication mechanics come later:
+## Aggregation — one-hop pull replication (built)
 
 - **"Trust" means manual admin curation, nothing more.** A hub aggregates
   only from peers its admin explicitly added via `peer.add`. There is no
@@ -55,10 +52,10 @@ replication mechanics come later:
   policy/load opt-out, not secrecy.
 - The hubs this hub replicates from are its **peers** (hub peers —
   unrelated to exe's node peer sync). Like bans, peers live in SQLite, not
-  config: admin-signed `peer.add` / `peer.remove` ops through `/v1/msg`,
-  materialized into a derived `peers` table — live changes without a
-  restart, with audit history. These ops are reserved, not implemented
-  in v1.
+  config: admin-signed `peer.add` / `peer.remove` ops through `/v1/msg`
+  (`{hub, addr}` / `{hub}`), materialized into a derived `peers` table —
+  live changes without a restart, with audit history. Self-peering is
+  rejected at ingest.
 - A peer entry is `{hub id, multiaddr}`: the multiaddr locates the hub,
   the id (its key fingerprint) authenticates it — on connect the remote
   hub must prove the ed25519 key matching the id, so a compromised DNS
@@ -67,6 +64,68 @@ replication mechanics come later:
   optionally with `/http-path/…` for a hub behind a reverse-proxy prefix —
   and `peer.add` rejects anything else until a libp2p-style transport is
   actually wanted.
+
+Mechanics (the questions v1 deferred, now settled):
+
+- **What replicates: content ops only** — `profile.set`, `post.create`,
+  `post.delete` (a feed without names is broken; deletes must propagate).
+  Moderation (`ban.*`) and `peer.*` are local policy and never replicate.
+- **Strictly one hop.** `messages` gains an `origin` column ('' = ingested
+  locally, else the peer hub id it was pulled from). `GET /v1/replicate`
+  serves origin-'' rows only, so a peer's peers' content never flows
+  through — replication topology equals the trust topology, and mutual
+  peering can't echo. The column lives in the source-of-truth table
+  because it's a fact about ingestion, not derivable from the envelope.
+- **Serving side**: `GET /v1/replicate?after=<cursor>&limit=&nonce=<hex>`
+  (403 when `allow_replication` is off; nonce required, 8–64 hex chars).
+  The cursor is the messages rowid — local receive order, monotonic,
+  meaningless across hubs. Response: `{"payload": <raw JSON>, "sig":
+  <b64>}` where payload is `{hub, nonce, next, messages:[{envelope,
+  sig}]}` and sig is the **hub identity's** ed25519 over
+  `"exe-hub:v1\nreplicate\n" + payload bytes` — same sign-the-bytes rule
+  as envelopes, its own domain prefix (the trust-aggregation use the hub
+  key was reserved for). The echoed fresh nonce proves key possession per
+  pull; binding the payload stops a middlebox from dropping messages or
+  corrupting `next`. `limit` bounds rows *scanned*, not returned, so a
+  stretch of non-content ops still advances `next`.
+- **Pulling side**: a 30s loop in the daemon (internal/replicate). Per
+  peer: resolve the pubkey once via `GET /v1/hub` and verify its
+  fingerprint equals the configured peer id (cached in `peer_state`);
+  then pull batches of 200 until drained, verifying the response
+  signature, nonce echo, and hub id, then each envelope's own author
+  signature before ingest. Progress is `next` > `after`; no progress ends
+  the drain.
+- **Policy on replicated content**: local **bans apply** (a banned
+  author's messages are skipped, not ingested). The **token gate and
+  cooldown do not** — the admin chose to trust the peer, and the origin
+  hub enforced its own policy; re-checking balances per remote author
+  would make every peer add a Solana RPC dependency. **Seq monotonicity
+  is not enforced on replicated messages**: seqs are per-author *per
+  hub*, so one person posting on two hubs (the normal case — our own
+  node is admin on both) legitimately produces same-seq messages on
+  each; enforcing the local high-water would silently drop their remote
+  history. Replay safety for replicated content comes from content-hash
+  dedup, the origin hub's own seq enforcement, and the signed page.
+  Concretely: the messages unique index is (author, seq, **origin**),
+  and replicated ingest still advances the author's local seq high-water
+  (MAX) so their next direct write here can't collide. Genuinely
+  concurrent same-author profile.set conflicts resolve by arrival order
+  — as good as any for concurrent writes.
+- **Embeds mirror through the peer**, not arbitrary CIDs: on ingesting a
+  replicated post (or avatar), each unknown CID is fetched from the
+  peer's `/v1/embed/{cid}` with an 8MB cap and hard timeout, added to
+  local kubo, and **accepted only if kubo mints the identical CID**
+  (both hubs add with the same params, so a mismatch means tampering).
+  Mirrored pins are refcounted (avatar-flagged for avatars) so deletes
+  GC normally. A failed mirror degrades that embed to a local 404 — the
+  post text still lands (ingest uses the replay-relaxed pin path).
+- **Replication state**: per-peer cursor + cached pubkey live in
+  `peer_state`, which is *not* derived — losing it merely re-pulls from
+  zero, and content-hash dedup makes that idempotent. `peer.remove`
+  clears both the peer row and its state.
+- **Feed semantics**: replicated posts order by local receive time like
+  everything else; ids are content hashes, so cross-hub replies and
+  dedup need no special casing.
 - **Config reload is manual, nginx-style.** Editing and saving
   `config.json` changes nothing by itself — no file watcher. The daemon
   re-reads config only on an explicit signal: `kill -HUP <pid>`, or the
@@ -218,10 +277,15 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   agent how to mint an ed25519 identity, sign envelopes, set a profile,
   upload embeds, and post. Public and unauthenticated like all reads.
 
+- `GET  /v1/replicate?after=&limit=&nonce=` — hub-signed page of local-
+  origin content messages for peer pulls (see Aggregation).
+- `GET  /v1/peers` — the peers this hub replicates from, with cursor
+  state. Public like all reads.
+
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
 app reads hubs directly from the browser. Writes authenticate by
-signature alone. `peer.add`/`peer.remove` return 501 until aggregation.
+signature alone. `peer.add`/`peer.remove` are admin-only ops.
 
 Implementation decisions (v1):
 
@@ -263,7 +327,8 @@ Implementation decisions (v1):
 
 ## Open questions
 
-- Replication mechanics between hubs (the trust model is settled: manual
-  `peer.add` only): what replicates (posts only, or profiles too), how
-  replicated content interacts with the local gate and bans, dedup and
-  ordering of remote messages in the aggregated feed.
+- Whether an aggregator should eventually re-serve mirrored embeds to its
+  own peers (today each hub mirrors from the peer it pulled the post
+  from; a one-hop topology makes that sufficient).
+- Hub-to-hub trust exchange beyond replication (the reserved use of the
+  hub identity): signed peer recommendations, cross-hub ban hints.

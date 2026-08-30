@@ -71,3 +71,8 @@ func Fingerprint(pub ed25519.PublicKey) string {
 func (id *Identity) PubKey() string {
 	return base64.StdEncoding.EncodeToString(id.pub)
 }
+
+// Sign signs with the hub's own key. Callers add their domain prefix.
+func (id *Identity) Sign(msg []byte) []byte {
+	return ed25519.Sign(id.priv, msg)
+}

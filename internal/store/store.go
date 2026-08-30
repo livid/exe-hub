@@ -58,7 +58,6 @@ CREATE TABLE IF NOT EXISTS messages (
   raw      BLOB NOT NULL,
   sig      BLOB NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS messages_author_seq ON messages(author, seq);
 
 CREATE TABLE IF NOT EXISTS profiles (
   id      TEXT PRIMARY KEY,           -- pubkey fingerprint
@@ -110,14 +109,41 @@ CREATE TABLE IF NOT EXISTS bans (
 CREATE TABLE IF NOT EXISTS seqs (
   author TEXT PRIMARY KEY,
   seq    INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS peers (
+  hub   TEXT PRIMARY KEY,              -- remote hub id (key fingerprint)
+  addr  TEXT NOT NULL,                 -- HTTP multiaddr
+  added_by TEXT NOT NULL,              -- admin profile id
+  ts    INTEGER NOT NULL
+);
+
+-- Replication runtime state, NOT derived: losing it only re-pulls from
+-- zero, and content-hash dedup makes that idempotent.
+CREATE TABLE IF NOT EXISTS peer_state (
+  hub    TEXT PRIMARY KEY,
+  pubkey TEXT NOT NULL DEFAULT '',     -- cached, fingerprint-verified
+  cursor INTEGER NOT NULL DEFAULT 0    -- remote messages rowid high-water
 );`)
 	if err != nil {
 		return err
 	}
-	// migration for pre-avatar databases; harmless once applied
-	if _, err := s.db.Exec(`ALTER TABLE pins ADD COLUMN is_avatar INTEGER NOT NULL DEFAULT 0`); err != nil &&
-		!strings.Contains(err.Error(), "duplicate column") {
-		return err
+	// migrations for older databases; harmless once applied
+	for _, ddl := range []string{
+		`ALTER TABLE pins ADD COLUMN is_avatar INTEGER NOT NULL DEFAULT 0`,
+		// '' = ingested locally, else the peer hub id it was pulled from;
+		// /v1/replicate serves only '' rows, keeping aggregation one-hop
+		`ALTER TABLE messages ADD COLUMN origin TEXT NOT NULL DEFAULT ''`,
+		// seqs are per-author per hub, so the same author's messages
+		// replicated from another hub legitimately reuse seq numbers:
+		// uniqueness holds per origin (the origin hub enforced plain
+		// author+seq for everything it serves)
+		`DROP INDEX IF EXISTS messages_author_seq`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS messages_author_seq_origin ON messages(author, seq, origin)`,
+	} {
+		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
 	}
 	return nil
 }
@@ -128,6 +154,18 @@ CREATE TABLE IF NOT EXISTS seqs (
 // It returns the message id and any CIDs whose refcount dropped to zero
 // (the caller unpins those best-effort, outside the transaction).
 func (s *Store) Ingest(raw, sig []byte, e *envelope.Envelope, op any) (id string, unpin []string, err error) {
+	return s.ingest(raw, sig, e, op, "")
+}
+
+// IngestReplicated ingests a message pulled from a peer, recording that
+// peer as its origin (so it is never re-served to other peers) and using
+// the replay-relaxed pin checks — an embed whose mirror failed degrades to
+// a local 404 rather than blocking the post.
+func (s *Store) IngestReplicated(raw, sig []byte, e *envelope.Envelope, op any, origin string) (id string, unpin []string, err error) {
+	return s.ingest(raw, sig, e, op, origin)
+}
+
+func (s *Store) ingest(raw, sig []byte, e *envelope.Envelope, op any, origin string) (id string, unpin []string, err error) {
 	id = envelope.MsgID(raw)
 	now := time.Now().UnixMilli()
 
@@ -144,23 +182,31 @@ func (s *Store) Ingest(raw, sig []byte, e *envelope.Envelope, op any) (id string
 	if n > 0 {
 		return id, nil, ErrDuplicate
 	}
-	var last int64
-	if err = tx.QueryRow(`SELECT seq FROM seqs WHERE author=?`, e.Author).Scan(&last); err != nil && err != sql.ErrNoRows {
-		return "", nil, err
-	}
-	if e.Seq <= last {
-		return "", nil, fmt.Errorf("%w: got %d, have %d", ErrStaleSeq, e.Seq, last)
+	// Monotonic seq guards direct ingest only. Seqs are per-author per
+	// hub, so a replicated message from an author who also writes here
+	// legitimately reuses numbers — its replay safety is the id dedup
+	// above plus the origin hub's own enforcement.
+	if origin == "" {
+		var last int64
+		if err = tx.QueryRow(`SELECT seq FROM seqs WHERE author=?`, e.Author).Scan(&last); err != nil && err != sql.ErrNoRows {
+			return "", nil, err
+		}
+		if e.Seq <= last {
+			return "", nil, fmt.Errorf("%w: got %d, have %d", ErrStaleSeq, e.Seq, last)
+		}
 	}
 
-	if unpin, err = apply(tx, id, e, op, now, false); err != nil {
+	if unpin, err = apply(tx, id, e, op, now, origin != ""); err != nil {
 		return "", nil, err
 	}
 
-	if _, err = tx.Exec(`INSERT INTO messages (id, author, seq, type, ts, received, raw, sig) VALUES (?,?,?,?,?,?,?,?)`,
-		id, e.Author, e.Seq, e.Type, e.TS, now, raw, sig); err != nil {
+	if _, err = tx.Exec(`INSERT INTO messages (id, author, seq, type, ts, received, raw, sig, origin) VALUES (?,?,?,?,?,?,?,?,?)`,
+		id, e.Author, e.Seq, e.Type, e.TS, now, raw, sig, origin); err != nil {
 		return "", nil, err
 	}
-	if _, err = tx.Exec(`INSERT INTO seqs (author, seq) VALUES (?,?) ON CONFLICT(author) DO UPDATE SET seq=excluded.seq`,
+	// MAX, not overwrite: a replicated message may carry a lower seq than
+	// this hub's high-water for the author, and must never regress it.
+	if _, err = tx.Exec(`INSERT INTO seqs (author, seq) VALUES (?,?) ON CONFLICT(author) DO UPDATE SET seq=MAX(seq, excluded.seq)`,
 		e.Author, e.Seq); err != nil {
 		return "", nil, err
 	}
@@ -275,6 +321,19 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 	case *envelope.BanLift:
 		_, err = tx.Exec(`DELETE FROM bans WHERE target=?`, v.Target)
 		return nil, err
+	case *envelope.PeerAdd:
+		_, err = tx.Exec(`INSERT INTO peers (hub, addr, added_by, ts) VALUES (?,?,?,?)
+			ON CONFLICT(hub) DO UPDATE SET addr=excluded.addr, added_by=excluded.added_by, ts=excluded.ts`,
+			v.Hub, v.Addr, pid, received)
+		return nil, err
+	case *envelope.PeerRemove:
+		if _, err = tx.Exec(`DELETE FROM peers WHERE hub=?`, v.Hub); err != nil {
+			return nil, err
+		}
+		// peer_state is runtime state, not derived; a removed peer's cursor
+		// and cached key must not survive a re-add under the same id.
+		_, err = tx.Exec(`DELETE FROM peer_state WHERE hub=?`, v.Hub)
+		return nil, err
 	}
 	return nil, fmt.Errorf("apply: unhandled op %T", op)
 }
@@ -308,7 +367,7 @@ func (s *Store) Rebuild() error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, t := range []string{"profiles", "posts", "embeds", "bans", "seqs"} {
+	for _, t := range []string{"profiles", "posts", "embeds", "bans", "seqs", "peers"} {
 		if _, err := tx.Exec(`DELETE FROM ` + t); err != nil {
 			return err
 		}
@@ -348,7 +407,7 @@ func (s *Store) Rebuild() error {
 		if _, err := apply(tx, m.id, e, op, m.received, true); err != nil {
 			return fmt.Errorf("rebuild %s: %w", m.id, err)
 		}
-		if _, err := tx.Exec(`INSERT INTO seqs (author, seq) VALUES (?,?) ON CONFLICT(author) DO UPDATE SET seq=excluded.seq`,
+		if _, err := tx.Exec(`INSERT INTO seqs (author, seq) VALUES (?,?) ON CONFLICT(author) DO UPDATE SET seq=MAX(seq, excluded.seq)`,
 			e.Author, e.Seq); err != nil {
 			return err
 		}
@@ -598,4 +657,80 @@ func (s *Store) SweepStaged(cutoff time.Time) ([]string, error) {
 		cids = append(cids, c)
 	}
 	return cids, rows.Err()
+}
+
+// ---- replication ----
+
+// ReplMsg is one log entry as served to a pulling peer: the stored bytes,
+// verbatim — the puller re-verifies the author signature itself.
+type ReplMsg struct {
+	Envelope []byte `json:"envelope"`
+	Sig      []byte `json:"sig"`
+}
+
+// replicated content ops; moderation and peer curation are local policy
+// and never leave the hub
+var contentTypes = map[string]bool{"profile.set": true, "post.create": true, "post.delete": true}
+
+// ReplicationPage returns local-origin content messages after the given
+// rowid cursor. limit bounds rows scanned, not returned, so a stretch of
+// non-content ops still advances next; next == after means fully drained.
+func (s *Store) ReplicationPage(after int64, limit int) (msgs []ReplMsg, next int64, err error) {
+	rows, err := s.db.Query(`SELECT rowid, type, raw, sig FROM messages WHERE rowid > ? AND origin = '' ORDER BY rowid LIMIT ?`,
+		after, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	next = after
+	msgs = []ReplMsg{}
+	for rows.Next() {
+		var typ string
+		var m ReplMsg
+		if err := rows.Scan(&next, &typ, &m.Envelope, &m.Sig); err != nil {
+			return nil, 0, err
+		}
+		if contentTypes[typ] {
+			msgs = append(msgs, m)
+		}
+	}
+	return msgs, next, rows.Err()
+}
+
+// Peer is one replication source with its runtime state joined in.
+type Peer struct {
+	Hub    string `json:"hub"`
+	Addr   string `json:"addr"`
+	PubKey string `json:"pubkey,omitempty"` // cached; '' until first contact
+	Cursor int64  `json:"cursor"`
+}
+
+func (s *Store) Peers() ([]Peer, error) {
+	rows, err := s.db.Query(`SELECT p.hub, p.addr, IFNULL(ps.pubkey,''), IFNULL(ps.cursor,0)
+		FROM peers p LEFT JOIN peer_state ps ON ps.hub = p.hub ORDER BY p.ts`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Peer{}
+	for rows.Next() {
+		var p Peer
+		if err := rows.Scan(&p.Hub, &p.Addr, &p.PubKey, &p.Cursor); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetPeerPubkey(hub, pubkey string) error {
+	_, err := s.db.Exec(`INSERT INTO peer_state (hub, pubkey) VALUES (?,?)
+		ON CONFLICT(hub) DO UPDATE SET pubkey=excluded.pubkey`, hub, pubkey)
+	return err
+}
+
+func (s *Store) SetPeerCursor(hub string, cursor int64) error {
+	_, err := s.db.Exec(`INSERT INTO peer_state (hub, cursor) VALUES (?,?)
+		ON CONFLICT(hub) DO UPDATE SET cursor=excluded.cursor`, hub, cursor)
+	return err
 }

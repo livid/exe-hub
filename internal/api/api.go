@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/post/{id}", s.handlePost)
 	mux.HandleFunc("GET /v1/embed/{cid}", s.handleEmbed)
 	mux.HandleFunc("GET /v1/seq", s.handleSeq)
+	mux.HandleFunc("GET /v1/replicate", s.handleReplicate)
+	mux.HandleFunc("GET /v1/peers", s.handlePeers)
 	return cors(mux)
 }
 
@@ -135,13 +138,13 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, err)
 		return
 	}
-	if e.Type == "peer.add" || e.Type == "peer.remove" {
-		writeErr(w, http.StatusNotImplemented, errors.New("peer ops are reserved for aggregation"))
-		return
-	}
 	op, err := e.Op()
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if pa, ok := op.(*envelope.PeerAdd); ok && pa.Hub == s.Hub.ID {
+		writeErr(w, http.StatusBadRequest, errors.New("a hub cannot peer with itself"))
 		return
 	}
 	if err := s.policy(e); err != nil {
@@ -198,6 +201,10 @@ func (s *Server) policy(e *envelope.Envelope) error {
 	case "ban.set", "ban.lift":
 		if !admin {
 			return errors.New("moderation requires an admin key")
+		}
+	case "peer.add", "peer.remove":
+		if !admin {
+			return errors.New("peer curation requires an admin key")
 		}
 	case "post.create", "profile.set":
 		banned, err := s.St.Banned(pid)
@@ -429,4 +436,65 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", "attachment")
 	}
 	io.Copy(w, rc)
+}
+
+// replicateNonce accepts 8–64 hex chars — enough entropy to prove
+// freshness, small enough to never bloat the signed payload.
+var replicateNonce = regexp.MustCompile(`^[0-9a-f]{8,64}$`)
+
+// ReplicatePayload is the signed portion of a /v1/replicate response. The
+// puller verifies the hub signature over the exact payload bytes it
+// received, then checks the nonce echo and hub id — so a middlebox can
+// neither drop messages nor corrupt the cursor.
+type ReplicatePayload struct {
+	Hub      string          `json:"hub"`
+	Nonce    string          `json:"nonce"`
+	Next     int64           `json:"next"`
+	Messages []store.ReplMsg `json:"messages"`
+}
+
+// handleReplicate serves peers a hub-signed page of this hub's local-
+// origin content messages (see PLAN.md, Aggregation). Individual
+// envelopes stay author-signed; the hub signature authenticates the hub
+// and binds the page.
+func (s *Server) handleReplicate(w http.ResponseWriter, r *http.Request) {
+	if !s.Cfg.Get().Replicable() {
+		writeErr(w, http.StatusForbidden, errors.New("this hub does not allow replication"))
+		return
+	}
+	nonce := r.URL.Query().Get("nonce")
+	if !replicateNonce.MatchString(nonce) {
+		writeErr(w, http.StatusBadRequest, errors.New("nonce: want 8-64 hex chars"))
+		return
+	}
+	after, err := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	if err != nil && r.URL.Query().Get("after") != "" {
+		writeErr(w, http.StatusBadRequest, errors.New("after: not a cursor"))
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	msgs, next, err := s.St.ReplicationPage(after, limit)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	pb, err := json.Marshal(ReplicatePayload{Hub: s.Hub.ID, Nonce: nonce, Next: next, Messages: msgs})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	sig := s.Hub.Sign(append([]byte(envelope.ReplicatePrefix), pb...))
+	writeJSON(w, http.StatusOK, map[string]any{"payload": json.RawMessage(pb), "sig": sig})
+}
+
+func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
+	peers, err := s.St.Peers()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"peers": peers})
 }

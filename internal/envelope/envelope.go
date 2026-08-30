@@ -13,6 +13,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"exehub/internal/identity"
@@ -26,6 +29,10 @@ const Prefix = "exe-hub:v1\n"
 // UploadPrefix domain-separates upload authorizations (which sign a body
 // digest, not an envelope) from envelope signatures.
 const UploadPrefix = "exe-hub:v1\nupload\n"
+
+// ReplicatePrefix domain-separates the hub identity's signature over a
+// /v1/replicate response payload from every author-key use of ed25519.
+const ReplicatePrefix = "exe-hub:v1\nreplicate\n"
 
 // MaxRaw caps the serialized envelope. Post text is capped separately;
 // this bounds the whole message including embeds metadata.
@@ -70,6 +77,18 @@ type BanSet struct {
 
 type BanLift struct {
 	Target string `json:"target"`
+}
+
+// PeerAdd / PeerRemove curate the hubs this hub replicates from,
+// admin-only. Hub is the remote hub identity's fingerprint; Addr an HTTP
+// multiaddr profile (see ParseMultiaddr).
+type PeerAdd struct {
+	Hub  string `json:"hub"`
+	Addr string `json:"addr"`
+}
+
+type PeerRemove struct {
+	Hub string `json:"hub"`
 }
 
 // Parse validates the envelope's frame; per-type body validation happens
@@ -217,6 +236,27 @@ func (e *Envelope) Op() (any, error) {
 			return nil, errors.New("target: not a profile id")
 		}
 		return v, nil
+	case "peer.add":
+		v := &PeerAdd{}
+		if err := strictBody(e.Body, v); err != nil {
+			return nil, err
+		}
+		if !validProfileID(v.Hub) {
+			return nil, errors.New("hub: not a hub id")
+		}
+		if _, err := ParseMultiaddr(v.Addr); err != nil {
+			return nil, fmt.Errorf("addr: %w", err)
+		}
+		return v, nil
+	case "peer.remove":
+		v := &PeerRemove{}
+		if err := strictBody(e.Body, v); err != nil {
+			return nil, err
+		}
+		if !validProfileID(v.Hub) {
+			return nil, errors.New("hub: not a hub id")
+		}
+		return v, nil
 	}
 	return nil, fmt.Errorf("unknown type %q", e.Type)
 }
@@ -258,4 +298,55 @@ func validCID(s string) bool {
 		}
 	}
 	return true
+}
+
+// ParseMultiaddr resolves the HTTP multiaddr profiles peer.add accepts —
+// /ip4|ip6|dns4|dns6/<host>/tcp/<port>/http|https, optionally followed by
+// /http-path/<percent-encoded prefix> — into a base URL. Anything else is
+// rejected until a libp2p-style transport is actually wanted.
+func ParseMultiaddr(addr string) (string, error) {
+	p := strings.Split(addr, "/")
+	// leading slash yields an empty first element
+	if len(p) < 6 || p[0] != "" {
+		return "", errors.New("not an HTTP multiaddr")
+	}
+	switch p[1] {
+	case "ip4", "ip6", "dns4", "dns6":
+	default:
+		return "", fmt.Errorf("unsupported transport %q", p[1])
+	}
+	host := p[2]
+	if host == "" {
+		return "", errors.New("empty host")
+	}
+	if p[1] == "ip6" {
+		host = "[" + host + "]"
+	}
+	if p[3] != "tcp" {
+		return "", fmt.Errorf("unsupported protocol %q", p[3])
+	}
+	port, err := strconv.Atoi(p[4])
+	if err != nil || port < 1 || port > 65535 {
+		return "", errors.New("bad port")
+	}
+	var scheme string
+	switch p[5] {
+	case "http", "https":
+		scheme = p[5]
+	default:
+		return "", fmt.Errorf("unsupported scheme %q", p[5])
+	}
+	base := scheme + "://" + host + ":" + p[4]
+	rest := p[6:]
+	if len(rest) > 0 {
+		if rest[0] != "http-path" || len(rest) != 2 || rest[1] == "" {
+			return "", errors.New("only /http-path/<prefix> may follow the scheme")
+		}
+		path, err := url.PathUnescape(rest[1])
+		if err != nil {
+			return "", fmt.Errorf("http-path: %w", err)
+		}
+		base += "/" + strings.Trim(path, "/")
+	}
+	return base, nil
 }
