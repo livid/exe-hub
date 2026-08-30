@@ -176,8 +176,10 @@ feed ordering uses hub receive time.
     "mode": "token",
     "token": {
       "rpc_url": "https://mainnet.helius-rpc.com/?api-key=<key>",
-      "mint": "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump",
-      "min_amount": "10000000000",
+      "mints": [
+        { "mint": "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump",
+          "min_amount": "10000000000" }
+      ],
       "recheck": "10m",
       "rpc_unavailable": "deny"
     }
@@ -187,6 +189,16 @@ feed ordering uses hub receive time.
   "cooldown": 60
 }
 ```
+
+`mints` is a list with **any-of (OR) semantics**: holding at least
+`min_amount` of any one listed mint passes the gate. Entries are checked
+in order with short-circuit on the first pass, so put the most commonly
+held mint first. The pre-list config shape — top-level `mint` +
+`min_amount` — still loads: `Load` normalizes it into a one-element
+`mints` list. `rpc_url`/`recheck`/`rpc_unavailable` are shared across
+entries (one RPC). AND and weighted-sum gates are deliberately not
+built — OR covers the real cases (a second community token, an old mint
+alongside its migration).
 
 `config.json` is **gitignored** — the RPC URL embeds a Helius API key. A
 committed `config.example.json` carries the shape with placeholders. The

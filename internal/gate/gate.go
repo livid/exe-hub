@@ -42,24 +42,24 @@ func New(cfg *config.Holder) *Gate {
 		cache: map[string]verdict{}, decimals: map[string]int{}}
 }
 
-// Decimals returns the configured mint's on-chain decimal places (via
-// getTokenSupply, cached forever — a mint's decimals are immutable). ok is
-// false in open mode or while the RPC is unreachable with no cached value;
-// callers fall back to raw base units.
-func (g *Gate) Decimals() (dec int, ok bool) {
+// Decimals returns a mint's on-chain decimal places (via getTokenSupply,
+// cached forever — a mint's decimals are immutable). ok is false in open
+// mode or while the RPC is unreachable with no cached value; callers fall
+// back to raw base units.
+func (g *Gate) Decimals(mint string) (dec int, ok bool) {
 	c := g.cfg.Get()
 	if c.Gate.Mode != "token" {
 		return 0, false
 	}
 	t := &c.Gate.Token
 	g.mu.Lock()
-	dec, cached := g.decimals[t.Mint]
+	dec, cached := g.decimals[mint]
 	g.mu.Unlock()
 	if cached {
 		return dec, true
 	}
 	req, _ := json.Marshal(map[string]any{
-		"jsonrpc": "2.0", "id": 1, "method": "getTokenSupply", "params": []any{t.Mint},
+		"jsonrpc": "2.0", "id": 1, "method": "getTokenSupply", "params": []any{mint},
 	})
 	resp, err := g.client.Post(t.RPCURL, "application/json", bytes.NewReader(req))
 	if err != nil {
@@ -77,7 +77,7 @@ func (g *Gate) Decimals() (dec int, ok bool) {
 		return 0, false
 	}
 	g.mu.Lock()
-	g.decimals[t.Mint] = *out.Result.Value.Decimals
+	g.decimals[mint] = *out.Result.Value.Decimals
 	g.mu.Unlock()
 	return *out.Result.Value.Decimals, true
 }
@@ -98,8 +98,25 @@ func (g *Gate) Check(pub ed25519.PublicKey) error {
 		return v.errIfDenied()
 	}
 
-	held, err := g.balance(t, addr)
-	if err != nil {
+	// Any-of: the first mint held at its threshold passes. An RPC error
+	// on one mint doesn't fail the check if a later mint passes; only
+	// when no mint passed and at least one couldn't be checked is the
+	// verdict unknown.
+	pass, firstErr := false, error(nil)
+	for _, m := range t.Mints {
+		held, err := g.balance(t, m.Mint, addr)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if held >= m.MinRaw {
+			pass = true
+			break
+		}
+	}
+	if !pass && firstErr != nil {
 		// A stale verdict beats guessing; only with no cache at all does
 		// rpc_unavailable apply.
 		if cached {
@@ -108,9 +125,9 @@ func (g *Gate) Check(pub ed25519.PublicKey) error {
 		if t.RPCUnavailable == "allow" {
 			return nil
 		}
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %v", ErrUnavailable, firstErr)
 	}
-	v = verdict{ok: held >= t.MinRaw, at: time.Now()}
+	v = verdict{ok: pass, at: time.Now()}
 	g.mu.Lock()
 	g.cache[addr] = v
 	g.mu.Unlock()
@@ -127,11 +144,11 @@ func (v verdict) errIfDenied() error {
 // balance sums the address's token accounts for the mint, in raw base
 // units. The RPC's mint filter is program-agnostic — it covers both the
 // classic SPL Token and Token-2022 programs in one call.
-func (g *Gate) balance(t *config.TokenGate, addr string) (uint64, error) {
+func (g *Gate) balance(t *config.TokenGate, mint, addr string) (uint64, error) {
 	req, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "getTokenAccountsByOwner",
 		"params": []any{addr,
-			map[string]string{"mint": t.Mint},
+			map[string]string{"mint": mint},
 			map[string]string{"encoding": "jsonParsed"}},
 	})
 	resp, err := g.client.Post(t.RPCURL, "application/json", bytes.NewReader(req))

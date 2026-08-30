@@ -32,7 +32,8 @@ func TestSkillDynamic(t *testing.T) {
 	zero := 0
 	s.Cfg.Set(&config.Config{
 		Gate: config.Gate{Mode: "token", Token: config.TokenGate{
-			Mint: "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump", MinAmount: "10000000000", Recheck: "10m"}},
+			Mints:   []config.MintReq{{Mint: "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump", MinAmount: "10000000000"}},
+			Recheck: "10m"}},
 		Cooldown: &zero,
 	})
 	gated := get()
@@ -43,6 +44,23 @@ func TestSkillDynamic(t *testing.T) {
 	}
 	if !strings.Contains(gated, "disabled on this hub") || strings.Contains(gated, "{{") {
 		t.Fatal("cooldown/placeholder rendering wrong")
+	}
+	if strings.Contains(gated, "**one** of") {
+		t.Fatal("single mint must not render as a list")
+	}
+
+	s.Cfg.Set(&config.Config{
+		Gate: config.Gate{Mode: "token", Token: config.TokenGate{
+			Mints: []config.MintReq{
+				{Mint: "MintAaa", MinAmount: "10000000000"},
+				{Mint: "MintBbb", MinAmount: "500000000"}},
+			Recheck: "10m"}},
+	})
+	multi := get()
+	if !strings.Contains(multi, "**one** of") ||
+		!strings.Contains(multi, "- **10000000000 raw base units** of mint `MintAaa`") ||
+		!strings.Contains(multi, "- **500000000 raw base units** of mint `MintBbb`") {
+		t.Fatalf("multi-mint variant wrong:\n%s", multi)
 	}
 }
 

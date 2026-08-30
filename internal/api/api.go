@@ -63,9 +63,8 @@ func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
 	gate := strings.TrimRight(skillGateOpen, "\n")
 	if c.Gate.Mode == "token" {
 		t := c.Gate.Token
-		dec, known := s.Gate.Decimals()
 		gate = strings.TrimRight(fmt.Sprintf(skillGateToken,
-			gateAmountPhrase(t.MinAmount, t.MinRaw, dec, known), t.Mint, t.Recheck), "\n")
+			s.gateRequirement(t.Mints), t.Recheck), "\n")
 	}
 	cooldown := "disabled on this hub"
 	if cd := c.CooldownSec(); cd > 0 {
@@ -523,9 +522,23 @@ func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"peers": peers})
 }
 
-// gateAmountPhrase renders the token threshold for the skill guide:
-// human units when the mint's decimals are known, raw base units alone
-// when the RPC hasn't answered yet.
+// gateRequirement renders the full holding requirement for the skill
+// guide: a single phrase for one mint, an any-of bullet list for several.
+func (s *Server) gateRequirement(mints []config.MintReq) string {
+	phrases := make([]string, len(mints))
+	for i, m := range mints {
+		dec, known := s.Gate.Decimals(m.Mint)
+		phrases[i] = fmt.Sprintf("%s of mint `%s`", gateAmountPhrase(m.MinAmount, m.MinRaw, dec, known), m.Mint)
+	}
+	if len(phrases) == 1 {
+		return "at least " + phrases[0]
+	}
+	return "at least **one** of:\n\n- " + strings.Join(phrases, "\n- ")
+}
+
+// gateAmountPhrase renders one token threshold: human units when the
+// mint's decimals are known, raw base units alone when the RPC hasn't
+// answered yet.
 func gateAmountPhrase(minAmount string, minRaw uint64, dec int, known bool) string {
 	if !known {
 		return fmt.Sprintf("**%s raw base units**", minAmount)

@@ -14,16 +14,28 @@ import (
 	"time"
 )
 
-type TokenGate struct {
-	RPCURL    string `json:"rpc_url"`
+// MintReq is one acceptable holding: at least MinAmount of Mint.
+type MintReq struct {
 	Mint      string `json:"mint"`
 	MinAmount string `json:"min_amount"` // raw base units; string, u64s don't survive JSON floats
+
+	MinRaw uint64 `json:"-"`
+}
+
+type TokenGate struct {
+	RPCURL string `json:"rpc_url"`
+	// Mints has any-of (OR) semantics: holding enough of any one entry
+	// passes. Checked in order, short-circuiting on the first pass.
+	Mints []MintReq `json:"mints,omitempty"`
+	// Mint/MinAmount are the pre-list single-mint shape; Load normalizes
+	// them into Mints so the rest of the code sees one form.
+	Mint      string `json:"mint,omitempty"`
+	MinAmount string `json:"min_amount,omitempty"`
 	Recheck   string `json:"recheck"`
 	// RPCUnavailable applies only when there is no cached verdict at all;
 	// a stale cached verdict is always preferred over guessing.
 	RPCUnavailable string `json:"rpc_unavailable"`
 
-	MinRaw     uint64        `json:"-"`
 	RecheckDur time.Duration `json:"-"`
 }
 
@@ -90,11 +102,21 @@ func Load(path string) (*Config, error) {
 		c.Gate.Mode = "open"
 	case "token":
 		t := &c.Gate.Token
-		if t.RPCURL == "" || t.Mint == "" {
-			return nil, errors.New("gate.token needs rpc_url and mint")
+		if t.Mint != "" || t.MinAmount != "" {
+			t.Mints = append([]MintReq{{Mint: t.Mint, MinAmount: t.MinAmount}}, t.Mints...)
+			t.Mint, t.MinAmount = "", ""
 		}
-		if t.MinRaw, err = strconv.ParseUint(t.MinAmount, 10, 64); err != nil || t.MinRaw == 0 {
-			return nil, errors.New("gate.token.min_amount must be a positive integer string")
+		if t.RPCURL == "" || len(t.Mints) == 0 {
+			return nil, errors.New("gate.token needs rpc_url and at least one mint")
+		}
+		for i := range t.Mints {
+			m := &t.Mints[i]
+			if m.Mint == "" {
+				return nil, fmt.Errorf("gate.token.mints[%d]: mint required", i)
+			}
+			if m.MinRaw, err = strconv.ParseUint(m.MinAmount, 10, 64); err != nil || m.MinRaw == 0 {
+				return nil, fmt.Errorf("gate.token.mints[%d].min_amount must be a positive integer string", i)
+			}
 		}
 		if t.Recheck == "" {
 			t.Recheck = "10m"
