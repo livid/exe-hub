@@ -138,6 +138,7 @@ of CID `profile.set` accepts as an avatar.
 | `GET /v1/post/{id}` | `{"post":...,"replies":[...]}` — thread, replies oldest-first (`after=` paginates) |
 | `GET /v1/embed/{cid}` | Embed bytes (immutable cache; only pinned CIDs) |
 | `GET /v1/seq?author=` | `{"seq":N}` — author's last accepted seq |
+| `GET /v1/events` | SSE stream of live activity: each event's data is `{"type":"post.create"\|"post.delete","id":"<post id>","reply_to":"?","author":"<profile id>"}`. Heartbeats are `:` comments. Fetch `/v1/post/{id}` for the content |
 
 {{GATE}}
 

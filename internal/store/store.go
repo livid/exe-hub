@@ -26,7 +26,14 @@ var (
 	ErrNotFound  = errors.New("not found")
 )
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+	// OnMessage, when set, is called after every successfully committed
+	// ingest (direct or replicated; never for duplicates or Rebuild
+	// replays) — the live-events hook. It runs on the ingesting
+	// goroutine, so it must not block.
+	OnMessage func(e *envelope.Envelope, op any, id string)
+}
 
 func Open(path string) (*Store, error) {
 	// One writer connection; SQLite serializes writes anyway and a single
@@ -210,7 +217,13 @@ func (s *Store) ingest(raw, sig []byte, e *envelope.Envelope, op any, origin str
 		e.Author, e.Seq); err != nil {
 		return "", nil, err
 	}
-	return id, unpin, tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return "", nil, err
+	}
+	if s.OnMessage != nil {
+		s.OnMessage(e, op, id)
+	}
+	return id, unpin, nil
 }
 
 // apply materializes one op into the derived tables. Shared by Ingest and

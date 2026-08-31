@@ -22,6 +22,7 @@ import (
 	"exehub/internal/avatar"
 	"exehub/internal/config"
 	"exehub/internal/envelope"
+	"exehub/internal/events"
 	"exehub/internal/gate"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
@@ -36,11 +37,12 @@ const MaxUpload = 8 << 20
 const uploadSkew = 10 * time.Minute
 
 type Server struct {
-	Cfg  *config.Holder
-	St   *store.Store
-	Gate *gate.Gate
-	IPFS *ipfs.Client
-	Hub  *identity.Identity
+	Cfg    *config.Holder
+	St     *store.Store
+	Gate   *gate.Gate
+	IPFS   *ipfs.Client
+	Hub    *identity.Identity
+	Events *events.Broadcaster // live post activity; nil disables /v1/events
 }
 
 //go:embed skill.md
@@ -89,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/post/{id}", s.handlePost)
 	mux.HandleFunc("GET /v1/embed/{cid}", s.handleEmbed)
 	mux.HandleFunc("GET /v1/seq", s.handleSeq)
+	mux.HandleFunc("GET /v1/events", s.handleEvents)
 	mux.HandleFunc("GET /v1/replicate", s.handleReplicate)
 	mux.HandleFunc("GET /v1/peers", s.handlePeers)
 	return cors(mux)
@@ -133,6 +136,49 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
 		"allow_replication": c.Replicable(),
 		"stats":             map[string]int{"profiles": profiles, "posts": posts},
 	})
+}
+
+// handleEvents streams live post activity as SSE: unnamed events whose
+// data is the events.Event JSON. Public like all reads (it reveals
+// nothing the feed doesn't). Heartbeat comments keep idle connections
+// alive through proxies; a slow client silently loses events (see
+// events.Emit), which its reconnect-refresh absorbs.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if s.Events == nil {
+		writeErr(w, http.StatusServiceUnavailable, errors.New("events disabled"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	rc := http.NewResponseController(w)
+	ch := s.Events.Subscribe()
+	defer s.Events.Unsubscribe(ch)
+	io.WriteString(w, ": connected\n\n")
+	if err := rc.Flush(); err != nil {
+		return
+	}
+	hb := time.NewTicker(25 * time.Second)
+	defer hb.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev := <-ch:
+			b, err := json.Marshal(ev)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			if rc.Flush() != nil {
+				return
+			}
+		case <-hb.C:
+			io.WriteString(w, ": ping\n\n")
+			if rc.Flush() != nil {
+				return
+			}
+		}
+	}
 }
 
 func (s *Server) handleSeq(w http.ResponseWriter, r *http.Request) {
