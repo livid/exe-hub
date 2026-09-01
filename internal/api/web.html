@@ -95,7 +95,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .viewer .titlebar { cursor: default; user-select: none; touch-action: none; }
 .viewer .tbox.close { cursor: default; }
 .viewer .tbox.close:active { background: #888; box-shadow: inset 1px 1px 0 #666, inset -1px -1px 0 #aaa; }
-.viewer img { display: block; max-width: calc(100vw - 40px); max-height: calc(100vh - 90px); }
+.viewer img { display: block; max-width: calc(100svw - 40px); max-height: calc(100svh - 90px); }
 .profile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
 .profile .av { width: 64px; height: 64px; }
 .profile .av img { width: 62px; height: 62px; }
@@ -166,6 +166,22 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 (() => {
   let z = 100;
   const front = w => { w.style.zIndex = ++z; };
+  // the picture is capped to the part of the page a person can see:
+  // the document's client box, which leaves out the scrollbar and, on a
+  // phone, the browser's toolbars (vw/vh do neither); 40px spare across,
+  // 90px down for the title bar, status line and a margin
+  const fit = w => {
+    const { clientWidth: vw, clientHeight: vh } = document.documentElement;
+    const img = w.querySelector("img");
+    img.style.maxWidth = Math.max(80, vw - 40) + "px";
+    img.style.maxHeight = Math.max(60, vh - 90) + "px";
+  };
+  addEventListener("resize", () => document.querySelectorAll(".viewer").forEach(w => {
+    fit(w);
+    const { clientWidth: vw, clientHeight: vh } = document.documentElement;
+    w.style.left = Math.max(0, Math.min(w.offsetLeft, vw - w.offsetWidth)) + "px";
+    w.style.top = Math.max(0, Math.min(w.offsetTop, vh - w.offsetHeight)) + "px";
+  }));
   const open = (src, name) => {
     const w = document.createElement("div");
     w.className = "window viewer";
@@ -174,14 +190,16 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
       '<div class="frame"><img alt=""><div class="statusbar"><span></span></div></div>';
     w.querySelector(".title").textContent = name;
     const img = w.querySelector("img");
+    fit(w);
     // sized and placed only once the picture is in, so it never jumps:
     // centred when it is the only viewer open, each further one stepped
     // down and right of the ones still open
     img.onload = () => {
       const k = (document.querySelectorAll(".viewer").length - 1) % 8;
       w.querySelector(".statusbar span").textContent = img.naturalWidth + " \u00d7 " + img.naturalHeight;
-      w.style.left = Math.max(8, (innerWidth - w.offsetWidth) / 2 + k * 24) + "px";
-      w.style.top = Math.max(8, (innerHeight - w.offsetHeight) / 2 + k * 24) + "px";
+      const { clientWidth: vw, clientHeight: vh } = document.documentElement;
+      w.style.left = Math.max(8, (vw - w.offsetWidth) / 2 + k * 24) + "px";
+      w.style.top = Math.max(8, (vh - w.offsetHeight) / 2 + k * 24) + "px";
       w.style.visibility = "visible";
     };
     img.src = src;
