@@ -31,6 +31,28 @@ import (
 //go:embed web.html
 var webHTML string
 
+// The pages' icons, drawn from the Hub app's own 32px pixel art: the
+// shortcut icon at 1x (a 32 and a halved 16 in one .ico), the touch icon
+// at 5x on the desktop's lavender, like exe's maskable icon.
+//
+//go:embed favicon.ico
+var webFavicon []byte
+
+//go:embed apple-touch-icon.png
+var webTouchIcon []byte
+
+func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(webFavicon)
+}
+
+func (s *Server) handleTouchIcon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(webTouchIcon)
+}
+
 var webTmpl = template.Must(template.New("web").Parse(webHTML))
 
 // webPage is the page size of the feed and profile pages; the next page
@@ -288,6 +310,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	members, count, _ := s.St.Counts()
 	s.webRender(w, r, http.StatusOK, &webData{
 		Page: "home", Desc: "an exe-hub: a small public feed where a key is an account",
+		Image: webBase(r) + "/apple-touch-icon.png",
 		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r),
 		Members: members, Count: count,
 	})
@@ -361,6 +384,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	}
 	name := profileName(d.Profile)
 	d.Title = name + " on " + r.Host
+	d.Image = webBase(r) + "/apple-touch-icon.png"
 	if d.Profile.Avatar != "" {
 		d.Image = webBase(r) + "/v1/embed/" + d.Profile.Avatar
 	}

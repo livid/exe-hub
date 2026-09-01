@@ -258,3 +258,26 @@ func TestWebPicture(t *testing.T) {
 		t.Error("viewer script missing")
 	}
 }
+
+// TestWebIcons: the shortcut and touch icons are served, and the pages
+// point at them.
+func TestWebIcons(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	for _, c := range []struct{ path, mime, magic string }{
+		{"/favicon.ico", "image/x-icon", "\x00\x00\x01\x00"},
+		{"/apple-touch-icon.png", "image/png", "\x89PNG"},
+		{"/apple-touch-icon-precomposed.png", "image/png", "\x89PNG"},
+	} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example"+c.path, nil))
+		if w.Code != 200 || w.Header().Get("Content-Type") != c.mime || !strings.HasPrefix(w.Body.String(), c.magic) {
+			t.Errorf("%s: %d %s %q", c.path, w.Code, w.Header().Get("Content-Type"), w.Body.String()[:4])
+		}
+	}
+	_, body := get(t, h, "/")
+	if !strings.Contains(body, `<link rel="icon" href="/favicon.ico"`) || !strings.Contains(body, `<link rel="apple-touch-icon" href="/apple-touch-icon.png">`) ||
+		!strings.Contains(body, `<meta property="og:image" content="http://hub.example/apple-touch-icon.png">`) {
+		t.Error("page lacks the icon links")
+	}
+}
