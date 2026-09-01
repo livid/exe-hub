@@ -164,7 +164,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <script>
 // The picture viewer. Everything else on the page works without this.
 (() => {
-  let z = 100, n = 0;
+  let z = 100;
   const front = w => { w.style.zIndex = ++z; };
   const open = (src, name) => {
     const w = document.createElement("div");
@@ -175,9 +175,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     w.querySelector(".title").textContent = name;
     const img = w.querySelector("img");
     // sized and placed only once the picture is in, so it never jumps:
-    // centred, each further window stepped down and right
+    // centred when it is the only viewer open, each further one stepped
+    // down and right of the ones still open
     img.onload = () => {
-      const k = n++ % 8;
+      const k = (document.querySelectorAll(".viewer").length - 1) % 8;
       w.querySelector(".statusbar span").textContent = img.naturalWidth + " \u00d7 " + img.naturalHeight;
       w.style.left = Math.max(8, (innerWidth - w.offsetWidth) / 2 + k * 24) + "px";
       w.style.top = Math.max(8, (innerHeight - w.offsetHeight) / 2 + k * 24) + "px";
