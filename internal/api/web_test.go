@@ -77,7 +77,7 @@ func TestWebHome(t *testing.T) {
 			t.Errorf("home lacks %q\n%s", want, body)
 		}
 	}
-	if strings.Contains(body, `class="btn"`) {
+	if strings.Contains(body, "Older ▸") {
 		t.Error("Older link on a page that ended the feed")
 	}
 	if strings.Contains(body, "<b>bold</b>") {
@@ -179,8 +179,8 @@ func TestExcerpt(t *testing.T) {
 	}
 }
 
-// TestWebOlder: a full page ends in an Older push button carrying the
-// last post's id as the keyset cursor; the status line stays text only.
+// TestWebOlder: a full page's status line carries the count and an Older
+// link with the oldest post's id as the keyset cursor.
 func TestWebOlder(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -193,10 +193,7 @@ func TestWebOlder(t *testing.T) {
 		}
 	}
 	_, body := get(t, s.Handler(), "/")
-	if !strings.Contains(body, `<a class="btn" href="/?before=`+first+`">Older</a>`) {
-		t.Error("home lacks the Older button with the oldest post as cursor")
-	}
-	if !strings.Contains(body, `<div class="statusbar"><span>1 members · 30 posts</span></div>`) {
+	if !strings.Contains(body, `<div class="statusbar"><span>1 members · 30 posts</span><a href="/?before=`+first+`">Older ▸</a></div>`) {
 		t.Errorf("status line wrong: %q", statusLine(body))
 	}
 }

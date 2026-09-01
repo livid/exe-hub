@@ -27,25 +27,16 @@ a { color: #333399; }
   background-image: linear-gradient(#fff, #fff 50%, #777 50%, #777); background-size: 100% 2px; }
 .title { font-weight: bold; line-height: 13px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title a { color: inherit; text-decoration: none; }
-.frame { margin: 0 4px 4px; border: 1px solid #262626; background: #ddd;
+.frame { margin: 0 4px 4px; border: 1px solid #262626; background: #fff;
   box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
-/* the exe desktop's content shape (Blue Pencil, the Hub app): a white box
-   on the platinum frame, buttons in a row of their own below it — right-
-   aligned, 12px from the frame edge, 20px push buttons at least 58px
-   wide — and a 15px text-only status line along the frame's bottom */
-.content { padding: 8px 8px 0; }
-.box { background: #fff; border: 1px solid #262626; margin-bottom: 8px; }
-.btnrow { display: flex; justify-content: flex-end; gap: 12px; padding: 0 4px 8px 0; }
-.btn { display: inline-block; box-sizing: border-box; min-width: 58px; height: 20px; padding: 2px 13px;
-  background: #ddd; color: #262626; text-decoration: none; text-align: center;
-  font-size: 12px; line-height: 14px; font-weight: bold;
-  border: 1px solid #262626; border-radius: 3px;
-  box-shadow: inset 1px 1px 0 #ddd, inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
-.btn:active { background: #666; color: #fff;
-  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
-.statusbar { display: flex; align-items: center; gap: 12px; height: 15px; padding: 0 8px;
+/* the exe desktop's status line, inside the frame along its bottom: a
+   15px platinum strip under a black rule, 11px text; the paging link
+   rides at its right as text, like the Hub app's clickable address */
+.statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 15px; padding: 0 8px;
   border-top: 1px solid #262626; background: #ddd; font-size: 11px; color: #333;
   box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; white-space: nowrap; overflow: hidden; }
+.statusbar a { font-weight: bold; text-decoration: none; }
+.statusbar a:hover { text-decoration: underline; }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
@@ -63,18 +54,17 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .foot { margin-top: 5px; font-size: 11px; }
 .foot a { text-decoration: none; }
 .foot a:hover { text-decoration: underline; }
-.pad { padding: 10px 12px 4px; }
+.pad { padding: 12px 14px; }
 .pad p { margin: 0 0 8px; }
 .join ol { margin: 6px 0 0; padding-left: 20px; }
 .join li { margin-bottom: 6px; }
 .gate { background: #ffffc9; border: 1px solid #262626; padding: 6px 8px; margin: 8px 0 10px; box-shadow: inset 1px 1px 0 #fff; }
-.join .pad { padding-bottom: 10px; }
 .profile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
 .profile .av { width: 64px; height: 64px; }
 .profile .av img { width: 62px; height: 62px; }
 .profile h1 { margin: 0; font-size: 14px; }
 .profile p { margin: 4px 0 0; overflow-wrap: anywhere; }
-.alert { padding: 14px 12px; }
+.alert { padding: 16px 14px; }
 </style>
 </head>
 <body>
@@ -95,47 +85,41 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <div class="window">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
-    <div class="content">
-      <div class="box">{{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}</div>
-      {{if .Older}}<div class="btnrow"><a class="btn" href="/?before={{.Older}}">Older</a></div>{{end}}
-    </div>
-    <div class="statusbar"><span>{{.Members}} members · {{.Count}} posts</span></div>
+    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
+    <div class="statusbar"><span>{{.Members}} members · {{.Count}} posts</span>{{if .Older}}<a href="/?before={{.Older}}">Older ▸</a>{{end}}</div>
   </div>
 </div>
 {{else if eq .Page "thread"}}
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
-    <div class="content"><div class="box">
-      {{template "post" .Post}}
-      {{range .Replies}}{{template "post" .}}{{end}}
-    </div></div>
-    <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span></div>
+    {{template "post" .Post}}
+    {{range .Replies}}{{template "post" .}}{{end}}
+    <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span><a href="/">Feed ▸</a></div>
   </div>
 </div>
 {{else if eq .Page "profile"}}
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
-    <div class="content">
-      <div class="box"><div class="profile">
-        <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{end}}</span>
-        <div>
-          <h1>{{if .Profile.Name}}{{.Profile.Name}}{{else}}{{.Profile.ID}}{{end}}</h1>
-          <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · since {{.Since}}{{end}}</div>
-          {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
-        </div>
-      </div></div>
-      <div class="box">{{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">No posts yet.</div>{{end}}</div>
-      {{if .Older}}<div class="btnrow"><a class="btn" href="/u/{{.Profile.ID}}?before={{.Older}}">Older</a></div>{{end}}
+    <div class="profile">
+      <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{end}}</span>
+      <div>
+        <h1>{{if .Profile.Name}}{{.Profile.Name}}{{else}}{{.Profile.ID}}{{end}}</h1>
+        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · since {{.Since}}{{end}}</div>
+        {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
+      </div>
     </div>
-    <div class="statusbar"><span>{{if .Since}}{{.Count}} posts{{else}}{{len .Posts}} posts{{end}}</span></div>
+  </div>
+  <div class="frame">
+    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">No posts yet.</div>{{end}}
+    <div class="statusbar"><span>{{if .Since}}{{.Count}} posts{{else}}{{len .Posts}} posts{{end}}</span>{{if .Older}}<a href="/u/{{.Profile.ID}}?before={{.Older}}">Older ▸</a>{{end}}</div>
   </div>
 </div>
 {{else}}
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
-  <div class="frame"><div class="content"><div class="box"><div class="alert">{{.Message}} <a href="/">Back to the feed.</a></div></div></div></div>
+  <div class="frame"><div class="alert">{{.Message}} <a href="/">Back to the feed.</a></div></div>
 </div>
 {{end}}
 </body>

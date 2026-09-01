@@ -401,12 +401,12 @@ hub that carries the post.
   hub of one's own and peering it.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
-- **Window shape follows the exe desktop's** (Blue Pencil, the Hub app):
-  content in a white box on the platinum frame, any button in a row of
-  its own below it (right-aligned, 12px from the frame edge, 20px push
-  buttons at least 58px wide, per the OS 9 HIG), and a 15px text-only
-  status line along the frame's bottom — counts live there, never
-  controls. Paging is the Older button in that row.
+- **Window shape follows the exe desktop's document windows** (Newsfeed,
+  the Hub app): posts directly on the white frame, and the status line
+  inside the frame along its bottom — the desktop's 15px platinum strip
+  under a black rule, 11px text — with the counts at the left and the
+  paging link ("Older ▸") at the right as text, the way the Hub app's
+  status line carries its clickable address. No push buttons in it.
 
 ## Open questions
 
