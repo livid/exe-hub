@@ -288,13 +288,15 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   otherwise).
 - `GET  /v1/events` — live activity as SSE, public like all reads (it
   reveals nothing the feed doesn't). Unnamed events; the data is
-  `{"type","id","reply_to?","author"}` where type is `post.create` or
-  `post.delete` and `id` is the post concerned (for deletes, the deleted
-  post, not the delete message). Fired from a store post-commit hook
-  (`Store.OnMessage`), so subscribers never see uncommitted state, and
-  replicated posts fire it the same as direct ones. Events carry ids, not
-  content — clients fetch `/v1/post/{id}`, reusing the one tested render
-  path. Delivery is best-effort by design: `events.Broadcaster.Emit`
+  `{"type","id","reply_to?","author"}` where type is `post.create`,
+  `post.delete` or `profile.set` and `id` is the post concerned (for
+  deletes, the deleted post, not the delete message; for profile.set the
+  message itself — `author` is what matters there). Fired from a store
+  post-commit hook (`Store.OnMessage`), so subscribers never see
+  uncommitted state, and replicated posts fire it the same as direct
+  ones. Events carry ids, not content — clients fetch `/v1/post/{id}`
+  (for profile.set, `/v1/profile/{author}`), reusing the one tested
+  render path. Delivery is best-effort by design: `events.Broadcaster.Emit`
   never blocks ingest (a slow subscriber's events drop), and clients
   treat any reconnect as "refetch the view", which absorbs both drops and
   downtime. Heartbeat comments every 25s keep idle connections alive; the

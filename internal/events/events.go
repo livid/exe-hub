@@ -8,9 +8,10 @@ import "sync"
 
 // Event is one feed-visible change. Type is the envelope op that caused
 // it; ID is the post id it concerns (for post.delete, the deleted post,
-// not the delete message's own id).
+// not the delete message's own id; for profile.set, the message itself —
+// Author names the profile that changed).
 type Event struct {
-	Type    string `json:"type"`               // "post.create" | "post.delete"
+	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set"
 	ID      string `json:"id"`                 // post id
 	ReplyTo string `json:"reply_to,omitempty"` // parent post id when the post is a reply
 	Author  string `json:"author"`             // author profile id
