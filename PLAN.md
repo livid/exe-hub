@@ -401,6 +401,9 @@ hub that carries the post.
   hub of one's own and peering it.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
+- The home page is a desk of two windows: stacked, join first, on a
+  narrow screen; from 1060px wide the join window sits at the left and
+  stays put (sticky) while the feed scrolls beside it. CSS only.
 - **Window shape follows the exe desktop's document windows** (Newsfeed,
   the Hub app): posts directly on the white frame. Along the frame's
   bottom, on the desktop's platinum strip under a black rule, the feed

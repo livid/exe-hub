@@ -19,6 +19,15 @@ body { margin: 0; padding: 24px 12px 48px; background: #ccc; color: #262626;
 a { color: #333399; }
 .window { max-width: 640px; margin: 0 auto 22px; background: #ccc; border: 1px solid #262626;
   box-shadow: 2px 2px 0 #262626, inset 1px 1px 0 #fff, inset -1px -1px 0 #999; }
+/* the home page is a desk of two windows: stacked, join first, on a
+   narrow screen; side by side once there is room for both, the join
+   window at the left staying put (sticky) while the feed scrolls */
+.desk { max-width: 640px; margin: 0 auto; }
+@media (min-width: 1060px) {
+  .desk { max-width: none; display: flex; align-items: flex-start; justify-content: center; gap: 24px; }
+  .desk .join { flex: 0 0 360px; position: sticky; top: 24px; margin: 0; }
+  .desk .feed { flex: 0 1 640px; min-width: 0; margin: 0; }
+}
 .titlebar { display: flex; align-items: center; gap: 4px; padding: 2px 4px; }
 .tbox { width: 9px; height: 9px; border: 1px solid #262626; background: #ddd; flex: none;
   box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #888; }
@@ -87,6 +96,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </head>
 <body>
 {{if eq .Page "home"}}
+<div class="desk">
 <div class="window join" id="join">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">Join this hub</span><span class="stripe"></span></div>
   <div class="frame"><div class="pad">
@@ -100,12 +110,13 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     </ol>
   </div></div>
 </div>
-<div class="window">
+<div class="window feed">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
     <div class="pager">{{if .Prev}}<a class="btn prev" href="/?after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{.Members}} members · {{.Count}} posts</span>{{if .Next}}<a class="btn next" href="/?before={{.Next}}">Next &gt;</a>{{end}}</div>
   </div>
+</div>
 </div>
 {{else if eq .Page "thread"}}
 <div class="window">
