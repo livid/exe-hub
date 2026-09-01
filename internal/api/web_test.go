@@ -77,7 +77,7 @@ func TestWebHome(t *testing.T) {
 			t.Errorf("home lacks %q\n%s", want, body)
 		}
 	}
-	if strings.Contains(body, "Older ▸") {
+	if strings.Contains(body, `class="btn"`) {
 		t.Error("Older link on a page that ended the feed")
 	}
 	if strings.Contains(body, "<b>bold</b>") {
@@ -125,7 +125,7 @@ func TestWebThreadProfile(t *testing.T) {
 	// with a profile.set the page gains the name, count and date
 	ingest(t, s, priv, pub, 3, "profile.set", map[string]any{"name": "Ann", "bio": "hi <there>"})
 	code, body = get(t, h, "/u/"+author)
-	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "2 posts · since 20") || !strings.Contains(body, "hi &lt;there&gt;") {
+	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, "<span>2 posts</span>") || !strings.Contains(body, "hi &lt;there&gt;") {
 		t.Errorf("named profile page: %d\n%s", code, body)
 	}
 	if code, _ := get(t, h, "/u/nobody"); code != 404 {
@@ -176,5 +176,26 @@ func TestExcerpt(t *testing.T) {
 	}
 	if got := excerpt("one two three four", 10); got != "one two…" {
 		t.Errorf("excerpt cut = %q", got)
+	}
+}
+
+// TestWebOlder: a full page ends in an Older push button carrying the
+// last post's id as the keyset cursor; the status line stays text only.
+func TestWebOlder(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	var first string // newest-first, so the page ends with the first post ingested
+	for i := int64(1); i <= webPage; i++ {
+		id := ingest(t, s, priv, pub, i, "post.create", map[string]any{"text": "post"})
+		if i == 1 {
+			first = id
+		}
+	}
+	_, body := get(t, s.Handler(), "/")
+	if !strings.Contains(body, `<a class="btn" href="/?before=`+first+`">Older</a>`) {
+		t.Errorf("home lacks the Older button:\n%s", body)
+	}
+	if strings.Contains(body, `<div class="statusbar"><span>1 members · 30 posts</span></div>`) == false {
+		t.Errorf("status line wrong:\n%s", body)
 	}
 }
