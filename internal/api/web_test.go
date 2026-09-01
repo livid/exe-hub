@@ -184,18 +184,29 @@ func TestExcerpt(t *testing.T) {
 func TestWebOlder(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
 	var first string // newest-first, so the page ends with the first post ingested
 	for i := int64(1); i <= webPage; i++ {
-		id := ingest(t, s, priv, pub, i, "post.create", map[string]any{"text": "post"})
+		id := ingest(t, s, priv, pub, i+1, "post.create", map[string]any{"text": "post"})
 		if i == 1 {
 			first = id
 		}
 	}
 	_, body := get(t, s.Handler(), "/")
 	if !strings.Contains(body, `<a class="btn" href="/?before=`+first+`">Older</a>`) {
-		t.Errorf("home lacks the Older button:\n%s", body)
+		t.Error("home lacks the Older button with the oldest post as cursor")
 	}
-	if strings.Contains(body, `<div class="statusbar"><span>1 members · 30 posts</span></div>`) == false {
-		t.Errorf("status line wrong:\n%s", body)
+	if !strings.Contains(body, `<div class="statusbar"><span>1 members · 30 posts</span></div>`) {
+		t.Errorf("status line wrong: %q", statusLine(body))
 	}
+}
+
+// statusLine is the page's status strip, for short failure messages.
+func statusLine(body string) string {
+	i := strings.Index(body, `<div class="statusbar">`)
+	if i < 0 {
+		return "(none)"
+	}
+	j := strings.Index(body[i:], "</div>")
+	return body[i : i+j+6]
 }
