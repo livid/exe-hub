@@ -402,11 +402,15 @@ hub that carries the post.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
 - **Window shape follows the exe desktop's document windows** (Newsfeed,
-  the Hub app): posts directly on the white frame, and the status line
-  inside the frame along its bottom — the desktop's 15px platinum strip
-  under a black rule, 11px text — with the counts at the left and the
-  paging link ("Older ▸") at the right as text, the way the Hub app's
-  status line carries its clickable address. No push buttons in it.
+  the Hub app): posts directly on the white frame. Along the frame's
+  bottom, on the desktop's platinum strip under a black rule, the feed
+  and profile pages carry a pager — `< Prev` at the left, the counts
+  centred, `Next >` at the right, as Platinum push buttons that appear
+  only when that page exists; a thread page keeps the 15px text status
+  line. Paging is keyset both ways (`?before=` older, `?after=` newer,
+  `store.FeedNewer` / `ProfileFeedNewer`), fetching one row past the
+  page to know whether a neighbour exists; a newer page that comes back
+  short has reached the top and redirects to the list's first page.
 
 ## Open questions
 

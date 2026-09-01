@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,8 +78,8 @@ func TestWebHome(t *testing.T) {
 			t.Errorf("home lacks %q\n%s", want, body)
 		}
 	}
-	if strings.Contains(body, "Older ▸") {
-		t.Error("Older link on a page that ended the feed")
+	if strings.Contains(body, `class="btn`) {
+		t.Error("a paging button on a one-page feed")
 	}
 	if strings.Contains(body, "<b>bold</b>") {
 		t.Error("post markup reached the page unescaped")
@@ -125,8 +126,8 @@ func TestWebThreadProfile(t *testing.T) {
 	// with a profile.set the page gains the name, count and date
 	ingest(t, s, priv, pub, 3, "profile.set", map[string]any{"name": "Ann", "bio": "hi <there>"})
 	code, body = get(t, h, "/u/"+author)
-	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, "<span>2 posts</span>") || !strings.Contains(body, "hi &lt;there&gt;") {
-		t.Errorf("named profile page: %d\n%s", code, body)
+	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, `<span class="stats">2 posts</span>`) || !strings.Contains(body, "hi &lt;there&gt;") {
+		t.Errorf("named profile page: %d %q", code, statusLine(body))
 	}
 	if code, _ := get(t, h, "/u/nobody"); code != 404 {
 		t.Errorf("unknown profile = %d", code)
@@ -179,28 +180,58 @@ func TestExcerpt(t *testing.T) {
 	}
 }
 
-// TestWebOlder: a full page's status line carries the count and an Older
-// link with the oldest post's id as the keyset cursor.
-func TestWebOlder(t *testing.T) {
+// TestWebPaging: 31 posts make two pages. The first page has Next only,
+// the last has Prev only, Prev from the last page lands on a full page
+// with no Prev of its own, and a short newer page redirects to the top.
+func TestWebPaging(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
-	var first string // newest-first, so the page ends with the first post ingested
-	for i := int64(1); i <= webPage; i++ {
-		id := ingest(t, s, priv, pub, i+1, "post.create", map[string]any{"text": "post"})
-		if i == 1 {
-			first = id
-		}
+	var ids []string // oldest first
+	for i := int64(1); i <= webPage+1; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, i+1, "post.create", map[string]any{"text": fmt.Sprintf("post %d", i)}))
 	}
-	_, body := get(t, s.Handler(), "/")
-	if !strings.Contains(body, `<div class="statusbar"><span>1 members · 30 posts</span><a href="/?before=`+first+`">Older ▸</a></div>`) {
-		t.Errorf("status line wrong: %q", statusLine(body))
+	h := s.Handler()
+	oldestOnFirst := ids[1] // 31 posts newest-first: the first page ends at post 2
+
+	_, body := get(t, h, "/")
+	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next" href="/?before=`+oldestOnFirst+`">Next &gt;</a>`) {
+		t.Errorf("first page: %q", statusLine(body))
+	}
+	if !strings.Contains(body, `<span class="stats">1 members · 31 posts</span>`) {
+		t.Errorf("stats: %q", statusLine(body))
+	}
+
+	_, body = get(t, h, "/?before="+oldestOnFirst)
+	if !strings.Contains(body, "post 1<") || strings.Contains(body, "post 2<") {
+		t.Error("second page should hold post 1 only")
+	}
+	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[0]+`">&lt; Prev</a>`) {
+		t.Errorf("last page: %q", statusLine(body))
+	}
+
+	// Prev from the last page: the 30 posts newer than post 1 — a full page, nothing newer
+	_, body = get(t, h, "/?after="+ids[0])
+	if strings.Contains(body, "Prev") || !strings.Contains(body, "post 31<") || !strings.Contains(body, "post 2<") ||
+		!strings.Contains(body, `<a class="btn next" href="/?before=`+oldestOnFirst+`">Next &gt;</a>`) {
+		t.Errorf("newer page: %q", statusLine(body))
+	}
+
+	// only a few posts newer than post 20: back to the top page instead of a short one
+	req := httptest.NewRequest("GET", "http://hub.example/?after="+ids[19], nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 302 || w.Header().Get("Location") != "/" {
+		t.Errorf("short newer page: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	if code, _ := get(t, h, "/?before="+strings.Repeat("0", 64)); code != 404 {
+		t.Errorf("unknown cursor = %d", code)
 	}
 }
 
-// statusLine is the page's status strip, for short failure messages.
+// statusLine is the page's pager strip, for short failure messages.
 func statusLine(body string) string {
-	i := strings.Index(body, `<div class="statusbar">`)
+	i := strings.Index(body, `<div class="pager">`)
 	if i < 0 {
 		return "(none)"
 	}

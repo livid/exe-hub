@@ -431,16 +431,16 @@ func (s *Store) Rebuild() error {
 // ---- reads ----
 
 type FeedPost struct {
-	ID         string          `json:"id"`
-	Author     string          `json:"author"`
-	AuthorName string          `json:"author_name,omitempty"`
-	Avatar     string          `json:"avatar,omitempty"`
-	Text       string          `json:"text"`
-	ReplyTo    string          `json:"reply_to,omitempty"`
-	TS         int64           `json:"ts"`
-	Received   int64           `json:"received"`
+	ID         string           `json:"id"`
+	Author     string           `json:"author"`
+	AuthorName string           `json:"author_name,omitempty"`
+	Avatar     string           `json:"avatar,omitempty"`
+	Text       string           `json:"text"`
+	ReplyTo    string           `json:"reply_to,omitempty"`
+	TS         int64            `json:"ts"`
+	Received   int64            `json:"received"`
 	Embeds     []envelope.Embed `json:"embeds,omitempty"`
-	Replies    int             `json:"replies"`
+	Replies    int              `json:"replies"`
 }
 
 const feedQuery = `
@@ -491,7 +491,7 @@ func (s *Store) postEmbeds(post string) ([]envelope.Embed, error) {
 // means "from the top".
 func (s *Store) cursor(before string) (int64, string, error) {
 	if before == "" {
-		return 1<<62, "￿", nil
+		return 1 << 62, "￿", nil
 	}
 	var recv int64
 	err := s.db.QueryRow(`SELECT received FROM posts WHERE id=?`, before).Scan(&recv)
@@ -518,6 +518,23 @@ func (s *Store) Feed(before string, limit int, withReplies bool) ([]FeedPost, er
 	return s.scanFeed(rows)
 }
 
+// FeedNewer is the feed's other direction: up to limit posts newer than
+// after, oldest-first (the ones nearest to after come first) — the
+// public pages' Prev button. Callers reverse for display.
+func (s *Store) FeedNewer(after string, limit int, withReplies bool) ([]FeedPost, error) {
+	recv, aid, err := s.cursor(after)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(feedQuery+`WHERE (? OR p.reply_to = '') AND (p.received, p.id) > (?, ?) ORDER BY p.received, p.id LIMIT ?`,
+		withReplies, recv, aid, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
 func (s *Store) ProfileFeed(author, before string, limit int) ([]FeedPost, error) {
 	recv, bid, err := s.cursor(before)
 	if err != nil {
@@ -525,6 +542,21 @@ func (s *Store) ProfileFeed(author, before string, limit int) ([]FeedPost, error
 	}
 	rows, err := s.db.Query(feedQuery+`WHERE p.author = ? AND (p.received, p.id) < (?, ?) ORDER BY p.received DESC, p.id DESC LIMIT ?`,
 		author, recv, bid, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+// ProfileFeedNewer is ProfileFeed's other direction, like FeedNewer.
+func (s *Store) ProfileFeedNewer(author, after string, limit int) ([]FeedPost, error) {
+	recv, aid, err := s.cursor(after)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(feedQuery+`WHERE p.author = ? AND (p.received, p.id) > (?, ?) ORDER BY p.received, p.id LIMIT ?`,
+		author, recv, aid, limit)
 	if err != nil {
 		return nil, err
 	}

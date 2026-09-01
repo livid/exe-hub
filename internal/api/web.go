@@ -7,6 +7,7 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -69,7 +70,7 @@ type webData struct {
 	Image            string // OpenGraph picture, when the page has one
 	Page             string // "home" | "thread" | "profile" | "error"
 	Posts            []webPost
-	Older            string // keyset cursor for the next page, "" on the last
+	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
 	Join             *webJoin
 	Post             *webPost
 	Replies          []webPost
@@ -137,13 +138,64 @@ func webPosts(posts []store.FeedPost) []webPost {
 	return out
 }
 
-// olderCursor is the next page's cursor: the last id when a full page
-// came back, nothing when this page ended the feed.
-func olderCursor(posts []store.FeedPost) string {
-	if len(posts) < webPage {
-		return ""
+// webPager is one page of a keyset-paged list and its neighbours: Prev
+// (newer) and Next (older) carry the cursor for that direction, and are
+// empty at the newest and oldest ends, so the buttons only show when a
+// page exists. Home asks for a redirect to the list's first page.
+type webPager struct {
+	Posts      []store.FeedPost
+	Prev, Next string
+	Home       bool
+}
+
+// webPageOf resolves ?before= (older than) or ?after= (newer than) into a
+// page, fetching one row past it to learn whether a neighbour exists.
+// The newer direction reads oldest-first from the cursor, so the page is
+// the posts nearest to it; a newer page that is not full has reached the
+// newest end, and the list's own first page shows those posts better
+// than a short one would, so it redirects there.
+func webPageOf(q url.Values,
+	older func(before string, n int) ([]store.FeedPost, error),
+	newer func(after string, n int) ([]store.FeedPost, error)) (webPager, error) {
+	var pg webPager
+	if after := q.Get("after"); after != "" {
+		asc, err := newer(after, webPage+1)
+		if err != nil {
+			return pg, err
+		}
+		if len(asc) < webPage {
+			pg.Home = true
+			return pg, nil
+		}
+		more := len(asc) > webPage
+		asc = asc[:webPage]
+		for i := len(asc) - 1; i >= 0; i-- {
+			pg.Posts = append(pg.Posts, asc[i])
+		}
+		if more {
+			pg.Prev = pg.Posts[0].ID
+		}
+		pg.Next = pg.Posts[len(pg.Posts)-1].ID // `after` itself lies beyond
+		return pg, nil
 	}
-	return posts[len(posts)-1].ID
+	before := q.Get("before")
+	posts, err := older(before, webPage+1)
+	if err != nil {
+		return pg, err
+	}
+	if len(posts) > webPage {
+		posts = posts[:webPage]
+		pg.Next = posts[len(posts)-1].ID
+	}
+	pg.Posts = posts
+	if before != "" {
+		if len(posts) > 0 {
+			pg.Prev = posts[0].ID
+		} else {
+			pg.Prev = before
+		}
+	}
+	return pg, nil
 }
 
 // webBase is how this hub is reached from outside: the request's Host,
@@ -218,15 +270,25 @@ func authorLabel(p store.FeedPost) string {
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	posts, err := s.St.Feed(r.URL.Query().Get("before"), webPage, false)
+	pg, err := webPageOf(r.URL.Query(),
+		func(before string, n int) ([]store.FeedPost, error) { return s.St.Feed(before, n, false) },
+		func(after string, n int) ([]store.FeedPost, error) { return s.St.FeedNewer(after, n, false) })
+	if errors.Is(err, store.ErrNotFound) {
+		s.webError(w, r, http.StatusNotFound, "No such page.")
+		return
+	}
 	if err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "The feed could not be read.")
+		return
+	}
+	if pg.Home {
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 	members, count, _ := s.St.Counts()
 	s.webRender(w, r, http.StatusOK, &webData{
 		Page: "home", Desc: "an exe-hub: a small public feed where a key is an account",
-		Posts: webPosts(posts), Older: olderCursor(posts), Join: s.webJoinBlock(r),
+		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r),
 		Members: members, Count: count,
 	})
 }
@@ -265,13 +327,24 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 // a profile nor a post is a 404.
 func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	posts, err := s.St.ProfileFeed(id, r.URL.Query().Get("before"), webPage)
+	pg, err := webPageOf(r.URL.Query(),
+		func(before string, n int) ([]store.FeedPost, error) { return s.St.ProfileFeed(id, before, n) },
+		func(after string, n int) ([]store.FeedPost, error) { return s.St.ProfileFeedNewer(id, after, n) })
+	if errors.Is(err, store.ErrNotFound) {
+		s.webError(w, r, http.StatusNotFound, "No such page.")
+		return
+	}
 	if err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "The posts could not be read.")
 		return
 	}
+	if pg.Home {
+		http.Redirect(w, r, "/u/"+url.PathEscape(id), http.StatusFound)
+		return
+	}
+	posts := pg.Posts
 	pr, err := s.St.Profile(id)
-	d := &webData{Page: "profile", Posts: webPosts(posts), Older: olderCursor(posts)}
+	d := &webData{Page: "profile", Posts: webPosts(posts), Prev: pg.Prev, Next: pg.Next}
 	switch {
 	case err == nil:
 		d.Profile, d.Count = pr, pr.Posts
