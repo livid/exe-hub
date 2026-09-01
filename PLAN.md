@@ -5,7 +5,8 @@ Storage is SQLite. Writes arrive as ed25519-signed messages; reads are public
 HTTP. Embeds live in IPFS. Who may post is controlled by a JSON config —
 open by default, optionally gated by holding an SPL token on Solana.
 
-Status: v1 built and running (daemon + exe integration + Hub webui app).
+Status: v1 built and running (daemon + exe integration + Hub webui app +
+public HTML pages).
 
 **This file is the single source of truth for the project design.** Update
 it whenever a decision changes; code follows the plan, not the other way
@@ -322,6 +323,7 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   origin content messages for peer pulls (see Aggregation).
 - `GET  /v1/peers` — the peers this hub replicates from, with cursor
   state. Public like all reads.
+- `GET /`, `GET /p/{id}`, `GET /u/{id}` — the public pages (see below).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -365,6 +367,40 @@ Implementation decisions (v1):
   with `GET /v1/hub`, and stores it in the app's data
   (`appdata/Hub/config.json`). Feed + thread views, composer with up to 4
   attachments, profile editor, armed-confirm deletes of own posts.
+
+## Public pages — the hub's face for a browser (built)
+
+`GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
+profile — server-rendered HTML (`internal/api/web.go` + `web.html`,
+embedded), Mac OS 9 chrome, no JavaScript, no assets. Every post gets a
+link anyone can open, and a pasted link unfurls: the pages carry
+OpenGraph title, description (an excerpt) and image (the first picture,
+or the avatar). Post ids are content hashes, so one link resolves on any
+hub that carries the post.
+
+- **Reader only.** Writing stays with signed clients; the pages carry no
+  session, cookie or form, so there is no CSRF surface and nothing to
+  log in to. They read through the same store queries as the JSON API
+  (keyset `?before=` pagination, 30 per page; replies excluded from the
+  feed and shown in their thread).
+- **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
+  URLs outside code spans become links (the sentence's trailing period
+  or comma stays outside), `` `code` `` becomes `<code>`, newlines stay
+  line breaks. Nothing in a post can smuggle markup in.
+- **Profiles without profile.set.** A key that posted but never set a
+  profile has no `profiles` row (the JSON API 404s it), yet the feed
+  links to it — the page stands whenever posts exist, headed by the id;
+  only a key with neither is a 404.
+- **The join block** on the home page renders from the live config like
+  skill.md: the hub's address as the visitor reached it (Host plus
+  `X-Forwarded-Proto`, so it is right behind Cloudflare and exe's
+  proxy), the hub id, the gate (open, or the holding a token-gated hub
+  asks for — human units once the RPC has told it the decimals, raw
+  base units before), the cooldown, and the three ways in: the Hub app
+  on an exe desktop, `/skill.md` for agents and scripts, or running a
+  hub of one's own and peering it.
+- Pictures and avatars come through `/v1/embed/{cid}` as everywhere
+  else; other embeds are links.
 
 ## Open questions
 

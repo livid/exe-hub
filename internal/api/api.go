@@ -80,6 +80,10 @@ func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	// the public pages (web.go): the feed, a thread, a profile
+	mux.HandleFunc("GET /{$}", s.handleHome)
+	mux.HandleFunc("GET /p/{id}", s.handleThreadPage)
+	mux.HandleFunc("GET /u/{id}", s.handleProfilePage)
 	mux.HandleFunc("GET /skill.md", s.handleSkill)
 	mux.HandleFunc("GET /v1/hub", s.handleHub)
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
