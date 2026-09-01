@@ -372,7 +372,11 @@ Implementation decisions (v1):
 
 `GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
 profile — server-rendered HTML (`internal/api/web.go` + `web.html`,
-embedded), Mac OS 9 chrome, no JavaScript, no assets. Every post gets a
+embedded), Mac OS 9 chrome, no assets, and no JavaScript except one
+small inline script for the picture viewer: a click on a picture opens
+it in a window of its own (fixed, cascading, dragged by its title bar,
+closed by its box or Escape, size in pixels on its status line), like
+the desktop's PictureViewer; without script the link opens the picture. Every post gets a
 link anyone can open, and a pasted link unfurls: the pages carry
 OpenGraph title, description (an excerpt) and image (the first picture,
 or the avatar). Post ids are content hashes, so one link resolves on any

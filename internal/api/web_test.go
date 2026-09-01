@@ -238,3 +238,23 @@ func statusLine(body string) string {
 	j := strings.Index(body[i:], "</div>")
 	return body[i : i+j+6]
 }
+
+// TestWebPicture: a picture embed renders as a viewer link carrying its
+// name, and the page ships the viewer script.
+func TestWebPicture(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	const cid = "bafybeieeqqg3m4keu6lt3bwmo6s2gofxyrrn3sbyayw63kvxzrq4p5rdsy"
+	if err := s.St.AddPin(cid, 1234, "image/jpeg", false); err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "look",
+		"embeds": []map[string]any{{"cid": cid, "mime": "image/jpeg", "filename": "cat.jpg", "alt": "a cat"}}})
+	_, body := get(t, s.Handler(), "/")
+	if !strings.Contains(body, `<a class="pic" href="/v1/embed/`+cid+`" data-name="cat.jpg"><img src="/v1/embed/`+cid+`" alt="a cat"></a>`) {
+		t.Errorf("picture embed wrong:\n%s", body[strings.Index(body, `<div class="embeds">`):][:300])
+	}
+	if !strings.Contains(body, `querySelectorAll("a.pic")`) {
+		t.Error("viewer script missing")
+	}
+}

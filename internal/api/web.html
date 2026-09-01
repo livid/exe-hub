@@ -86,6 +86,16 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .join ol { margin: 6px 0 0; padding-left: 20px; }
 .join li { margin-bottom: 6px; }
 .gate { background: #ffffc9; border: 1px solid #262626; padding: 6px 8px; margin: 8px 0 10px; box-shadow: inset 1px 1px 0 #fff; }
+/* the picture viewer: a click on a picture opens it in a window of its
+   own, like the desktop's PictureViewer — fixed, cascading, dragged by
+   its title bar, closed by its box or Escape; the status line shows the
+   picture's size in pixels. Built by the script at the end of the page;
+   without script the link opens the picture itself. */
+.viewer { position: fixed; left: 0; top: 0; margin: 0; max-width: none; z-index: 100; visibility: hidden; }
+.viewer .titlebar { cursor: default; user-select: none; touch-action: none; }
+.viewer .tbox.close { cursor: default; }
+.viewer .tbox.close:active { background: #888; box-shadow: inset 1px 1px 0 #666, inset -1px -1px 0 #aaa; }
+.viewer img { display: block; max-width: calc(100vw - 40px); max-height: calc(100vh - 90px); }
 .profile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
 .profile .av { width: 64px; height: 64px; }
 .profile .av img { width: 62px; height: 62px; }
@@ -151,6 +161,59 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"><div class="alert">{{.Message}} <a href="/">Back to the feed.</a></div></div>
 </div>
 {{end}}
+<script>
+// The picture viewer. Everything else on the page works without this.
+(() => {
+  let z = 100, n = 0;
+  const front = w => { w.style.zIndex = ++z; };
+  const open = (src, name) => {
+    const w = document.createElement("div");
+    w.className = "window viewer";
+    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="Close"></span><span class="stripe"></span>' +
+      '<span class="title"></span><span class="stripe"></span></div>' +
+      '<div class="frame"><img alt=""><div class="statusbar"><span></span></div></div>';
+    w.querySelector(".title").textContent = name;
+    const img = w.querySelector("img");
+    // sized and placed only once the picture is in, so it never jumps:
+    // centred, each further window stepped down and right
+    img.onload = () => {
+      const k = n++ % 8;
+      w.querySelector(".statusbar span").textContent = img.naturalWidth + " \u00d7 " + img.naturalHeight;
+      w.style.left = Math.max(8, (innerWidth - w.offsetWidth) / 2 + k * 24) + "px";
+      w.style.top = Math.max(8, (innerHeight - w.offsetHeight) / 2 + k * 24) + "px";
+      w.style.visibility = "visible";
+    };
+    img.src = src;
+    document.body.append(w);
+    front(w);
+    w.addEventListener("pointerdown", () => front(w), true);
+    w.querySelector(".close").addEventListener("click", () => w.remove());
+    const bar = w.querySelector(".titlebar");
+    bar.addEventListener("pointerdown", e => {
+      if (e.target.closest(".close") || e.button) return;
+      e.preventDefault();
+      const dx = e.clientX - w.offsetLeft, dy = e.clientY - w.offsetTop;
+      const move = ev => {
+        w.style.left = Math.max(60 - w.offsetWidth, Math.min(innerWidth - 60, ev.clientX - dx)) + "px";
+        w.style.top = Math.max(0, Math.min(innerHeight - 24, ev.clientY - dy)) + "px";
+      };
+      bar.setPointerCapture(e.pointerId);
+      bar.addEventListener("pointermove", move);
+      bar.addEventListener("pointerup", () => bar.removeEventListener("pointermove", move), { once: true });
+    });
+  };
+  document.querySelectorAll("a.pic").forEach(a => a.addEventListener("click", e => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; // a new tab is still a new tab
+    e.preventDefault();
+    open(a.href, a.dataset.name);
+  }));
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const top = [...document.querySelectorAll(".viewer")].sort((a, b) => b.style.zIndex - a.style.zIndex)[0];
+    if (top) top.remove();
+  });
+})();
+</script>
 </body>
 </html>
 {{end}}
@@ -160,7 +223,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div>
     <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}">{{.When}}</a>{{if .ReplyTo}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}</div>
     {{if .Text}}<div class="text">{{.HTML}}</div>{{end}}
-    {{if or .Images .Files}}<div class="embeds">{{range .Images}}<a href="/v1/embed/{{.CID}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
+    {{if or .Images .Files}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
     {{if and (not .ReplyTo) .Replies}}<div class="foot"><a href="/p/{{.ID}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a></div>{{end}}
   </div>
 </div>
