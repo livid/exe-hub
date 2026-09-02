@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Keybridge for exe-hub",
+  "version": "0.1.0",
+  "description": "Sign exe-hub messages with Phantom without exposing a private key.",
+  "action": {
+    "default_title": "Keybridge",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://hub.v2core.com/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  }
+}

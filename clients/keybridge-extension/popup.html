@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keybridge</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="titlebar">
+        <div class="brand-mark" aria-hidden="true">K</div>
+        <div>
+          <h1>Keybridge</h1>
+          <p>Phantom signing for exe-hub</p>
+        </div>
+        <span class="window-dot" aria-hidden="true">⋮</span>
+      </header>
+
+      <section class="connection-row">
+        <span id="status-light" class="status-light"></span>
+        <div class="connection-copy">
+          <strong id="connection-title">Phantom 未连接</strong>
+          <span id="connection-address">点击连接钱包</span>
+        </div>
+        <button id="connect-button" class="button button-secondary">连接</button>
+      </section>
+
+      <section class="privacy-note">
+        <span class="lock-icon" aria-hidden="true">⌑</span>
+        <p>私钥永远不会离开 Phantom。插件只接收公钥和一次性签名。</p>
+      </section>
+
+      <section class="form-section">
+        <label for="hub-url">Hub 地址</label>
+        <input id="hub-url" value="https://hub.v2core.com" spellcheck="false" />
+
+        <div class="field-grid">
+          <div>
+            <label for="operation">操作</label>
+            <select id="operation">
+              <option value="post.create">发布帖子</option>
+              <option value="profile.set">设置资料名称</option>
+            </select>
+          </div>
+          <div>
+            <label for="sequence">序号</label>
+            <input id="sequence" value="自动获取" disabled />
+          </div>
+        </div>
+
+        <label for="payload-text" id="payload-label">帖子内容</label>
+        <textarea id="payload-text" rows="4" placeholder="输入要发布的内容"></textarea>
+      </section>
+
+      <section class="message-section">
+        <div class="section-heading">
+          <h2>待签名消息</h2>
+          <span>只读</span>
+        </div>
+        <pre id="message-preview">连接 Phantom 后生成精确消息</pre>
+      </section>
+
+      <button id="sign-button" class="button button-primary" disabled>
+        <span aria-hidden="true">◈</span>
+        使用 Phantom 签名
+      </button>
+
+      <section id="result-panel" class="result-panel" hidden>
+        <div class="result-heading">
+          <span class="success-mark">✓</span>
+          <strong>签名已生成</strong>
+        </div>
+        <textarea id="signature-output" readonly rows="3"></textarea>
+        <button id="copy-button" class="button button-secondary button-full">复制签名</button>
+      </section>
+
+      <p id="feedback" class="feedback" role="status"></p>
+
+      <footer>
+        <span>本地签名</span>
+        <span>·</span>
+        <span>不托管私钥</span>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
