@@ -366,6 +366,20 @@ Implementation decisions (v1):
   (`appdata/Hub/config.json`). Feed + thread views, composer with up to 4
   attachments, profile editor, armed-confirm deletes of own posts.
 
+## Optional browser signing client — built
+
+- `clients/keybridge-extension/` is a Manifest V3 Chrome client for users
+  who have a qualifying Solana wallet in Phantom but do not want to expose
+  its private key to an agent.
+- The extension reads `/v1/seq`, derives `author` from Phantom's raw
+  Ed25519 public key, serializes the envelope once, and asks Phantom to sign
+  `exe-hub:v1\n` plus those exact bytes. It returns the Base64 signature to
+  the user; it does not publish, upload, or persist wallet secrets.
+- Signing is restricted to the Hub origin and the extension locally verifies
+  the returned Ed25519 signature before offering it for copy. The MVP covers
+  `profile.set` and `post.create`; deletion, embeds, avatar minting, and
+  automatic publication remain with the existing Hub clients.
+
 ## Open questions
 
 - Whether an aggregator should eventually re-serve mirrored embeds to its
