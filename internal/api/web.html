@@ -16,7 +16,8 @@
 <style>
 /* Mac OS 9 Platinum, the exe desktop's chrome reduced to what a page
    needs: a window with a striped title bar and a hard shadow, a sunken
-   white frame, a statusbar strip. No scripts, no assets. */
+   white frame, a statusbar strip. No assets; two small scripts at the
+   end of the page. */
 body { margin: 0; padding: 24px 12px 48px; background: #ccc; color: #262626;
   font: 12px/1.45 "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; }
 a { color: #333399; }
@@ -224,11 +225,13 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
       bar.addEventListener("pointerup", () => bar.removeEventListener("pointermove", move), { once: true });
     });
   };
-  document.querySelectorAll("a.pic").forEach(a => a.addEventListener("click", e => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; // a new tab is still a new tab
+  // delegated, so a picture the live feed brings in opens the same way
+  document.addEventListener("click", e => {
+    const a = e.target.closest("a.pic");
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; // a new tab is still a new tab
     e.preventDefault();
     open(a.href, a.dataset.name);
-  }));
+  });
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     const top = [...document.querySelectorAll(".viewer")].sort((a, b) => b.style.zIndex - a.style.zIndex)[0];
@@ -236,6 +239,50 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   });
 })();
 </script>
+{{if .Live}}<script>
+// The live feed. This is the newest page, and it stays current: the
+// hub's event stream says when a post lands or goes or a name changes,
+// and the page fetches itself again and swaps the feed's children in,
+// keeping each post whose HTML did not change (so pictures never
+// reload and the view stays put) and inserting, replacing or removing
+// only what did. There is no renderer here: the server's template
+// stays the one text pipeline, and order, reply counts, names and the
+// pager's counts all come from the same render as a fresh load. A
+// burst coalesces into one fetch, a hidden tab waits until it is
+// shown, and a reconnect fetches too, which absorbs whatever was
+// missed while the line was down.
+(() => {
+  const feed = document.querySelector(".feed .frame");
+  if (!feed || !("EventSource" in window)) return;
+  const swap = html => {
+    const fresh = new DOMParser().parseFromString(html, "text/html").querySelector(".feed .frame");
+    if (!fresh) return;
+    const have = new Map([...feed.children].filter(n => n.id).map(n => [n.id, n]));
+    const next = [...fresh.children].map(n => {
+      const old = have.get(n.id);
+      return old && old.isEqualNode(n) ? old : n;
+    });
+    for (const n of [...feed.children]) if (!next.includes(n)) n.remove();
+    next.forEach((n, i) => { if (feed.children[i] !== n) feed.insertBefore(n, feed.children[i] || null); });
+  };
+  let timer, busy = false, wanted = false;
+  const refresh = () => {
+    if (busy || document.hidden) { wanted = true; return; }
+    busy = true; wanted = false;
+    fetch("/", { cache: "no-store" })
+      .then(r => r.ok ? r.text() : Promise.reject(r.status)).then(swap)
+      .catch(() => {})
+      .finally(() => { busy = false; if (wanted) poke(); });
+  };
+  const poke = () => { clearTimeout(timer); timer = setTimeout(refresh, 300); };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && wanted) poke(); });
+  let down = false;
+  const es = new EventSource("/v1/events");
+  es.onmessage = poke;
+  es.onerror = () => { down = true; };
+  es.onopen = () => { if (down) { down = false; poke(); } };
+})();
+</script>{{end}}
 </body>
 </html>
 {{end}}

@@ -12,6 +12,7 @@ import (
 
 	"exehub/internal/config"
 	"exehub/internal/envelope"
+	"exehub/internal/events"
 )
 
 // ingest signs and stores one envelope for the test key, returning its
@@ -254,8 +255,38 @@ func TestWebPicture(t *testing.T) {
 	if !strings.Contains(body, `<a class="pic" href="/v1/embed/`+cid+`" data-name="cat.jpg"><img src="/v1/embed/`+cid+`" alt="a cat"></a>`) {
 		t.Errorf("picture embed wrong:\n%s", body[strings.Index(body, `<div class="embeds">`):][:300])
 	}
-	if !strings.Contains(body, `querySelectorAll("a.pic")`) {
+	if !strings.Contains(body, `closest("a.pic")`) {
 		t.Error("viewer script missing")
+	}
+}
+
+// TestWebLive: the home page's first page ships the live-feed script
+// when the hub has an event bus; cursor pages and a hub without one
+// stay static.
+func TestWebLive(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	var ids []string
+	for i := int64(1); i <= webPage+1; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, i, "post.create", map[string]any{"text": fmt.Sprintf("post %d", i)}))
+	}
+	const live = `new EventSource("/v1/events")`
+	if _, body := get(t, s.Handler(), "/"); strings.Contains(body, live) {
+		t.Error("live script on a hub without an event bus")
+	}
+	s.Events = events.New()
+	h := s.Handler()
+	if _, body := get(t, h, "/"); !strings.Contains(body, live) {
+		t.Error("first page lacks the live script")
+	}
+	if _, body := get(t, h, "/?before="+ids[1]); strings.Contains(body, live) {
+		t.Error("live script on an older page")
+	}
+	if _, body := get(t, h, "/?after="+ids[0]); strings.Contains(body, live) {
+		t.Error("live script on a newer page")
+	}
+	if _, body := get(t, h, "/u/"+strings.Repeat("0", 16)); strings.Contains(body, live) {
+		t.Error("live script on a profile page")
 	}
 }
 

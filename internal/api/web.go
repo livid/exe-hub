@@ -19,14 +19,16 @@ import (
 // Public pages — the hub's face for a browser, beside the JSON API:
 // GET / (the feed and how to join), /p/{id} (a thread), /u/{id} (a
 // profile). Server-rendered from the same store queries the API uses,
-// no JavaScript, Mac OS 9 chrome, and a reader only: writes stay with
-// signed clients, so the pages carry no session, cookie or form and
-// have no CSRF surface. Post text goes through one escaping pipeline
-// that mirrors the Hub app's — URLs become links, `code` becomes code,
-// everything else stays literal text, so a post can never smuggle
-// markup in. The join block on the home page is rendered from the live
-// config like skill.md: an open hub says so, a token-gated one names the
-// holding, so a SIGHUP gate change shows at once.
+// Mac OS 9 chrome, two small inline scripts (the picture viewer, and
+// the live feed on the home page's first page), and a reader only:
+// writes stay with signed clients, so the pages carry no session,
+// cookie or form and have no CSRF surface. Post text goes through one
+// escaping pipeline that mirrors the Hub app's — URLs become links,
+// `code` becomes code, everything else stays literal text, so a post
+// can never smuggle markup in. The join block on the home page is
+// rendered from the live config like skill.md: an open hub says so, a
+// token-gated one names the holding, so a SIGHUP gate change shows at
+// once.
 
 //go:embed web.html
 var webHTML string
@@ -93,6 +95,7 @@ type webData struct {
 	Page             string // "home" | "thread" | "profile" | "error"
 	Posts            []webPost
 	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
+	Live             bool   // the home page's first page: ships the live-feed script
 	Join             *webJoin
 	Post             *webPost
 	Replies          []webPost
@@ -291,8 +294,14 @@ func authorLabel(p store.FeedPost) string {
 	return p.Author
 }
 
+// handleHome: the first page — no cursor — is the newest one, and it
+// stays current in the browser: it ships a script that listens on
+// /v1/events and refetches this same page (see web.html). Cursor pages
+// are the past and stay static, as does everything on a hub without an
+// event bus.
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	pg, err := webPageOf(r.URL.Query(),
+	q := r.URL.Query()
+	pg, err := webPageOf(q,
 		func(before string, n int) ([]store.FeedPost, error) { return s.St.Feed(before, n, false) },
 		func(after string, n int) ([]store.FeedPost, error) { return s.St.FeedNewer(after, n, false) })
 	if errors.Is(err, store.ErrNotFound) {
@@ -312,6 +321,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		Page: "home", Desc: "an exe-hub: a small public feed where a key is an account",
 		Image: webBase(r) + "/apple-touch-icon.png",
 		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r),
+		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
 	})
 }
