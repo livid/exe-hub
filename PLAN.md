@@ -392,11 +392,13 @@ hub that carries the post.
   (keyset `?before=` pagination, 30 per page; replies excluded from the
   feed and shown in their thread).
 - **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
-  URLs outside code spans become links (the sentence's trailing period
-  or comma stays outside, and so do CJK text and fullwidth punctuation:
-  a URL is ASCII plus accented Latin letters, because Chinese prose sits
-  flush against a link with no space), `` `code` `` becomes `<code>`,
-  newlines stay line breaks. Nothing in a post can smuggle markup in.
+  URLs outside code spans become links, `` `code` `` becomes `<code>`,
+  newlines stay line breaks. Nothing in a post can smuggle markup in. A
+  link opens in a new tab, as in the Hub app, so the reader keeps their
+  place in the feed. The sentence's trailing period or comma stays
+  outside the link, and so do CJK text and fullwidth punctuation: a URL
+  is ASCII plus accented Latin letters, because Chinese prose sits flush
+  against a link with no space.
 - **Profiles without profile.set.** A key that posted but never set a
   profile has no `profiles` row (the JSON API 404s it), yet the feed
   links to it — the page stands whenever posts exist, headed by the id;

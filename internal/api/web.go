@@ -119,8 +119,9 @@ var webURL = regexp.MustCompile(`https?://[\w#$%&+,\-./:;=?@\[\]~` + webURLLatin
 var webCode = regexp.MustCompile("`([^`\n]+)`")
 
 // renderText turns a post's text into HTML the page may embed: every
-// character escaped, URLs outside code spans wrapped in anchors, code
-// spans set in <code>, newlines kept as line breaks.
+// character escaped, URLs outside code spans wrapped in anchors that
+// open in a new tab, code spans set in <code>, newlines kept as line
+// breaks.
 func renderText(text string) template.HTML {
 	var b strings.Builder
 	last := 0
@@ -138,7 +139,7 @@ func writeLinked(b *strings.Builder, s string) {
 	for _, m := range webURL.FindAllStringIndex(s, -1) {
 		writePlain(b, s[last:m[0]])
 		u := html.EscapeString(s[m[0]:m[1]])
-		b.WriteString(`<a href="` + u + `" rel="noopener nofollow">` + u + `</a>`)
+		b.WriteString(`<a href="` + u + `" target="_blank" rel="noopener nofollow">` + u + `</a>`)
 		last = m[1]
 	}
 	writePlain(b, s[last:])

@@ -64,7 +64,7 @@ func TestWebHome(t *testing.T) {
 		t.Fatalf("GET / = %d", code)
 	}
 	for _, want := range []string{
-		`<a href="https://example.com/a" rel="noopener nofollow">https://example.com/a</a>.`, // the period stays outside
+		`<a href="https://example.com/a" target="_blank" rel="noopener nofollow">https://example.com/a</a>.`, // the period stays outside
 		"&lt;b&gt;bold&lt;/b&gt;", // markup in a post is text
 		"<code>x &lt;i&gt;y&lt;/i&gt;</code>",
 		"too<br>\nline two",
@@ -158,12 +158,12 @@ func TestRenderText(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"plain", "plain"},
 		{"a <b>c</b>", "a &lt;b&gt;c&lt;/b&gt;"},
-		{"go to https://x.y/z?q=1, now", `go to <a href="https://x.y/z?q=1" rel="noopener nofollow">https://x.y/z?q=1</a>, now`},
-		{"(see https://x.y/)", `(see <a href="https://x.y/" rel="noopener nofollow">https://x.y/</a>)`},
-		{"来自小虾平台（https://xiaoxia.app）的助手", `来自小虾平台（<a href="https://xiaoxia.app" rel="noopener nofollow">https://xiaoxia.app</a>）的助手`},
-		{"详见https://x.y/z的说明。", `详见<a href="https://x.y/z" rel="noopener nofollow">https://x.y/z</a>的说明。`},
-		{"https://x.y/café, oui", `<a href="https://x.y/café" rel="noopener nofollow">https://x.y/café</a>, oui`},
-		{"“https://x.y/z” en", `“<a href="https://x.y/z" rel="noopener nofollow">https://x.y/z</a>” en`},
+		{"go to https://x.y/z?q=1, now", `go to <a href="https://x.y/z?q=1" target="_blank" rel="noopener nofollow">https://x.y/z?q=1</a>, now`},
+		{"(see https://x.y/)", `(see <a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a>)`},
+		{"来自小虾平台（https://xiaoxia.app）的助手", `来自小虾平台（<a href="https://xiaoxia.app" target="_blank" rel="noopener nofollow">https://xiaoxia.app</a>）的助手`},
+		{"详见https://x.y/z的说明。", `详见<a href="https://x.y/z" target="_blank" rel="noopener nofollow">https://x.y/z</a>的说明。`},
+		{"https://x.y/café, oui", `<a href="https://x.y/café" target="_blank" rel="noopener nofollow">https://x.y/café</a>, oui`},
+		{"“https://x.y/z” en", `“<a href="https://x.y/z" target="_blank" rel="noopener nofollow">https://x.y/z</a>” en`},
 		{"`https://x.y` literal", "<code>https://x.y</code> literal"},
 		{"a\nb", "a<br>\nb"},
 		{"`unterminated", "`unterminated"},
