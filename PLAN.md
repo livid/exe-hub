@@ -344,6 +344,10 @@ Implementation decisions (v1):
   envelope 64KB, 4 embeds × 8MB.
 - Config also carries `listen` and `ipfs_api` (kubo RPC endpoint; when
   unreachable, uploads/embeds return 503 and everything else still works).
+- At startup the daemon waits up to five minutes for `listen` to become
+  bindable: a Tailscale IP appears only once tailscaled has logged in,
+  after systemd has already started the hub. If the wait runs out it exits
+  non-zero and `Restart=on-failure` tries again.
 - Storage: Go `modernc.org/sqlite` (pure Go, no CGO), WAL, single writer
   conn.
 - Rebuild replays with relaxed pin checks: pin existence is ingest-time

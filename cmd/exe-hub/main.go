@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -167,9 +168,40 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		httpSrv.Shutdown(ctx)
 	}()
 
+	ln, err := listenWait(cfg.Listen, 5*time.Minute)
+	if err != nil {
+		return err
+	}
 	log.Printf("exe-hub %s listening on %s (gate=%s, state=%s)", hub.ID, cfg.Listen, cfg.Gate.Mode, stateDir)
-	if err := httpSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+	if err := httpSrv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
+}
+
+// listenWait binds addr, retrying for up to wait while the address is on
+// no interface yet: a Tailscale IP in `listen` appears only once tailscaled
+// has logged in, seconds to minutes after systemd started us, and a daemon
+// that gave up on it stayed down until someone noticed. Should the wait run
+// out we exit non-zero and systemd's Restart= starts us again.
+func listenWait(addr string, wait time.Duration) (net.Listener, error) {
+	start := time.Now()
+	logged := false
+	for {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			if logged {
+				log.Printf("bind %s: ok after %s", addr, time.Since(start).Round(time.Second))
+			}
+			return ln, nil
+		}
+		if !errors.Is(err, syscall.EADDRNOTAVAIL) || time.Since(start) > wait {
+			return nil, err
+		}
+		if !logged {
+			logged = true
+			log.Printf("bind %s: %v — retrying for up to %s", addr, err, wait)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
