@@ -183,9 +183,11 @@ type webPager struct {
 // webPageOf resolves ?before= (older than) or ?after= (newer than) into a
 // page, fetching one row past it to learn whether a neighbour exists.
 // The newer direction reads oldest-first from the cursor, so the page is
-// the posts nearest to it; a newer page that is not full has reached the
-// newest end, and the list's own first page shows those posts better
-// than a short one would, so it redirects there.
+// the posts nearest to it; a newer page with nothing newer beyond it —
+// full or short — is the list's own first page, and redirects there
+// rather than rendering the same posts under a cursor: the first page
+// is the one that stays live, and only its bare URL does (Prev from the
+// second page lands on it).
 func webPageOf(q url.Values,
 	older func(before string, n int) ([]store.FeedPost, error),
 	newer func(after string, n int) ([]store.FeedPost, error)) (webPager, error) {
@@ -195,18 +197,15 @@ func webPageOf(q url.Values,
 		if err != nil {
 			return pg, err
 		}
-		if len(asc) < webPage {
+		if len(asc) <= webPage {
 			pg.Home = true
 			return pg, nil
 		}
-		more := len(asc) > webPage
 		asc = asc[:webPage]
 		for i := len(asc) - 1; i >= 0; i-- {
 			pg.Posts = append(pg.Posts, asc[i])
 		}
-		if more {
-			pg.Prev = pg.Posts[0].ID
-		}
+		pg.Prev = pg.Posts[0].ID
 		pg.Next = pg.Posts[len(pg.Posts)-1].ID // `after` itself lies beyond
 		return pg, nil
 	}

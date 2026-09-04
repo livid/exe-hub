@@ -432,8 +432,10 @@ hub that carries the post.
   only when that page exists; a thread page keeps the 15px text status
   line. Paging is keyset both ways (`?before=` older, `?after=` newer,
   `store.FeedNewer` / `ProfileFeedNewer`), fetching one row past the
-  page to know whether a neighbour exists; a newer page that comes back
-  short has reached the top and redirects to the list's first page.
+  page to know whether a neighbour exists; a newer page with nothing
+  newer beyond it — full or short — is the list's first page and
+  redirects to its bare URL, so `< Prev` from the second page lands on
+  `/` with no query string, where the feed is live.
 - **The first page is live.** `GET /` without a cursor (neither
   `?before=` nor `?after=`) is the newest page, and it stays current
   while it is open: an inline script subscribes to `/v1/events` and on

@@ -185,49 +185,61 @@ func TestExcerpt(t *testing.T) {
 	}
 }
 
-// TestWebPaging: 31 posts make two pages. The first page has Next only,
-// the last has Prev only, Prev from the last page lands on a full page
-// with no Prev of its own, and a short newer page redirects to the top.
+// TestWebPaging: 32 posts make two pages. The first page has Next only,
+// the last has Prev only, and Prev from the last page redirects to the
+// bare first page (never a full copy of it under ?after=, which would
+// not be live); a newer page with more beyond it is a static middle
+// page with both buttons, and a short newer page redirects to the top.
 func TestWebPaging(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
 	var ids []string // oldest first
-	for i := int64(1); i <= webPage+1; i++ {
+	for i := int64(1); i <= webPage+2; i++ {
 		ids = append(ids, ingest(t, s, priv, pub, i+1, "post.create", map[string]any{"text": fmt.Sprintf("post %d", i)}))
 	}
 	h := s.Handler()
-	oldestOnFirst := ids[1] // 31 posts newest-first: the first page ends at post 2
+	oldestOnFirst := ids[2] // 32 posts newest-first: the first page ends at post 3
+	redirect := func(path string) (int, string) {
+		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Code, w.Header().Get("Location")
+	}
 
 	_, body := get(t, h, "/")
 	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next" href="/?before=`+oldestOnFirst+`">Next &gt;</a>`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
-	if !strings.Contains(body, `<span class="stats">1 members · 31 posts</span>`) {
+	if !strings.Contains(body, `<span class="stats">1 members · 32 posts</span>`) {
 		t.Errorf("stats: %q", statusLine(body))
 	}
 
 	_, body = get(t, h, "/?before="+oldestOnFirst)
-	if !strings.Contains(body, "post 1<") || strings.Contains(body, "post 2<") {
-		t.Error("second page should hold post 1 only")
+	if !strings.Contains(body, "post 2<") || !strings.Contains(body, "post 1<") || strings.Contains(body, "post 3<") {
+		t.Error("second page should hold posts 2 and 1 only")
 	}
-	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[0]+`">&lt; Prev</a>`) {
+	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[1]+`">&lt; Prev</a>`) {
 		t.Errorf("last page: %q", statusLine(body))
 	}
 
-	// Prev from the last page: the 30 posts newer than post 1 — a full page, nothing newer
+	// Prev from the last page: the 30 posts newer than post 2 are exactly
+	// the first page — back to its bare URL, where the feed is live
+	if code, loc := redirect("/?after=" + ids[1]); code != 302 || loc != "/" {
+		t.Errorf("full newer page at the top: %d %s", code, loc)
+	}
+
+	// 31 posts newer than post 1: the 30 nearest make a middle page, posts 31..2
 	_, body = get(t, h, "/?after="+ids[0])
-	if strings.Contains(body, "Prev") || !strings.Contains(body, "post 31<") || !strings.Contains(body, "post 2<") ||
-		!strings.Contains(body, `<a class="btn next" href="/?before=`+oldestOnFirst+`">Next &gt;</a>`) {
-		t.Errorf("newer page: %q", statusLine(body))
+	if !strings.Contains(body, "post 31<") || !strings.Contains(body, "post 2<") || strings.Contains(body, "post 32<") || strings.Contains(body, "post 1<") ||
+		!strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[30]+`">&lt; Prev</a>`) ||
+		!strings.Contains(body, `<a class="btn next" href="/?before=`+ids[1]+`">Next &gt;</a>`) {
+		t.Errorf("middle newer page: %q", statusLine(body))
 	}
 
 	// only a few posts newer than post 20: back to the top page instead of a short one
-	req := httptest.NewRequest("GET", "http://hub.example/?after="+ids[19], nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != 302 || w.Header().Get("Location") != "/" {
-		t.Errorf("short newer page: %d %s", w.Code, w.Header().Get("Location"))
+	if code, loc := redirect("/?after=" + ids[19]); code != 302 || loc != "/" {
+		t.Errorf("short newer page: %d %s", code, loc)
 	}
 	if code, _ := get(t, h, "/?before="+strings.Repeat("0", 64)); code != 404 {
 		t.Errorf("unknown cursor = %d", code)
