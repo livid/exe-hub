@@ -83,6 +83,10 @@ a { color: #333399; }
   box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
 .find input:focus { outline: none; }
 .find button { font-family: inherit; cursor: default; margin: 0; }
+/* Search is the strip's default button — Return in the field presses
+   it — and wears the default ring, outset 3px from the button (HIG
+   Fig. 2-3), drawn as the desktop draws it on a dialog's default */
+.find .btn { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
 @media (pointer: coarse) { .find input { font-size: 16px; height: 24px; } }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }

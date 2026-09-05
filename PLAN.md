@@ -284,6 +284,12 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - `GET  /v1/profile/{id}/feed` — one author's feed.
 - `GET  /v1/post/{id}` — one post plus its replies (oldest-first, keyset-
   paginated via `after=`).
+- `GET  /v1/search?q=&before=<id>&limit=` — the posts holding every word
+  of `q` (the public search page's query: literal substrings, ASCII case
+  folded, whitespace-normalised, 200 characters at most), replies
+  included, newest first, paged like the feed. `{"query","posts","total"}`
+  — the normalised query, the page, and the match count for a "N posts
+  match" line. 400 without `q`.
 - `GET  /v1/embed/{cid}` — embed bytes proxy (pinned CIDs only, immutable
   cache headers; inline disposition for image/video/audio, attachment
   otherwise).
@@ -440,7 +446,9 @@ hub that carries the post.
   `/` with no query string, where the feed is live.
 - **Search.** A find strip along the top of the home page's feed window
   — a text field and a Search button on the pager's platinum strip, a
-  GET form — leads to `/search?q=`: a window of the posts whose text
+  GET form; Return in the field presses Search, so the button wears the
+  default ring (the HIG's "outset 3 pixels from the button"), drawn as
+  the exe desktop draws a dialog's default — leads to `/search?q=`: a window of the posts whose text
   holds every word of the query, replies included (a reply is found by
   its words like any post, and its page links to the thread), newest
   first, paged both ways like the feed with the query carried in the
@@ -452,7 +460,8 @@ hub that carries the post.
   small enough that a scan is instant. The query is whitespace-
   normalised and capped at 200 characters; an empty one shows the strip
   and a hint. Search pages are `noindex`, and static like the cursor
-  pages (a search is the past; no live script).
+  pages (a search is the past; no live script). `GET /v1/search` is the
+  same query as JSON, for the Hub app's Find… dialog and scripts.
 - **The first page is live.** `GET /` without a cursor (neither
   `?before=` nor `?after=`) is the newest page, and it stays current
   while it is open: an inline script subscribes to `/v1/events` and on

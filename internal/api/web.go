@@ -334,28 +334,28 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// webQueryMax caps the search box: a page title and every cursor link
-// carry the query.
-const webQueryMax = 200
+// queryMax caps a search query, on the page and in the API: a page
+// title and every cursor link carry it.
+const queryMax = 200
 
-// webQuery normalises what was typed: whitespace collapsed to single
+// normQuery normalises what was typed: whitespace collapsed to single
 // spaces (the same words either way, and the cursor links stay short),
-// cut at webQueryMax characters, never mid-rune.
-func webQuery(q string) string {
+// cut at queryMax characters, never mid-rune.
+func normQuery(q string) string {
 	q = strings.Join(strings.Fields(q), " ")
-	if r := []rune(q); len(r) > webQueryMax {
-		q = strings.TrimSpace(string(r[:webQueryMax]))
+	if r := []rune(q); len(r) > queryMax {
+		q = strings.TrimSpace(string(r[:queryMax]))
 	}
 	return q
 }
 
-// handleSearch: /search?q= is the posts holding every word of q, paged
+// handleSearchPage: /search?q= is the posts holding every word of q, paged
 // like the feed with the query carried in the cursors (see webPageOf —
 // a newer page at the top redirects to the bare query); the find strip
 // along the top holds the query for refining it. An empty query is the
 // strip and a hint. Static, and noindex: a search is the past.
-func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	q := webQuery(r.URL.Query().Get("q"))
+func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
+	q := normQuery(r.URL.Query().Get("q"))
 	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q, Image: webBase(r) + "/apple-touch-icon.png"}
 	if q == "" {
 		s.webRender(w, r, http.StatusOK, d)

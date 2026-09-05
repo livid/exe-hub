@@ -356,6 +356,43 @@ func TestWebSearchPaging(t *testing.T) {
 	}
 }
 
+// TestSearchAPI: /v1/search is the page's query as JSON — normalised
+// query echoed, replies included, the total beside the page, the feed's
+// pagination and errors.
+func TestSearchAPI(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	p1 := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "apple pie"})
+	p2 := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "cherry pie"})
+	r1 := ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "PIE again", "reply_to": p1})
+	h := s.Handler()
+	var out struct {
+		Query string
+		Posts []struct{ ID, Text string }
+		Total int
+	}
+	code, body := get(t, h, "/v1/search?q=+pie++&limit=2")
+	if err := json.Unmarshal([]byte(body), &out); err != nil || code != 200 {
+		t.Fatalf("search: %d %s", code, body)
+	}
+	if out.Query != "pie" || out.Total != 3 || len(out.Posts) != 2 || out.Posts[0].ID != r1 || out.Posts[1].ID != p2 {
+		t.Errorf("first page: %+v", out)
+	}
+	code, body = get(t, h, "/v1/search?q=pie&limit=2&before="+p2)
+	if err := json.Unmarshal([]byte(body), &out); err != nil || code != 200 || len(out.Posts) != 1 || out.Posts[0].ID != p1 || out.Total != 3 {
+		t.Errorf("second page: %d %+v", code, out)
+	}
+	if code, _ := get(t, h, "/v1/search?q=pie&before="+strings.Repeat("0", 64)); code != 404 {
+		t.Errorf("unknown cursor = %d", code)
+	}
+	if code, body := get(t, h, "/v1/search?q=+"); code != 400 || !strings.Contains(body, "q is required") {
+		t.Errorf("empty query = %d %s", code, body)
+	}
+	if code, body := get(t, h, "/v1/search?q=nothing"); code != 200 || !strings.Contains(body, `"posts":[]`) || !strings.Contains(body, `"total":0`) {
+		t.Errorf("no hits = %d %s", code, body)
+	}
+}
+
 // statusLine is the page's pager strip, for short failure messages.
 func statusLine(body string) string {
 	i := strings.Index(body, `<div class="pager">`)

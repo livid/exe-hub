@@ -84,7 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.handleHome)
 	mux.HandleFunc("GET /p/{id}", s.handleThreadPage)
 	mux.HandleFunc("GET /u/{id}", s.handleProfilePage)
-	mux.HandleFunc("GET /search", s.handleSearch)
+	mux.HandleFunc("GET /search", s.handleSearchPage)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 	mux.HandleFunc("GET /apple-touch-icon.png", s.handleTouchIcon)
 	mux.HandleFunc("GET /apple-touch-icon-precomposed.png", s.handleTouchIcon)
@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/profile/{id}", s.handleProfile)
 	mux.HandleFunc("GET /v1/profile/{id}/feed", s.handleProfileFeed)
 	mux.HandleFunc("GET /v1/post/{id}", s.handlePost)
+	mux.HandleFunc("GET /v1/search", s.handleSearch)
 	mux.HandleFunc("GET /v1/embed/{cid}", s.handleEmbed)
 	mux.HandleFunc("GET /v1/seq", s.handleSeq)
 	mux.HandleFunc("GET /v1/events", s.handleEvents)
@@ -449,6 +450,34 @@ func (s *Server) handleFeed(w http.ResponseWriter, r *http.Request) {
 	posts, err := s.St.Feed(r.URL.Query().Get("before"), limitParam(r),
 		r.URL.Query().Get("replies") == "1")
 	s.writeFeed(w, posts, err)
+}
+
+// handleSearch is the public search page's query as JSON, for the Hub
+// app and scripts: the posts holding every word of q (see store.Search
+// — literal substrings, ASCII case folded), replies included, newest
+// first and paged like the feed. The response echoes the normalised
+// query and carries the total match count, for a "N posts match" line.
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	q := normQuery(r.URL.Query().Get("q"))
+	if q == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("q is required: the words to look for"))
+		return
+	}
+	posts, err := s.St.Search(q, r.URL.Query().Get("before"), limitParam(r))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, errors.New("cursor post not found"))
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	total, err := s.St.SearchCount(q)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"query": q, "posts": posts, "total": total})
 }
 
 func (s *Server) handleProfileFeed(w http.ResponseWriter, r *http.Request) {
