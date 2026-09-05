@@ -79,7 +79,7 @@ func TestWebHome(t *testing.T) {
 			t.Errorf("home lacks %q\n%s", want, body)
 		}
 	}
-	if strings.Contains(body, `class="btn`) {
+	if strings.Contains(body, `class="btn prev"`) || strings.Contains(body, `class="btn next"`) {
 		t.Error("a paging button on a one-page feed")
 	}
 	if strings.Contains(body, "<b>bold</b>") {
@@ -242,6 +242,116 @@ func TestWebPaging(t *testing.T) {
 		t.Errorf("short newer page: %d %s", code, loc)
 	}
 	if code, _ := get(t, h, "/?before="+strings.Repeat("0", 64)); code != 404 {
+		t.Errorf("unknown cursor = %d", code)
+	}
+}
+
+// TestWebSearch: the home page carries the find strip; /search?q= is
+// the posts holding every word (replies too), the query escaped in the
+// field, the title and the cursor links, paged like the feed.
+func TestWebSearch(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
+	p1 := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "apple pie"})
+	ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "Apple tart <b>x</b>"})
+	ingest(t, s, priv, pub, 4, "post.create", map[string]any{"text": "cherry pie"})
+	ingest(t, s, priv, pub, 5, "post.create", map[string]any{"text": "pie again", "reply_to": p1})
+	h := s.Handler()
+	const strip = `<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="`
+
+	_, body := get(t, h, "/")
+	if !strings.Contains(body, strip+`"`) || !strings.Contains(body, `<button class="btn" type="submit">Search</button>`) {
+		t.Error("home page lacks the find strip")
+	}
+	if strings.Contains(body, `name="robots"`) {
+		t.Error("the feed is noindex")
+	}
+
+	code, body := get(t, h, "/search?q=apple")
+	if code != 200 || !strings.Contains(body, "apple pie<") || !strings.Contains(body, "Apple tart") || strings.Contains(body, "cherry") {
+		t.Errorf("apple: %d, hits wrong", code)
+	}
+	for _, want := range []string{
+		strip + `apple"`, `<title>Search: apple · hub.example</title>`, `<meta name="robots" content="noindex">`,
+		`<span class="stats">2 posts match</span>`, `<span class="title">Search</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("search page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `class="btn prev"`) || strings.Contains(body, `class="btn next"`) || strings.Contains(body, "EventSource") {
+		t.Error("a paging button or the live script on a one-page search")
+	}
+
+	// every word must appear; whitespace is normalised into the field
+	_, body = get(t, h, "/search?q=+pie++APPLE+")
+	if !strings.Contains(body, strip+`pie APPLE"`) || !strings.Contains(body, "apple pie<") || strings.Contains(body, "cherry") || strings.Contains(body, "Apple tart") ||
+		!strings.Contains(body, `<span class="stats">1 post matches</span>`) {
+		t.Error("two words: not the one post holding both")
+	}
+
+	// replies are found too, and shown as replies
+	_, body = get(t, h, "/search?q=pie")
+	if !strings.Contains(body, "pie again<") || !strings.Contains(body, `class="post reply"`) || !strings.Contains(body, `<span class="stats">3 posts match</span>`) {
+		t.Error("the reply is missing from the pie results")
+	}
+
+	// the query is escaped wherever it lands, and matched literally
+	_, body = get(t, h, "/search?q=%3Cb%3Ex")
+	if !strings.Contains(body, strip+`&lt;b&gt;x"`) || !strings.Contains(body, `<title>Search: &lt;b&gt;x · hub.example</title>`) ||
+		strings.Contains(body, "<b>x") || !strings.Contains(body, "Apple tart &lt;b&gt;x&lt;/b&gt;<") || !strings.Contains(body, "1 post matches") {
+		t.Errorf("markup in the query: %s", body)
+	}
+
+	_, body = get(t, h, "/search?q=zzz")
+	if !strings.Contains(body, "No post matches.") || !strings.Contains(body, `<span class="stats">0 posts match</span>`) {
+		t.Error("no hits: message or count missing")
+	}
+	code, body = get(t, h, "/search")
+	if code != 200 || !strings.Contains(body, "Type a word or two") || strings.Contains(body, `class="pager"`) || !strings.Contains(body, `<title>Search · hub.example</title>`) {
+		t.Errorf("empty query: %d", code)
+	}
+	long := strings.Repeat("ab ", 120)
+	_, body = get(t, h, "/search?q="+strings.ReplaceAll(long, " ", "+"))
+	if !strings.Contains(body, strip+strings.TrimSpace(long[:200])+`"`) {
+		t.Error("a long query is not cut at 200 characters")
+	}
+}
+
+// TestWebSearchPaging: a search pages like the feed, the query carried
+// URL-encoded in the cursor links; Prev from the second page lands on
+// the bare query.
+func TestWebSearchPaging(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	var ids []string // oldest first
+	for i := int64(1); i <= webPage+2; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, i, "post.create", map[string]any{"text": fmt.Sprintf("hit me %d", i)}))
+	}
+	ingest(t, s, priv, pub, webPage+3, "post.create", map[string]any{"text": "miss 99"})
+	h := s.Handler()
+	oldestOnFirst := ids[2]
+
+	_, body := get(t, h, "/search?q=hit+me")
+	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next" href="/search?q=hit%20me&amp;before=`+oldestOnFirst+`">Next &gt;</a>`) {
+		t.Errorf("first page: %q", statusLine(body))
+	}
+	if !strings.Contains(body, `<span class="stats">32 posts match</span>`) || strings.Contains(body, "miss 99") {
+		t.Errorf("stats: %q", statusLine(body))
+	}
+	_, body = get(t, h, "/search?q=hit+me&before="+oldestOnFirst)
+	if !strings.Contains(body, "hit me 2<") || !strings.Contains(body, "hit me 1<") || strings.Contains(body, "hit me 3<") ||
+		strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/search?q=hit%20me&amp;after=`+ids[1]+`">&lt; Prev</a>`) {
+		t.Errorf("last page: %q", statusLine(body))
+	}
+	req := httptest.NewRequest("GET", "http://hub.example/search?q=hit+me&after="+ids[1], nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 302 || w.Header().Get("Location") != "/search?q=hit+me" {
+		t.Errorf("newer page at the top: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	if code, _ := get(t, h, "/search?q=hit+me&before="+strings.Repeat("0", 64)); code != 404 {
 		t.Errorf("unknown cursor = %d", code)
 	}
 }

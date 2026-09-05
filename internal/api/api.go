@@ -80,10 +80,11 @@ func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	// the public pages (web.go): the feed, a thread, a profile
+	// the public pages (web.go): the feed, a thread, a profile, a search
 	mux.HandleFunc("GET /{$}", s.handleHome)
 	mux.HandleFunc("GET /p/{id}", s.handleThreadPage)
 	mux.HandleFunc("GET /u/{id}", s.handleProfilePage)
+	mux.HandleFunc("GET /search", s.handleSearch)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 	mux.HandleFunc("GET /apple-touch-icon.png", s.handleTouchIcon)
 	mux.HandleFunc("GET /apple-touch-icon-precomposed.png", s.handleTouchIcon)

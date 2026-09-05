@@ -564,6 +564,65 @@ func (s *Store) ProfileFeedNewer(author, after string, limit int) ([]FeedPost, e
 	return s.scanFeed(rows)
 }
 
+// searchWhere is the search's filter: one LIKE per word of q, all of
+// which must hold. SQLite's LIKE folds ASCII case, and the word's own
+// `%`, `_` and `\` are escaped so it is looked for literally; a word is
+// a substring, not a token, so CJK prose — which has no word breaks for
+// a tokenizer to find — is searched the same way. The clause starts
+// with AND, for a WHERE that already has a term.
+func searchWhere(q string) (string, []any) {
+	var b strings.Builder
+	var args []any
+	for _, w := range strings.Fields(q) {
+		b.WriteString(` AND p.text LIKE ? ESCAPE '\'`)
+		args = append(args, "%"+likeEscaper.Replace(w)+"%")
+	}
+	return b.String(), args
+}
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// Search is the posts whose text holds every word of q, replies included
+// (a reply is found by its words like any post), newest first and
+// keyset-paginated like Feed. SearchNewer is its other direction, like
+// FeedNewer; SearchCount the total, for the search page's pager.
+func (s *Store) Search(q, before string, limit int) ([]FeedPost, error) {
+	recv, bid, err := s.cursor(before)
+	if err != nil {
+		return nil, err
+	}
+	where, args := searchWhere(q)
+	rows, err := s.db.Query(feedQuery+`WHERE 1`+where+` AND (p.received, p.id) < (?, ?) ORDER BY p.received DESC, p.id DESC LIMIT ?`,
+		append(args, recv, bid, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+func (s *Store) SearchNewer(q, after string, limit int) ([]FeedPost, error) {
+	recv, aid, err := s.cursor(after)
+	if err != nil {
+		return nil, err
+	}
+	where, args := searchWhere(q)
+	rows, err := s.db.Query(feedQuery+`WHERE 1`+where+` AND (p.received, p.id) > (?, ?) ORDER BY p.received, p.id LIMIT ?`,
+		append(args, recv, aid, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+func (s *Store) SearchCount(q string) (int, error) {
+	where, args := searchWhere(q)
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM posts p WHERE 1`+where, args...).Scan(&n)
+	return n, err
+}
+
 // Post returns one post; Replies its children oldest-first (thread order).
 func (s *Store) Post(id string) (*FeedPost, error) {
 	rows, err := s.db.Query(feedQuery+`WHERE p.id = ?`, id)

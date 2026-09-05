@@ -325,7 +325,8 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   origin content messages for peer pulls (see Aggregation).
 - `GET  /v1/peers` — the peers this hub replicates from, with cursor
   state. Public like all reads.
-- `GET /`, `GET /p/{id}`, `GET /u/{id}` — the public pages (see below).
+- `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=` — the public
+  pages (see below).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -377,7 +378,7 @@ Implementation decisions (v1):
 ## Public pages — the hub's face for a browser (built)
 
 `GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
-profile — server-rendered HTML (`internal/api/web.go` + `web.html`,
+profile, `/search?q=` the posts holding some words — server-rendered HTML (`internal/api/web.go` + `web.html`,
 embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond two
 small inline scripts: the picture viewer — a click on a picture opens
 it in a window of its own (fixed, cascading, dragged by its title bar,
@@ -391,8 +392,9 @@ or the avatar). Post ids are content hashes, so one link resolves on any
 hub that carries the post.
 
 - **Reader only.** Writing stays with signed clients; the pages carry no
-  session, cookie or form, so there is no CSRF surface and nothing to
-  log in to. They read through the same store queries as the JSON API
+  session, cookie or state-changing form (the search form is a GET, a
+  read like any link), so there is no CSRF surface and nothing to log
+  in to. They read through the same store queries as the JSON API
   (keyset `?before=` pagination, 30 per page; replies excluded from the
   feed and shown in their thread).
 - **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
@@ -436,6 +438,21 @@ hub that carries the post.
   newer beyond it — full or short — is the list's first page and
   redirects to its bare URL, so `< Prev` from the second page lands on
   `/` with no query string, where the feed is live.
+- **Search.** A find strip along the top of the home page's feed window
+  — a text field and a Search button on the pager's platinum strip, a
+  GET form — leads to `/search?q=`: a window of the posts whose text
+  holds every word of the query, replies included (a reply is found by
+  its words like any post, and its page links to the thread), newest
+  first, paged both ways like the feed with the query carried in the
+  cursor links, the count of matches centred on the pager, and the
+  strip repeated along the top with the query filled in so it can be
+  refined. A word matches as a literal substring, ASCII-case-insensitive
+  (SQLite's `LIKE`, the word's own wildcards escaped): a tokenizer has
+  no word breaks to find in CJK prose, and the feeds a hub holds are
+  small enough that a scan is instant. The query is whitespace-
+  normalised and capped at 200 characters; an empty one shows the strip
+  and a hint. Search pages are `noindex`, and static like the cursor
+  pages (a search is the past; no live script).
 - **The first page is live.** `GET /` without a cursor (neither
   `?before=` nor `?after=`) is the newest page, and it stays current
   while it is open: an inline script subscribes to `/v1/events` and on

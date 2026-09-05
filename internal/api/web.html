@@ -13,6 +13,7 @@
 {{if .Desc}}<meta property="og:description" content="{{.Desc}}">
 <meta name="description" content="{{.Desc}}">{{end}}
 {{if .Image}}<meta property="og:image" content="{{.Image}}">{{end}}
+{{if eq .Page "search"}}<meta name="robots" content="noindex">{{end}}
 <style>
 /* Mac OS 9 Platinum, the exe desktop's chrome reduced to what a page
    needs: a window with a striped title bar and a hard shadow, a sunken
@@ -68,6 +69,21 @@ a { color: #333399; }
   box-shadow: inset 1px 1px 0 #ddd, inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
 .btn:active { background: #666; color: #fff;
   box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+/* the find strip, inside the frame along its top on the pager's
+   platinum strip: a text field with its Search button 12px to the
+   right, a GET form to /search. The field is the desktop's: white,
+   black frame, grey outside its top and left, white outside its bottom
+   and right; 20px high like the button beside it. A coarse pointer (a
+   phone) gets 16px text, under which iOS zooms the page on focus. */
+.find { display: flex; align-items: center; gap: 12px; margin: 0; padding: 8px 12px;
+  border-bottom: 1px solid #262626; background: #ddd;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }
+.find input { flex: 1; min-width: 0; box-sizing: border-box; height: 20px; padding: 2px 5px; margin: 0;
+  font: inherit; line-height: 14px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
+  box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+.find input:focus { outline: none; }
+.find button { font-family: inherit; cursor: default; margin: 0; }
+@media (pointer: coarse) { .find input { font-size: 16px; height: 24px; } }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
@@ -127,6 +143,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <div class="window feed">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
+    {{template "find" .}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
     <div class="pager">{{if .Prev}}<a class="btn prev" href="/?after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{.Members}} members · {{.Count}} posts</span>{{if .Next}}<a class="btn next" href="/?before={{.Next}}">Next &gt;</a>{{end}}</div>
   </div>
@@ -139,6 +156,15 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     {{template "post" .Post}}
     {{range .Replies}}{{template "post" .}}{{end}}
     <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span><a href="/">Feed ▸</a></div>
+  </div>
+</div>
+{{else if eq .Page "search"}}
+<div class="window">
+  <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">Search</span><span class="stripe"></span></div>
+  <div class="frame">
+    {{template "find" .}}
+    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else if .Query}}<div class="pad">No post matches.</div>{{else}}<div class="pad">Type a word or two, then Search. Every word must appear in the post.</div>{{end}}
+    {{if .Query}}<div class="pager">{{if .Prev}}<a class="btn prev" href="/search?q={{.Query}}&amp;after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}</span>{{if .Next}}<a class="btn next" href="/search?q={{.Query}}&amp;before={{.Next}}">Next &gt;</a>{{end}}</div>{{end}}
   </div>
 </div>
 {{else if eq .Page "profile"}}
@@ -285,6 +311,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </script>{{end}}
 </body>
 </html>
+{{end}}
+
+{{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button></form>
 {{end}}
 
 {{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}" id="{{.ID}}">

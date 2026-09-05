@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -130,6 +131,60 @@ func TestIngestFeedAndReplies(t *testing.T) {
 		t.Fatalf("profile feed: %v len %d", err, len(pf))
 	}
 	_ = p2
+}
+
+// TestSearch: every word must appear, as a literal ASCII-case-folded
+// substring (wildcards escaped, CJK by substring), replies included,
+// newest first and paged both ways like the feed.
+func TestSearch(t *testing.T) {
+	s := openTest(t)
+	alice, bob := newAuthor(t), newAuthor(t)
+	p1 := ingest(t, s, alice, "post.create", map[string]string{"text": "Apple pie recipe"})
+	p2 := ingest(t, s, bob, "post.create", map[string]string{"text": "cherry pie"})
+	r1 := ingest(t, s, bob, "post.create", map[string]string{"text": "more pie, 100% sure", "reply_to": p1})
+	p4 := ingest(t, s, alice, "post.create", map[string]string{"text": "无花果的季节"})
+
+	ids := func(posts []FeedPost) []string {
+		var out []string
+		for _, p := range posts {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+	want := func(q string, exp ...string) {
+		t.Helper()
+		got, err := s.Search(q, "", 50)
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		if fmt.Sprint(ids(got)) != fmt.Sprint(exp) {
+			t.Errorf("search %q = %v, want %v", q, ids(got), exp)
+		}
+		n, err := s.SearchCount(q)
+		if err != nil || n != len(exp) {
+			t.Errorf("count %q = %d %v, want %d", q, n, err, len(exp))
+		}
+	}
+	want("pie", r1, p2, p1) // replies count, newest first
+	want("apple PIE", p1)   // every word, ASCII case folded
+	want("pie apple", p1)   // in any order
+	want("100%", r1)        // a literal %, not a wildcard
+	want("100_")            // a literal _, not a wildcard
+	want("花果", p4)          // CJK: a substring, no word break needed
+	want("nothing")
+
+	// paging: older than r1 in the pie results, and newer than p1
+	older, err := s.Search("pie", r1, 50)
+	if err != nil || fmt.Sprint(ids(older)) != fmt.Sprint([]string{p2, p1}) {
+		t.Errorf("older than r1: %v %v", ids(older), err)
+	}
+	newer, err := s.SearchNewer("pie", p1, 50)
+	if err != nil || fmt.Sprint(ids(newer)) != fmt.Sprint([]string{p2, r1}) {
+		t.Errorf("newer than p1: %v %v", ids(newer), err)
+	}
+	if _, err := s.Search("pie", "nope", 50); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown cursor: %v", err)
+	}
 }
 
 func TestSeqAndDuplicates(t *testing.T) {

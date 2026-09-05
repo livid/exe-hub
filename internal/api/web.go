@@ -18,11 +18,12 @@ import (
 
 // Public pages — the hub's face for a browser, beside the JSON API:
 // GET / (the feed and how to join), /p/{id} (a thread), /u/{id} (a
-// profile). Server-rendered from the same store queries the API uses,
+// profile), /search?q= (the posts holding some words). Server-rendered from the same store queries the API uses,
 // Mac OS 9 chrome, two small inline scripts (the picture viewer, and
 // the live feed on the home page's first page), and a reader only:
 // writes stay with signed clients, so the pages carry no session,
-// cookie or form and have no CSRF surface. Post text goes through one
+// cookie or state-changing form (the search form is a GET, a read
+// like any link) and have no CSRF surface. Post text goes through one
 // escaping pipeline that mirrors the Hub app's — URLs become links,
 // `code` becomes code, everything else stays literal text, so a post
 // can never smuggle markup in. The join block on the home page is
@@ -96,6 +97,7 @@ type webData struct {
 	Posts            []webPost
 	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
 	Live             bool   // the home page's first page: ships the live-feed script
+	Query            string // the search page's words, and what the find strip's field holds
 	Join             *webJoin
 	Post             *webPost
 	Replies          []webPost
@@ -330,6 +332,58 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
 	})
+}
+
+// webQueryMax caps the search box: a page title and every cursor link
+// carry the query.
+const webQueryMax = 200
+
+// webQuery normalises what was typed: whitespace collapsed to single
+// spaces (the same words either way, and the cursor links stay short),
+// cut at webQueryMax characters, never mid-rune.
+func webQuery(q string) string {
+	q = strings.Join(strings.Fields(q), " ")
+	if r := []rune(q); len(r) > webQueryMax {
+		q = strings.TrimSpace(string(r[:webQueryMax]))
+	}
+	return q
+}
+
+// handleSearch: /search?q= is the posts holding every word of q, paged
+// like the feed with the query carried in the cursors (see webPageOf —
+// a newer page at the top redirects to the bare query); the find strip
+// along the top holds the query for refining it. An empty query is the
+// strip and a hint. Static, and noindex: a search is the past.
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	q := webQuery(r.URL.Query().Get("q"))
+	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q, Image: webBase(r) + "/apple-touch-icon.png"}
+	if q == "" {
+		s.webRender(w, r, http.StatusOK, d)
+		return
+	}
+	d.Title = "Search: " + q + " · " + r.Host
+	pg, err := webPageOf(r.URL.Query(),
+		func(before string, n int) ([]store.FeedPost, error) { return s.St.Search(q, before, n) },
+		func(after string, n int) ([]store.FeedPost, error) { return s.St.SearchNewer(q, after, n) })
+	if errors.Is(err, store.ErrNotFound) {
+		s.webError(w, r, http.StatusNotFound, "No such page.")
+		return
+	}
+	if err != nil {
+		s.webError(w, r, http.StatusInternalServerError, "The posts could not be searched.")
+		return
+	}
+	if pg.Home {
+		http.Redirect(w, r, "/search?q="+url.QueryEscape(q), http.StatusFound)
+		return
+	}
+	count, err := s.St.SearchCount(q)
+	if err != nil {
+		s.webError(w, r, http.StatusInternalServerError, "The posts could not be searched.")
+		return
+	}
+	d.Posts, d.Prev, d.Next, d.Count = webPosts(pg.Posts), pg.Prev, pg.Next, count
+	s.webRender(w, r, http.StatusOK, d)
 }
 
 func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
