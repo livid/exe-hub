@@ -138,6 +138,10 @@ type webPost struct {
 	When   string
 	Images []envelope.Embed
 	Files  []envelope.Embed
+	// on a thread page: the reply this one answers is on the same page —
+	// a nested reply links to it in place, by the name it was posted under
+	InThread   bool
+	ParentName string
 }
 
 // webJoin is the join block: where this hub is, what its gate asks for.
@@ -467,16 +471,26 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The post could not be read.")
 		return
 	}
-	replies, err := s.St.Replies(p.ID, "", 200)
+	// the whole tree, a reply to a reply under the reply it answers
+	thread, err := s.St.Thread(p.ID, 500)
 	if err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "The thread could not be read.")
 		return
 	}
 	post := webPosts([]store.FeedPost{*p})[0]
 	post.Replies = 0 // the replies are right below; no link to this same page
+	replies := webPosts(thread)
+	names := map[string]string{p.ID: authorLabel(*p)}
+	for _, t := range thread {
+		names[t.ID] = authorLabel(t)
+	}
+	for i := range replies {
+		replies[i].InThread = true
+		replies[i].ParentName = names[replies[i].ReplyTo]
+	}
 	d := &webData{
 		Page: "thread", Title: authorLabel(*p) + " on " + r.Host, Desc: excerpt(p.Text, 200),
-		Post: &post, Replies: webPosts(replies),
+		Post: &post, Replies: replies,
 	}
 	if len(post.Images) > 0 {
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID

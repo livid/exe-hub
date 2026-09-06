@@ -448,11 +448,14 @@ type FeedPost struct {
 	Received   int64            `json:"received"`
 	Embeds     []envelope.Embed `json:"embeds,omitempty"`
 	Replies    int              `json:"replies"`
+	Depth      int              `json:"depth,omitempty"` // set by Thread: steps below the root, 1 = a direct reply
 }
 
+const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received,
+  (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id)`
+
 const feedQuery = `
-SELECT p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received,
-  (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id)
+SELECT ` + feedCols + `
 FROM posts p LEFT JOIN profiles pr ON pr.id = p.author `
 
 func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
@@ -666,6 +669,55 @@ func (s *Store) Replies(id, after string, limit int) ([]FeedPost, error) {
 	}
 	defer rows.Close()
 	return s.scanFeed(rows)
+}
+
+// Thread is every reply under a post, however deep, in reading order: a
+// reply is followed by the replies to it, siblings oldest first, and Depth
+// counts the steps from the root (1 = a direct reply). Replies keeps the
+// one-level, keyset-paged view; this is the whole tree for a thread page
+// or a client that wants to show a reply under the reply it answers. The
+// walk stops at limit posts and 32 levels; a reply whose parent fell past
+// the limit (or arrived by replication before its parent) is kept at the
+// end as a direct reply rather than lost.
+func (s *Store) Thread(id string, limit int) ([]FeedPost, error) {
+	rows, err := s.db.Query(`WITH RECURSIVE sub(id, depth) AS (
+  SELECT c.id, 1 FROM posts c WHERE c.reply_to = ?
+  UNION ALL
+  SELECT c.id, sub.depth + 1 FROM posts c JOIN sub ON c.reply_to = sub.id WHERE sub.depth < 32)
+SELECT `+feedCols+`
+FROM sub JOIN posts p ON p.id = sub.id LEFT JOIN profiles pr ON pr.id = p.author
+ORDER BY p.received, p.id LIMIT ?`, id, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	all, err := s.scanFeed(rows)
+	if err != nil {
+		return nil, err
+	}
+	kids := map[string][]FeedPost{}
+	for _, p := range all {
+		kids[p.ReplyTo] = append(kids[p.ReplyTo], p)
+	}
+	out := make([]FeedPost, 0, len(all))
+	placed := map[string]bool{}
+	var walk func(parent string, depth int)
+	walk = func(parent string, depth int) {
+		for _, p := range kids[parent] {
+			p.Depth = depth
+			placed[p.ID] = true
+			out = append(out, p)
+			walk(p.ID, depth+1)
+		}
+	}
+	walk(id, 1)
+	for _, p := range all {
+		if !placed[p.ID] {
+			p.Depth = 1
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 type Profile struct {

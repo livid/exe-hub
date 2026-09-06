@@ -461,7 +461,13 @@ hub that carries the post.
   and profile pages carry a pager — `< Prev` at the left, the counts
   centred, `Next >` at the right, as Platinum push buttons that appear
   only when that page exists; a thread page keeps the 15px text status
-  line. Paging is keyset both ways (`?before=` older, `?after=` newer,
+  line and shows the whole tree: a reply to a reply sits under the reply
+  it answers, indented one step per level (four at most, so a deep thread
+  still fits a phone) and naming that reply with an in-page link
+  (`store.Thread`, a recursive walk in reading order, siblings oldest
+  first); the status line counts the tree. `GET /v1/post/{id}` returns
+  that tree as `thread` (each entry with its `depth`) beside the one-level,
+  paged `replies` it always had. Paging is keyset both ways (`?before=` older, `?after=` newer,
   `store.FeedNewer` / `ProfileFeedNewer`), fetching one row past the
   page to know whether a neighbour exists; a newer page with nothing
   newer beyond it — full or short — is the list's first page and

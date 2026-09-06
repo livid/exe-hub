@@ -76,6 +76,43 @@ func ingest(t *testing.T, s *Store, a *author, typ string, body any) string {
 	return id
 }
 
+// TestThreadNested: Thread walks the whole tree in reading order — a reply
+// is followed by the replies to it, siblings oldest first — with depths,
+// while Replies stays the one level below.
+func TestThreadNested(t *testing.T) {
+	s := openTest(t)
+	a, b := newAuthor(t), newAuthor(t)
+	root := ingest(t, s, a, "post.create", map[string]string{"text": "root"})
+	r1 := ingest(t, s, b, "post.create", map[string]string{"text": "r1", "reply_to": root})
+	r1a := ingest(t, s, a, "post.create", map[string]string{"text": "r1a", "reply_to": r1})
+	r1a1 := ingest(t, s, b, "post.create", map[string]string{"text": "r1a1", "reply_to": r1a})
+	r2 := ingest(t, s, b, "post.create", map[string]string{"text": "r2", "reply_to": root})
+	got, err := s.Thread(root, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, depths := []string{}, []int{}
+	for _, p := range got {
+		ids = append(ids, p.Text)
+		depths = append(depths, p.Depth)
+	}
+	if fmt.Sprint(ids) != "[r1 r1a r1a1 r2]" || fmt.Sprint(depths) != "[1 2 3 1]" {
+		t.Fatalf("thread order %v depths %v", ids, depths)
+	}
+	_ = r1a1
+	_ = r2
+	direct, _ := s.Replies(root, "", 50)
+	if len(direct) != 2 {
+		t.Fatalf("Replies still one level: got %d", len(direct))
+	}
+	if sub, _ := s.Thread(r1, 100); len(sub) != 2 || sub[0].Depth != 1 || sub[1].Depth != 2 {
+		t.Fatalf("subtree from r1: %+v", sub)
+	}
+	if none, _ := s.Thread(r2, 100); len(none) != 0 {
+		t.Fatalf("leaf has a thread: %+v", none)
+	}
+}
+
 func TestIngestFeedAndReplies(t *testing.T) {
 	s := openTest(t)
 	alice, bob := newAuthor(t), newAuthor(t)

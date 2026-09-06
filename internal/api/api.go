@@ -526,7 +526,15 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"post": p, "replies": replies})
+	// replies is the one level below, paged; thread is the whole tree in
+	// reading order, each with its depth, for showing a reply under the
+	// reply it answers
+	thread, err := s.St.Thread(p.ID, 500)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"post": p, "replies": replies, "thread": thread})
 }
 
 // handleEmbed proxies pinned content out of IPFS. Only CIDs in the pins

@@ -101,12 +101,27 @@ func TestWebThreadProfile(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	root := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "root post"})
-	ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "the reply", "reply_to": root})
+	reply := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "the reply", "reply_to": root})
 	h := s.Handler()
 
 	code, body := get(t, h, "/p/"+root)
 	if code != 200 || !strings.Contains(body, "root post") || !strings.Contains(body, "the reply") || !strings.Contains(body, "1 reply<") {
 		t.Errorf("thread page: %d\n%s", code, body)
+	}
+	// a reply to the reply shows on the root's page, indented under it, and
+	// names the reply it answers with an in-page link; the count is the tree
+	ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "deeper still", "reply_to": reply})
+	code, body = get(t, h, "/p/"+root)
+	if code != 200 || !strings.Contains(body, "deeper still") || !strings.Contains(body, "2 replies<") ||
+		!strings.Contains(body, `style="--d:2"`) || !strings.Contains(body, `<a href="#`+reply+`">in reply to `) {
+		t.Errorf("nested thread page: %d\n%s", code, body)
+	}
+	if strings.Contains(body, `<a href="/p/`+root+`">in reply to</a>`) {
+		t.Error("a direct reply on the thread page still links back to the same page")
+	}
+	// the JSON keeps the one-level replies and adds the tree with depths
+	if code, body := get(t, h, "/v1/post/"+root); code != 200 || !strings.Contains(body, `"thread":[`) || !strings.Contains(body, `"depth":2`) {
+		t.Errorf("post JSON lacks the thread: %d %s", code, body)
 	}
 	if !strings.Contains(body, `<meta property="og:description" content="root post">`) {
 		t.Error("thread page lacks the OpenGraph description")
@@ -121,6 +136,9 @@ func TestWebThreadProfile(t *testing.T) {
 	if !strings.Contains(home, "1 reply ▸") {
 		t.Error("home lacks the reply count link")
 	}
+	if strings.Contains(home, "deeper still") {
+		t.Error("a nested reply leaked into the home feed")
+	}
 
 	// the profile id is the author's fingerprint, as the feed reports it
 	posts, _ := s.St.Feed("", 10, true)
@@ -130,9 +148,9 @@ func TestWebThreadProfile(t *testing.T) {
 		t.Errorf("profile page: %d\n%s", code, body)
 	}
 	// with a profile.set the page gains the name, count and date
-	ingest(t, s, priv, pub, 3, "profile.set", map[string]any{"name": "Ann", "bio": "hi <there>"})
+	ingest(t, s, priv, pub, 4, "profile.set", map[string]any{"name": "Ann", "bio": "hi <there>"})
 	code, body = get(t, h, "/u/"+author)
-	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, `<span class="stats">2 posts</span>`) || !strings.Contains(body, "hi &lt;there&gt;") {
+	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, `<span class="stats">3 posts</span>`) || !strings.Contains(body, "hi &lt;there&gt;") {
 		t.Errorf("named profile page: %d %q", code, statusLine(body))
 	}
 	if code, _ := get(t, h, "/u/nobody"); code != 404 {

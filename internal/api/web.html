@@ -118,6 +118,10 @@ a { color: #333399; }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
+/* a thread page indents a reply one step per level under the reply it
+   answers (four steps at most, so a deep thread still fits a phone) */
+.post.reply { padding-left: calc(36px + min(var(--d, 1) - 1, 4) * 22px); }
+.post.reply.deep { border-left: 1px solid #ddd; }
 .av { width: 32px; height: 32px; border: 1px solid #262626; display: block; background: #ddd; box-sizing: border-box; }
 .av img { width: 30px; height: 30px; display: block; image-rendering: pixelated; }
 .meta { color: #666; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -391,10 +395,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 
 {{define "bell"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM4 2h1v1h-1zM9 2h1v1h-1zM3 3h1v1h-1zM10 3h1v1h-1zM3 4h1v1h-1zM10 4h1v1h-1zM3 5h1v1h-1zM10 5h1v1h-1zM3 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM11 7h1v1h-1zM1 8h1v1h-1zM12 8h1v1h-1zM0 9h1v1h-1zM13 9h1v1h-1zM0 10h14v1h-14zM5 11h4v1h-4zM6 12h2v1h-2z"/><path class="s" d="M7 1h1v1h-1zM8 2h1v1h-1zM9 3h1v1h-1zM9 4h1v1h-1zM9 5h1v1h-1zM9 6h1v1h-1zM10 7h1v1h-1zM10 8h2v1h-2zM1 9h12v1h-12z"/><path class="f" d="M6 1h1v1h-1zM6 2h2v1h-2zM5 3h4v1h-4zM5 4h4v1h-4zM5 5h4v1h-4zM4 6h5v1h-5zM3 7h7v1h-7zM2 8h8v1h-8z"/><path class="w" d="M5 2h1v1h-1zM4 3h1v1h-1zM4 4h1v1h-1zM4 5h1v1h-1z"/></svg>{{end}}
 
-{{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}" id="{{.ID}}">
+{{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}{{if gt .Depth 1}} deep{{end}}" id="{{.ID}}"{{if gt .Depth 1}} style="--d:{{.Depth}}"{{end}}>
   <a class="av" href="/u/{{.Author}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{end}}</a>
   <div>
-    <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}">{{.When}}</a>{{if .ReplyTo}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}</div>
+    <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}">{{.When}}</a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}{{end}}</div>
     {{if .Text}}<div class="text">{{.HTML}}</div>{{end}}
     {{if or .Images .Files}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
     {{if and (not .ReplyTo) .Replies}}<div class="foot"><a href="/p/{{.ID}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a></div>{{end}}
