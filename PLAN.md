@@ -391,7 +391,7 @@ viewer — a click on a picture opens it in a window of its own (fixed,
 cascading, dragged by its title bar, closed by its box or Escape, size
 in pixels on its status line), like the desktop's PictureViewer — and,
 on the home page's first page only, the live feed (below) and the
-Notify box (see Notifications). Without script the link opens the
+Notify bell (see Notifications). Without script the link opens the
 picture and the first page is what it was, a static page. Every post gets a
 link anyone can open, and a pasted link unfurls: the pages carry
 OpenGraph title, description (an excerpt) and image (the first picture,
@@ -551,17 +551,21 @@ vector) and 8292 (VAPID).
   click. No fetch handler — nothing is ever served from a cache; the
   pages stay live views. Served `no-cache`, so a change reaches a
   browser on its next check.
-- **The control** is a Notify checkbox at the right of the find strip —
-  a boolean's control per the HIG, drawn as the desktop draws one (the
-  native box, dark accent). Present only where the browser can push (a
-  head script classes `<html>` before layout, so nothing jumps; Safari
-  in a tab on iOS has no PushManager, the installed copy does) and
-  disabled until the page knows whether this browser is subscribed.
-  Checking asks permission inside the click, as browsers require, then
-  subscribes and tells the hub; unchecking tells the hub and the
-  browser; any failure puts the box back. The live feed's swap keeps
-  the find strip as it is: the field and the box are the reader's
-  state, never the server's.
+- **The control** is a bell at the right of the find strip, in a 20px
+  bevel button: the HIG's bevel button as a toggle — raised when off,
+  depressed (the pressed push button's dark face) when on, with the
+  icon darkened the way a selected icon is, and the tooltip saying
+  which. The bell is 14px pixel art in the desktop's icon idiom (black
+  outline, gold face and shade, a white highlight), inline SVG in the
+  template, so the pages still carry no assets. Present only where the
+  browser can push (a head script classes `<html>` before layout, so
+  nothing jumps; Safari in a tab on iOS has no PushManager, the
+  installed copy does) and disabled until the page knows whether this
+  browser is subscribed. Pressing it asks permission inside the click,
+  as browsers require, then subscribes and tells the hub; pressing it
+  again tells the hub and the browser; any failure leaves the bell
+  where it was. The live feed's swap keeps the find strip as it is: the
+  field and the bell are the reader's state, never the server's.
 
 ## Open questions
 

@@ -96,18 +96,25 @@ a { color: #333399; }
 /* Search is the strip's default button — Return in the field presses
    it — and wears the default ring, outset 3px from the button (HIG
    Fig. 2-3), drawn as the desktop draws it on a dialog's default */
-.find .btn { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
+.find .btn[type=submit] { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
 @media (pointer: coarse) { .find input[type=text] { font-size: 16px; height: 24px; } }
-/* Notify, at the strip's right: a checkbox, a boolean's control per the
-   HIG, drawn as the desktop draws one (the native box, dark accent).
-   Shown only where the browser can push — the head script classes
-   <html> before layout, so the field never jumps — and disabled until
-   the page knows whether this browser is subscribed. */
-.find .check { display: none; align-items: center; gap: 5px; white-space: nowrap; font-weight: bold; cursor: default; }
-.push .find .check { display: flex; }
-.find .check input { margin: 0; width: 13px; height: 13px; accent-color: #333; }
-.find .check input:focus { outline: none; }
-.find .check input:focus-visible { outline: 2px solid #9999fe; }
+/* Notify, at the strip's right: a bell in a 20px bevel button — the
+   HIG's bevel button as a toggle, raised when off, depressed when on
+   with the icon darkened the way a selected icon is. The bell is 14px
+   pixel art in the desktop's idiom (black outline, gold face, white
+   highlight), inline SVG, so still no assets. Shown only where the
+   browser can push — the head script classes <html> before layout, so
+   the field never jumps — and disabled until the page knows whether
+   this browser is subscribed. */
+.find .bell { display: none; width: 20px; min-width: 0; padding: 0; align-items: center; justify-content: center; }
+.push .find .bell { display: inline-flex; }
+.find .bell svg { width: 14px; height: 14px; display: block; shape-rendering: crispEdges; }
+.find .bell .k { fill: #262626; } .find .bell .f { fill: #ffcc33; } .find .bell .s { fill: #cc9933; } .find .bell .w { fill: #fff; }
+.find .bell[aria-pressed=true] { background: #666;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.find .bell[aria-pressed=true] .f { fill: #997a1f; } .find .bell[aria-pressed=true] .s { fill: #66511a; } .find .bell[aria-pressed=true] .w { fill: #ccaa44; }
+.find .bell:focus { outline: none; }
+.find .bell:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
@@ -335,23 +342,27 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 })();
 </script>{{end}}
 {{if .PushKey}}<script>
-// Notify. The checkbox on the find strip subscribes this browser to a
-// push for every new post; the service worker (/sw.js) shows them and
-// does nothing else. Permission is asked inside the click, as browsers
+// Notify. The bell on the find strip subscribes this browser to a push
+// for every new post; the service worker (/sw.js) shows them and does
+// nothing else. Permission is asked inside the click, as browsers
 // require; the subscription goes to the hub with the key the page
-// carries; unchecking tells the hub and the browser both. Any failure
-// puts the box back where it was.
+// carries; pressing the bell again tells the hub and the browser both.
+// Any failure leaves the bell where it was.
 (() => {
-  const box = document.querySelector("#notify input");
-  if (!box || !document.documentElement.classList.contains("push")) return;
-  const key = Uint8Array.from(atob(box.dataset.key.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+  const bell = document.querySelector("#notify");
+  if (!bell || !document.documentElement.classList.contains("push")) return;
+  const key = Uint8Array.from(atob(bell.dataset.key.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
   const tell = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const set = on => {
+    bell.setAttribute("aria-pressed", on);
+    bell.title = on ? "Notifying you of every new post" : "Notify me of every new post";
+  };
   const ready = navigator.serviceWorker.register("/sw.js");
-  ready.then(r => r.pushManager.getSubscription()).then(s => { box.checked = !!s; box.disabled = false; }).catch(() => {});
-  box.addEventListener("change", async () => {
-    const want = box.checked;
+  ready.then(r => r.pushManager.getSubscription()).then(s => { set(!!s); bell.disabled = false; }).catch(() => {});
+  bell.addEventListener("click", async () => {
+    const want = bell.getAttribute("aria-pressed") !== "true";
     const asked = want ? Notification.requestPermission() : null;
-    box.disabled = true;
+    bell.disabled = true;
     try {
       const r = await ready;
       if (want) {
@@ -362,10 +373,11 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
         const s = await r.pushManager.getSubscription();
         if (s) { await tell("/v1/push/unsubscribe", { endpoint: s.endpoint }); await s.unsubscribe(); }
       }
+      set(want);
     } catch (e) {
-      box.checked = !want;
+      set(!want);
     } finally {
-      box.disabled = false;
+      bell.disabled = false;
     }
   });
 })();
@@ -374,8 +386,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </html>
 {{end}}
 
-{{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<label class="check" id="notify" title="A notification for every new post"><input type="checkbox" data-key="{{.PushKey}}" autocomplete="off" disabled> Notify</label>{{end}}</form>
+{{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}
+
+{{define "bell"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM4 2h1v1h-1zM9 2h1v1h-1zM3 3h1v1h-1zM10 3h1v1h-1zM3 4h1v1h-1zM10 4h1v1h-1zM3 5h1v1h-1zM10 5h1v1h-1zM3 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM11 7h1v1h-1zM1 8h1v1h-1zM12 8h1v1h-1zM0 9h1v1h-1zM13 9h1v1h-1zM0 10h14v1h-14zM5 11h4v1h-4zM6 12h2v1h-2z"/><path class="s" d="M7 1h1v1h-1zM8 2h1v1h-1zM9 3h1v1h-1zM9 4h1v1h-1zM9 5h1v1h-1zM9 6h1v1h-1zM10 7h1v1h-1zM10 8h2v1h-2zM1 9h12v1h-12z"/><path class="f" d="M6 1h1v1h-1zM6 2h2v1h-2zM5 3h4v1h-4zM5 4h4v1h-4zM5 5h4v1h-4zM4 6h5v1h-5zM3 7h7v1h-7zM2 8h8v1h-8z"/><path class="w" d="M5 2h1v1h-1zM4 3h1v1h-1zM4 4h1v1h-1zM4 5h1v1h-1z"/></svg>{{end}}
 
 {{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}" id="{{.ID}}">
   <a class="av" href="/u/{{.Author}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{end}}</a>
