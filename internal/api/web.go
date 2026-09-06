@@ -2,6 +2,7 @@ package api
 
 import (
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -34,9 +35,16 @@ import (
 //go:embed web.html
 var webHTML string
 
-// The pages' icons, drawn from the Hub app's own 32px pixel art: the
-// shortcut icon at 1x (a 32 and a halved 16 in one .ico), the touch icon
-// at 5x on the desktop's lavender, like exe's maskable icon.
+// The pages' icons, all drawn from the Hub app's own 32px pixel art
+// (which has a 4px transparent margin around a 24px core), scaled
+// nearest-neighbour so the pixels stay pixels: the shortcut icon at 1x
+// (a 32 and a halved 16 in one .ico); the touch icon at 5x on the
+// desktop's lavender with a 10px margin, like exe's maskable icon; the
+// manifest's icons at 6x and 16x, transparent, for a launcher or an
+// install dialog to show as they are, and a maskable one at 12x on the
+// lavender out to the edge — the 288px core sits inside the circle
+// Android's masks are guaranteed to keep (80% of 512, so a 289px
+// square at most).
 //
 //go:embed favicon.ico
 var webFavicon []byte
@@ -44,16 +52,74 @@ var webFavicon []byte
 //go:embed apple-touch-icon.png
 var webTouchIcon []byte
 
+//go:embed icon-192.png
+var webIcon192 []byte
+
+//go:embed icon-512.png
+var webIcon512 []byte
+
+//go:embed icon-maskable-512.png
+var webIconMaskable []byte
+
 func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/x-icon")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write(webFavicon)
 }
 
-func (s *Server) handleTouchIcon(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "image/png")
+func servePNG(png []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(png)
+	}
+}
+
+// webDesc is what the hub says it is: the home page's description, the
+// manifest's.
+const webDesc = "an exe-hub: a small public feed where a key is an account"
+
+// webManifest is the web app manifest, what makes the pages
+// installable — a home-screen shortcut on a phone, an app window on a
+// desktop — in a window of their own (display standalone; the page then
+// hides the join block, see web.html). Rendered per request because a
+// hub's name is its host: there is no display name for a hub, and every
+// hub is someone's own. No service worker goes with it: Chrome no
+// longer asks for one to install, and the pages are live views of the
+// hub, so nothing here should ever come from a cache.
+type webManifest struct {
+	Name       string            `json:"name"`
+	ShortName  string            `json:"short_name"`
+	Desc       string            `json:"description"`
+	ID         string            `json:"id"`
+	Start      string            `json:"start_url"`
+	Scope      string            `json:"scope"`
+	Display    string            `json:"display"`
+	Background string            `json:"background_color"`
+	Theme      string            `json:"theme_color"`
+	Icons      []webManifestIcon `json:"icons"`
+}
+
+type webManifestIcon struct {
+	Src     string `json:"src"`
+	Sizes   string `json:"sizes"`
+	Type    string `json:"type"`
+	Purpose string `json:"purpose,omitempty"`
+}
+
+func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/manifest+json")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Write(webTouchIcon)
+	json.NewEncoder(w).Encode(webManifest{
+		Name: r.Host, ShortName: r.Host, Desc: webDesc,
+		ID: "/", Start: "/", Scope: "/", Display: "standalone",
+		Background: "#cccccc", Theme: "#cccccc", // the desk, as the pages' theme-color
+		Icons: []webManifestIcon{
+			{Src: "/icon-192.png", Sizes: "192x192", Type: "image/png"},
+			{Src: "/icon-512.png", Sizes: "512x512", Type: "image/png"},
+			{Src: "/icon-maskable-512.png", Sizes: "512x512", Type: "image/png", Purpose: "maskable"},
+		},
+	})
 }
 
 var webTmpl = template.Must(template.New("web").Parse(webHTML))
@@ -326,7 +392,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	members, count, _ := s.St.Counts()
 	s.webRender(w, r, http.StatusOK, &webData{
-		Page: "home", Desc: "an exe-hub: a small public feed where a key is an account",
+		Page: "home", Desc: webDesc,
 		Image: webBase(r) + "/apple-touch-icon.png",
 		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r),
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",

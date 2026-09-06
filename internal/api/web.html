@@ -6,6 +6,7 @@
 <title>{{.Title}}</title>
 <link rel="icon" href="/favicon.ico" sizes="32x32 16x16">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#cccccc">
 <meta property="og:title" content="{{.Title}}">
 <meta property="og:type" content="{{if eq .Page "thread"}}article{{else}}website{{end}}">
@@ -32,6 +33,14 @@ a { color: #333399; }
   .desk { max-width: none; display: flex; align-items: flex-start; justify-content: center; gap: 24px; }
   .desk .join { flex: 0 0 360px; position: sticky; top: 24px; margin: 0; }
   .desk .feed { flex: 0 1 640px; min-width: 0; margin: 0; }
+}
+/* installed as an app — a home-screen shortcut on a phone, an app
+   window on a desktop; the manifest asks for a standalone window — the
+   desk is the feed alone: the join block is for a visitor in a browser,
+   and whoever installed the hub has found it. CSS only, like the desk:
+   the display-mode media feature is how the page knows. */
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .desk .join { display: none; }
 }
 .titlebar { display: flex; align-items: center; gap: 4px; padding: 2px 4px; }
 .tbox { width: 9px; height: 9px; border: 1px solid #262626; background: #ddd; flex: none;

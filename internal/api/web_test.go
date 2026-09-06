@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -453,25 +454,83 @@ func TestWebLive(t *testing.T) {
 	}
 }
 
-// TestWebIcons: the shortcut and touch icons are served, and the pages
-// point at them.
+// TestWebIcons: the shortcut, touch and manifest icons are served, each
+// PNG at the size the manifest declares, and the pages point at them.
 func TestWebIcons(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	h := s.Handler()
-	for _, c := range []struct{ path, mime, magic string }{
-		{"/favicon.ico", "image/x-icon", "\x00\x00\x01\x00"},
-		{"/apple-touch-icon.png", "image/png", "\x89PNG"},
-		{"/apple-touch-icon-precomposed.png", "image/png", "\x89PNG"},
+	for _, c := range []struct {
+		path, mime, magic string
+		size              int // a PNG's width and height
+	}{
+		{"/favicon.ico", "image/x-icon", "\x00\x00\x01\x00", 0},
+		{"/apple-touch-icon.png", "image/png", "\x89PNG", 180},
+		{"/apple-touch-icon-precomposed.png", "image/png", "\x89PNG", 180},
+		{"/icon-192.png", "image/png", "\x89PNG", 192},
+		{"/icon-512.png", "image/png", "\x89PNG", 512},
+		{"/icon-maskable-512.png", "image/png", "\x89PNG", 512},
 	} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example"+c.path, nil))
 		if w.Code != 200 || w.Header().Get("Content-Type") != c.mime || !strings.HasPrefix(w.Body.String(), c.magic) {
 			t.Errorf("%s: %d %s %q", c.path, w.Code, w.Header().Get("Content-Type"), w.Body.String()[:4])
 		}
+		if c.size == 0 {
+			continue
+		}
+		if cfg, err := png.DecodeConfig(w.Body); err != nil || cfg.Width != c.size || cfg.Height != c.size {
+			t.Errorf("%s: %dx%d %v, want %d square", c.path, cfg.Width, cfg.Height, err, c.size)
+		}
 	}
 	_, body := get(t, h, "/")
 	if !strings.Contains(body, `<link rel="icon" href="/favicon.ico"`) || !strings.Contains(body, `<link rel="apple-touch-icon" href="/apple-touch-icon.png">`) ||
 		!strings.Contains(body, `<meta property="og:image" content="http://hub.example/apple-touch-icon.png">`) {
 		t.Error("page lacks the icon links")
+	}
+}
+
+// TestWebManifest: the pages are installable — they link a manifest
+// named for the host, asking for a standalone window with the 192 and
+// 512 icons and a maskable one — and, installed, the home page hides
+// the join block by the display-mode media feature.
+func TestWebManifest(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example/manifest.webmanifest", nil))
+	if w.Code != 200 || w.Header().Get("Content-Type") != "application/manifest+json" {
+		t.Fatalf("manifest: %d %s", w.Code, w.Header().Get("Content-Type"))
+	}
+	var m struct {
+		Name      string `json:"name"`
+		ShortName string `json:"short_name"`
+		Start     string `json:"start_url"`
+		Scope     string `json:"scope"`
+		Display   string `json:"display"`
+		Theme     string `json:"theme_color"`
+		Icons     []struct{ Src, Sizes, Type, Purpose string }
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.Name != "hub.example" || m.ShortName != "hub.example" || m.Start != "/" || m.Scope != "/" || m.Display != "standalone" || m.Theme != "#cccccc" {
+		t.Errorf("manifest: %+v", m)
+	}
+	want := map[string]string{"/icon-192.png": "192x192", "/icon-512.png": "512x512", "/icon-maskable-512.png": "512x512"}
+	for _, ic := range m.Icons {
+		if want[ic.Src] != ic.Sizes || ic.Type != "image/png" || (ic.Purpose == "maskable") != strings.Contains(ic.Src, "maskable") {
+			t.Errorf("icon %+v", ic)
+		}
+		delete(want, ic.Src)
+	}
+	if len(want) > 0 {
+		t.Errorf("manifest lacks icons %v", want)
+	}
+	_, body := get(t, h, "/")
+	if !strings.Contains(body, `<link rel="manifest" href="/manifest.webmanifest">`) {
+		t.Error("page lacks the manifest link")
+	}
+	if !strings.Contains(body, "@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {\n  .desk .join { display: none; }") {
+		t.Error("installed, the page does not hide the join block")
 	}
 }

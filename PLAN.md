@@ -429,6 +429,27 @@ hub that carries the post.
   icon at 5x on the desktop's lavender), drawn from the Hub app's 32px
   pixel art and embedded in the binary; the home and profile pages use
   the touch icon as their OpenGraph picture when they have no other.
+- **Installable.** The pages link `/manifest.webmanifest`, rendered per
+  request because a hub's name is its host (a hub has no display name;
+  every hub is someone's own): name and short_name the host, the home
+  page's description, start_url, scope and id `/`, display
+  `standalone`, the desk's #cccccc as background and theme colour, and
+  icons from the same 32px art — `/icon-192.png` and `/icon-512.png`
+  transparent (6x, 16x), for a launcher or an install dialog to show as
+  they are, and `/icon-maskable-512.png` at 12x on the lavender out to
+  the edge, the art's 288px opaque core inside the circle Android's
+  masks keep (80% of 512, a 289px square at most). That is what Chrome
+  asks for to install (a name, 192 and 512 icons, start_url, display,
+  https) and all iOS needs for Add to Home Screen; no service worker
+  goes with it — Chrome no longer requires one, and the pages are live
+  views of the hub, so nothing here should ever come from a cache.
+  Installed — a home-screen shortcut on a phone, an app window on a
+  desktop — the home page is the feed alone: the join block is for a
+  visitor in a browser, and whoever installed the hub has found it.
+  CSS only, like the desk: a `display-mode` media query (standalone,
+  fullscreen, minimal-ui) hides the join window; the same URL in a
+  browser tab shows it. The HTML is the same either way (a request
+  carries no display mode), so the live feed's swap is untouched.
 - The home page is a desk of two windows: stacked, join first, on a
   narrow screen; from 1060px wide the join window sits at the left and
   stays put (sticky) while the feed scrolls beside it. CSS only.
