@@ -26,6 +26,7 @@ import (
 	"exehub/internal/gate"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/push"
 	"exehub/internal/store"
 )
 
@@ -43,6 +44,7 @@ type Server struct {
 	IPFS   *ipfs.Client
 	Hub    *identity.Identity
 	Events *events.Broadcaster // live post activity; nil disables /v1/events
+	Push   *push.Key           // Web Push (the VAPID key); nil disables subscribing and the page's Notify box
 }
 
 //go:embed skill.md
@@ -92,6 +94,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /icon-512.png", servePNG(webIcon512))
 	mux.HandleFunc("GET /icon-maskable-512.png", servePNG(webIconMaskable))
 	mux.HandleFunc("GET /manifest.webmanifest", s.handleManifest)
+	mux.HandleFunc("GET /sw.js", s.handleSW)
+	mux.HandleFunc("POST /v1/push/subscribe", s.handlePushSubscribe)
+	mux.HandleFunc("POST /v1/push/unsubscribe", s.handlePushUnsubscribe)
 	mux.HandleFunc("GET /skill.md", s.handleSkill)
 	mux.HandleFunc("GET /v1/hub", s.handleHub)
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
@@ -142,13 +147,17 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	info := map[string]any{
 		"id":                s.Hub.ID,
 		"pubkey":            s.Hub.PubKey(),
 		"gate":              map[string]string{"mode": c.Gate.Mode},
 		"allow_replication": c.Replicable(),
 		"stats":             map[string]int{"profiles": profiles, "posts": posts},
-	})
+	}
+	if s.Push != nil {
+		info["push"] = map[string]string{"key": s.Push.Public()} // pushManager.subscribe's applicationServerKey
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 // handleEvents streams live post activity as SSE: unnamed events whose

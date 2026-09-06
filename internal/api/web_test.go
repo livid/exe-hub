@@ -1,7 +1,9 @@
 package api
 
 import (
+	"crypto/ecdh"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -14,6 +16,8 @@ import (
 	"exehub/internal/config"
 	"exehub/internal/envelope"
 	"exehub/internal/events"
+	"exehub/internal/identity"
+	"exehub/internal/push"
 )
 
 // ingest signs and stores one envelope for the test key, returning its
@@ -532,5 +536,82 @@ func TestWebManifest(t *testing.T) {
 	}
 	if !strings.Contains(body, "@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {\n  .desk .join { display: none; }") {
 		t.Error("installed, the page does not hide the join block")
+	}
+}
+
+func postJSON(t *testing.T, h http.Handler, path, body string) (int, string) {
+	t.Helper()
+	req := httptest.NewRequest("POST", "http://hub.example"+path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	return w.Code, w.Body.String()
+}
+
+// TestWebPush: on a hub with a push key the home page carries the head
+// script, the Notify box with the key, and the push-only service worker;
+// subscribing takes a browser's subscription and nothing else, and
+// unsubscribing forgets it. Without a key, none of it.
+func TestWebPush(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	if _, body := get(t, h, "/"); strings.Contains(body, `id="notify"`) || strings.Contains(body, `classList.add("push")`) {
+		t.Error("Notify box on a hub without push")
+	}
+	if code, _ := postJSON(t, h, "/v1/push/subscribe", `{}`); code != 404 {
+		t.Errorf("subscribe without push: %d", code)
+	}
+
+	var err error
+	if s.Push, err = push.LoadKey(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if s.Hub, err = identity.Load(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	s.Events = events.New() // the first page is live, and its swap must keep the strip
+	key := s.Push.Public()
+	_, body := get(t, h, "/")
+	for _, want := range []string{`classList.add("push")`, `<label class="check" id="notify"`, `data-key="` + key + `"`, `navigator.serviceWorker.register("/sw.js")`, `n.id === "find"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("home page lacks %q", want)
+		}
+	}
+	if _, body := get(t, h, "/search?q=x"); strings.Contains(body, `id="notify"`) {
+		t.Error("Notify box on the search page")
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example/sw.js", nil))
+	if w.Code != 200 || w.Header().Get("Content-Type") != "text/javascript; charset=utf-8" || !strings.Contains(w.Body.String(), `addEventListener("push"`) || strings.Contains(w.Body.String(), `"fetch"`) {
+		t.Errorf("sw.js: %d %s", w.Code, w.Header().Get("Content-Type"))
+	}
+	_, hub := get(t, h, "/v1/hub")
+	if !strings.Contains(hub, `"push":{"key":"`+key+`"}`) {
+		t.Errorf("/v1/hub lacks the push key: %s", hub)
+	}
+
+	ua, _ := ecdh.P256().GenerateKey(rand.Reader)
+	p256dh := base64.RawURLEncoding.EncodeToString(ua.PublicKey().Bytes())
+	auth := base64.RawURLEncoding.EncodeToString(make([]byte, 16))
+	if code, body := postJSON(t, h, "/v1/push/subscribe", `{"endpoint":"http://push.example/x","keys":{"p256dh":"`+p256dh+`","auth":"`+auth+`"}}`); code != 400 {
+		t.Errorf("http endpoint: %d %s", code, body)
+	}
+	sub := `{"endpoint":"https://push.example/v1/abc","expirationTime":null,"keys":{"p256dh":"` + p256dh + `","auth":"` + auth + `"}}`
+	if code, body := postJSON(t, h, "/v1/push/subscribe", sub); code != 200 {
+		t.Fatalf("subscribe: %d %s", code, body)
+	}
+	subs, _ := s.St.PushSubs()
+	if len(subs) != 1 || subs[0].Endpoint != "https://push.example/v1/abc" || subs[0].Base != "http://hub.example" || len(subs[0].P256dh) != 65 {
+		t.Fatalf("stored: %+v", subs)
+	}
+	postJSON(t, h, "/v1/push/subscribe", sub) // again: the same one, not a second
+	if n, _ := s.St.PushCount(); n != 1 {
+		t.Errorf("resubscribe counted twice: %d", n)
+	}
+	if code, _ := postJSON(t, h, "/v1/push/unsubscribe", `{"endpoint":"https://push.example/v1/abc"}`); code != 200 {
+		t.Errorf("unsubscribe: %d", code)
+	}
+	if n, _ := s.St.PushCount(); n != 0 {
+		t.Errorf("still subscribed: %d", n)
 	}
 }

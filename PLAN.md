@@ -385,13 +385,14 @@ Implementation decisions (v1):
 
 `GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
 profile, `/search?q=` the posts holding some words — server-rendered HTML (`internal/api/web.go` + `web.html`,
-embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond two
-small inline scripts: the picture viewer — a click on a picture opens
-it in a window of its own (fixed, cascading, dragged by its title bar,
-closed by its box or Escape, size in pixels on its status line), like
-the desktop's PictureViewer — and, on the home page's first page only,
-the live feed (below). Without script the link opens the picture and
-the first page is what it was, a static page. Every post gets a
+embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond three
+small inline scripts and a push-only service worker: the picture
+viewer — a click on a picture opens it in a window of its own (fixed,
+cascading, dragged by its title bar, closed by its box or Escape, size
+in pixels on its status line), like the desktop's PictureViewer — and,
+on the home page's first page only, the live feed (below) and the
+Notify box (see Notifications). Without script the link opens the
+picture and the first page is what it was, a static page. Every post gets a
 link anyone can open, and a pasted link unfurls: the pages carry
 OpenGraph title, description (an excerpt) and image (the first picture,
 or the avatar). Post ids are content hashes, so one link resolves on any
@@ -440,9 +441,10 @@ hub that carries the post.
   the edge, the art's 288px opaque core inside the circle Android's
   masks keep (80% of 512, a 289px square at most). That is what Chrome
   asks for to install (a name, 192 and 512 icons, start_url, display,
-  https) and all iOS needs for Add to Home Screen; no service worker
-  goes with it — Chrome no longer requires one, and the pages are live
-  views of the hub, so nothing here should ever come from a cache.
+  https) and all iOS needs for Add to Home Screen; the only service
+  worker is the push-only one (see Notifications) — Chrome no longer
+  requires one to install, and the pages are live views of the hub, so
+  nothing here should ever come from a cache.
   Installed — a home-screen shortcut on a phone, an app window on a
   desktop — the home page is the feed alone: the join block is for a
   visitor in a browser, and whoever installed the hub has found it.
@@ -502,6 +504,64 @@ hub that carries the post.
   script, nor does the page on a hub running without an event bus; the
   picture viewer's click handling is delegated so pictures the live
   feed brings in open the same way.
+
+## Notifications — Web Push for every new post (built)
+
+The public page can notify a browser of every post that lands on the
+hub: the installed copy on a phone most of all, which is where iOS
+allows it (a Home Screen web app, since iOS 16.4), though a desktop
+browser tab does as well. Nothing but the standard library
+(`internal/push`): RFC 8030 (the request to the push service), 8291
+(the payload, aes128gcm — the test holds `encrypt` to the RFC's own
+vector) and 8292 (VAPID).
+
+- **Subscribing is anonymous**, like reading. `POST /v1/push/subscribe`
+  takes the browser's PushSubscription JSON (an https endpoint, the
+  65-byte P-256 key, the 16-byte auth secret), stored by endpoint in
+  `push_subs` with the hub's address as the subscriber reached it (the
+  VAPID subject, when https; else the project's page); `POST
+  /v1/push/unsubscribe` `{endpoint}` removes it — an endpoint is a
+  secret the browser minted, so knowing it is owning it. Capped at
+  10,000 subscriptions. Every subscriber gets every post, their own
+  included: there is no identity to filter by. Per-key subscriptions
+  (replies to my posts) are the obvious next step.
+- **The hub's VAPID key** is a P-256 pair at `<state>/vapid_p256`,
+  generated on first start beside `hub_ed25519` (which cannot serve:
+  VAPID signs ES256). Browsers bind a subscription to it, so a changed
+  key orphans them all. `GET /v1/hub` carries it as `push.key`; the
+  home page hands it to `pushManager.subscribe`.
+- **Sending**: a notifier on the event bus, like the page's live feed.
+  On every `post.create` — direct or replicated, replies included — it
+  loads the post and pushes `{title, body, url, tag}` to each
+  subscriber: the author's name (or "Name replied"), a 200-character
+  excerpt or "a picture" / "a file", the post's page (the thread, for a
+  reply), the post id as tag so a duplicate delivery is one
+  notification. Eight sends in flight, TTL a day for a device that is
+  offline, and a subscription its service reports gone (404, 410) is
+  dropped. The bus queues 32 events and drops on overflow, as it does
+  for everyone: a burst can cost a notification, never a post.
+- **SSRF guard.** The hub POSTs to whatever endpoint a client sent, so
+  it dials public addresses only: https at subscribe time, and the
+  resolved IP checked at dial time (no loopback, private, link-local or
+  CGNAT range, where Tailscale lives), so an endpoint of
+  `http://127.0.0.1:5001/…` cannot make the hub talk to its own kubo,
+  and a name that rebinds cannot either.
+- **The service worker** `/sw.js` is push only: it shows the
+  notification (the hub's icon) and opens or focuses the page on a
+  click. No fetch handler — nothing is ever served from a cache; the
+  pages stay live views. Served `no-cache`, so a change reaches a
+  browser on its next check.
+- **The control** is a Notify checkbox at the right of the find strip —
+  a boolean's control per the HIG, drawn as the desktop draws one (the
+  native box, dark accent). Present only where the browser can push (a
+  head script classes `<html>` before layout, so nothing jumps; Safari
+  in a tab on iOS has no PushManager, the installed copy does) and
+  disabled until the page knows whether this browser is subscribed.
+  Checking asks permission inside the click, as browsers require, then
+  subscribes and tells the hub; unchecking tells the hub and the
+  browser; any failure puts the box back. The live feed's swap keeps
+  the find strip as it is: the field and the box are the reader's
+  state, never the server's.
 
 ## Open questions
 

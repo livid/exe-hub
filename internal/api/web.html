@@ -7,7 +7,8 @@
 <link rel="icon" href="/favicon.ico" sizes="32x32 16x16">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#cccccc">
+{{if .PushKey}}<script>if ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window) document.documentElement.classList.add("push");</script>
+{{end}}<meta name="theme-color" content="#cccccc">
 <meta property="og:title" content="{{.Title}}">
 <meta property="og:type" content="{{if eq .Page "thread"}}article{{else}}website{{end}}">
 <meta property="og:url" content="{{.Base}}{{.Path}}">
@@ -87,16 +88,26 @@ a { color: #333399; }
 .find { display: flex; align-items: center; gap: 12px; margin: 0; padding: 8px 12px;
   border-bottom: 1px solid #262626; background: #ddd;
   box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }
-.find input { flex: 1; min-width: 0; box-sizing: border-box; height: 20px; padding: 2px 5px; margin: 0;
+.find input[type=text] { flex: 1; min-width: 0; box-sizing: border-box; height: 20px; padding: 2px 5px; margin: 0;
   font: inherit; line-height: 14px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
   box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
-.find input:focus { outline: none; }
+.find input[type=text]:focus { outline: none; }
 .find button { font-family: inherit; cursor: default; margin: 0; }
 /* Search is the strip's default button — Return in the field presses
    it — and wears the default ring, outset 3px from the button (HIG
    Fig. 2-3), drawn as the desktop draws it on a dialog's default */
 .find .btn { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
-@media (pointer: coarse) { .find input { font-size: 16px; height: 24px; } }
+@media (pointer: coarse) { .find input[type=text] { font-size: 16px; height: 24px; } }
+/* Notify, at the strip's right: a checkbox, a boolean's control per the
+   HIG, drawn as the desktop draws one (the native box, dark accent).
+   Shown only where the browser can push — the head script classes
+   <html> before layout, so the field never jumps — and disabled until
+   the page knows whether this browser is subscribed. */
+.find .check { display: none; align-items: center; gap: 5px; white-space: nowrap; font-weight: bold; cursor: default; }
+.push .find .check { display: flex; }
+.find .check input { margin: 0; width: 13px; height: 13px; accent-color: #333; }
+.find .check input:focus { outline: none; }
+.find .check input:focus-visible { outline: 2px solid #9999fe; }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
@@ -299,7 +310,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     const have = new Map([...feed.children].filter(n => n.id).map(n => [n.id, n]));
     const next = [...fresh.children].map(n => {
       const old = have.get(n.id);
-      return old && old.isEqualNode(n) ? old : n;
+      // the find strip is the reader's (what they typed, the Notify box)
+      return old && (n.id === "find" || old.isEqualNode(n)) ? old : n;
     });
     for (const n of [...feed.children]) if (!next.includes(n)) n.remove();
     next.forEach((n, i) => { if (feed.children[i] !== n) feed.insertBefore(n, feed.children[i] || null); });
@@ -322,11 +334,47 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   es.onopen = () => { if (down) { down = false; poke(); } };
 })();
 </script>{{end}}
+{{if .PushKey}}<script>
+// Notify. The checkbox on the find strip subscribes this browser to a
+// push for every new post; the service worker (/sw.js) shows them and
+// does nothing else. Permission is asked inside the click, as browsers
+// require; the subscription goes to the hub with the key the page
+// carries; unchecking tells the hub and the browser both. Any failure
+// puts the box back where it was.
+(() => {
+  const box = document.querySelector("#notify input");
+  if (!box || !document.documentElement.classList.contains("push")) return;
+  const key = Uint8Array.from(atob(box.dataset.key.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+  const tell = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const ready = navigator.serviceWorker.register("/sw.js");
+  ready.then(r => r.pushManager.getSubscription()).then(s => { box.checked = !!s; box.disabled = false; }).catch(() => {});
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    const asked = want ? Notification.requestPermission() : null;
+    box.disabled = true;
+    try {
+      const r = await ready;
+      if (want) {
+        if (await asked !== "granted") throw new Error("denied");
+        const s = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        if (!(await tell("/v1/push/subscribe", s.toJSON())).ok) { await s.unsubscribe(); throw new Error("refused"); }
+      } else {
+        const s = await r.pushManager.getSubscription();
+        if (s) { await tell("/v1/push/unsubscribe", { endpoint: s.endpoint }); await s.unsubscribe(); }
+      }
+    } catch (e) {
+      box.checked = !want;
+    } finally {
+      box.disabled = false;
+    }
+  });
+})();
+</script>{{end}}
 </body>
 </html>
 {{end}}
 
-{{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button></form>
+{{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<label class="check" id="notify" title="A notification for every new post"><input type="checkbox" data-key="{{.PushKey}}" autocomplete="off" disabled> Notify</label>{{end}}</form>
 {{end}}
 
 {{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}" id="{{.ID}}">

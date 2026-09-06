@@ -163,6 +163,7 @@ type webData struct {
 	Posts            []webPost
 	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
 	Live             bool   // the home page's first page: ships the live-feed script
+	PushKey          string // the home page on a hub that pushes: the VAPID public key for the Notify box
 	Query            string // the search page's words, and what the find strip's field holds
 	Join             *webJoin
 	Post             *webPost
@@ -391,13 +392,17 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	members, count, _ := s.St.Counts()
-	s.webRender(w, r, http.StatusOK, &webData{
+	d := &webData{
 		Page: "home", Desc: webDesc,
 		Image: webBase(r) + "/apple-touch-icon.png",
 		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r),
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
-	})
+	}
+	if s.Push != nil {
+		d.PushKey = s.Push.Public()
+	}
+	s.webRender(w, r, http.StatusOK, d)
 }
 
 // queryMax caps a search query, on the page and in the API: a page

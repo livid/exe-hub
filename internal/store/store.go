@@ -127,6 +127,13 @@ CREATE TABLE IF NOT EXISTS peers (
 
 -- Replication runtime state, NOT derived: losing it only re-pulls from
 -- zero, and content-hash dedup makes that idempotent.
+CREATE TABLE IF NOT EXISTS push_subs (
+  endpoint TEXT PRIMARY KEY,           -- the push service URL the browser minted; a secret
+  p256dh   BLOB NOT NULL,              -- the browser's P-256 public key, 65 bytes
+  auth     BLOB NOT NULL,              -- the browser's 16-byte auth secret
+  base     TEXT NOT NULL DEFAULT '',   -- the hub as the subscriber reached it: the VAPID subject
+  created  INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS peer_state (
   hub    TEXT PRIMARY KEY,
   pubkey TEXT NOT NULL DEFAULT '',     -- cached, fingerprint-verified
@@ -847,4 +854,49 @@ func (s *Store) Counts() (profiles, posts int, err error) {
 	}
 	err = s.db.QueryRow(`SELECT COUNT(*) FROM posts`).Scan(&posts)
 	return profiles, posts, err
+}
+
+// PushSub is one browser's Web Push subscription (PLAN.md
+// "Notifications"): where to POST and the keys the payload is
+// encrypted to. Anonymous — nothing ties it to a profile.
+type PushSub struct {
+	Endpoint     string
+	P256dh, Auth []byte
+	Base         string
+}
+
+// PushAdd stores a subscription; the same endpoint again replaces it.
+func (s *Store) PushAdd(sub PushSub) error {
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO push_subs(endpoint, p256dh, auth, base, created) VALUES (?, ?, ?, ?, ?)`,
+		sub.Endpoint, sub.P256dh, sub.Auth, sub.Base, time.Now().UnixMilli())
+	return err
+}
+
+func (s *Store) PushRemove(endpoint string) error {
+	_, err := s.db.Exec(`DELETE FROM push_subs WHERE endpoint = ?`, endpoint)
+	return err
+}
+
+func (s *Store) PushCount() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM push_subs`).Scan(&n)
+	return n, err
+}
+
+// PushSubs is every subscription, oldest first.
+func (s *Store) PushSubs() ([]PushSub, error) {
+	rows, err := s.db.Query(`SELECT endpoint, p256dh, auth, base FROM push_subs ORDER BY created, endpoint`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PushSub
+	for rows.Next() {
+		var sub PushSub
+		if err := rows.Scan(&sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.Base); err != nil {
+			return nil, err
+		}
+		out = append(out, sub)
+	}
+	return out, rows.Err()
 }

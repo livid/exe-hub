@@ -25,6 +25,7 @@ import (
 	"exehub/internal/gate"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/push"
 	"exehub/internal/replicate"
 	"exehub/internal/store"
 )
@@ -107,7 +108,14 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		}
 	}
 
-	srv := &api.Server{Cfg: holder, St: st, Gate: gate.New(holder), IPFS: ipfsc, Hub: hub, Events: bus}
+	// Web Push: every post.create on the bus goes to every subscriber.
+	pk, err := push.LoadKey(stateDir)
+	if err != nil {
+		return err
+	}
+	go (&push.Notifier{St: st, Bus: bus, Sender: &push.Sender{Key: pk}}).Run()
+
+	srv := &api.Server{Cfg: holder, St: st, Gate: gate.New(holder), IPFS: ipfsc, Hub: hub, Events: bus, Push: pk}
 	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler()}
 
 	// Pull from curated peers (peer.add ops); the loop re-reads the peers
