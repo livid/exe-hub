@@ -464,7 +464,14 @@ hub that carries the post.
   bottom, on the desktop's platinum strip under a black rule, the feed
   and profile pages carry a pager — `< Prev` at the left, the counts
   centred, `Next >` at the right, as Platinum push buttons that appear
-  only when that page exists; a thread page keeps the 15px text status
+  only when that page exists. A list that runs past one page is headed
+  by the same strip too — under the find strip, above the first post —
+  so the buttons are at hand at either end; a list that fits one page
+  keeps only the strip at the bottom. One template renders the strip
+  for all three lists, the cursor links and counts following the page.
+  Either seam of the top strip is one line: its rule is along its
+  bottom, the find strip's rule (or the frame's edge) already drawn
+  above it; a thread page keeps the 15px text status
   line and shows the whole tree: a reply to a reply sits under the reply
   it answers, indented one step per level (four at most, so a deep thread
   still fits a phone) and naming that reply with an in-page link

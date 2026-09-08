@@ -153,6 +153,9 @@ func TestWebThreadProfile(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, `<span class="stats">3 posts</span>`) || !strings.Contains(body, "hi &lt;there&gt;") {
 		t.Errorf("named profile page: %d %q", code, statusLine(body))
 	}
+	if strings.Contains(body, `class="pager top"`) || strings.Contains(home, `class="pager top"`) {
+		t.Error("a one-page list is headed by a pager")
+	}
 	if code, _ := get(t, h, "/u/nobody"); code != 404 {
 		t.Errorf("unknown profile = %d", code)
 	}
@@ -250,6 +253,13 @@ func TestWebPaging(t *testing.T) {
 	if !strings.Contains(body, `<span class="stats">1 members · 32 posts</span>`) {
 		t.Errorf("stats: %q", statusLine(body))
 	}
+	// a list past one page is headed by the same strip, under the find strip
+	if top := topStrip(body); strings.TrimSuffix(strings.TrimPrefix(top, `<div class="pager top">`), "</div>") != strings.TrimSuffix(strings.TrimPrefix(statusLine(body), `<div class="pager">`), "</div>") {
+		t.Errorf("top strip differs from the bottom one: %q vs %q", top, statusLine(body))
+	}
+	if i, j := strings.Index(body, `id="find"`), strings.Index(body, `class="pager top"`); !(i < j && j < strings.Index(body, `class="post"`)) {
+		t.Error("the top strip is not between the find strip and the first post")
+	}
 
 	_, body = get(t, h, "/?before="+oldestOnFirst)
 	if !strings.Contains(body, "post 2<") || !strings.Contains(body, "post 1<") || strings.Contains(body, "post 3<") {
@@ -257,6 +267,9 @@ func TestWebPaging(t *testing.T) {
 	}
 	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[1]+`">&lt; Prev</a>`) {
 		t.Errorf("last page: %q", statusLine(body))
+	}
+	if strings.Count(body, `<a class="btn prev" href="/?after=`+ids[1]+`">&lt; Prev</a>`) != 2 {
+		t.Errorf("last page lacks Prev at the top: %q", topStrip(body))
 	}
 
 	// Prev from the last page: the 30 posts newer than post 2 are exactly
@@ -376,6 +389,12 @@ func TestWebSearchPaging(t *testing.T) {
 	if !strings.Contains(body, `<span class="stats">32 posts match</span>`) || strings.Contains(body, "miss 99") {
 		t.Errorf("stats: %q", statusLine(body))
 	}
+	if strings.Count(body, `href="/search?q=hit%20me&amp;before=`+oldestOnFirst+`"`) != 2 {
+		t.Errorf("first page lacks Next at the top: %q", topStrip(body))
+	}
+	if _, body := get(t, h, "/search?q=miss"); strings.Contains(body, `class="pager top"`) || !strings.Contains(body, `<span class="stats">1 post matches</span>`) {
+		t.Errorf("a one-page search is headed by a pager: %q", topStrip(body))
+	}
 	_, body = get(t, h, "/search?q=hit+me&before="+oldestOnFirst)
 	if !strings.Contains(body, "hit me 2<") || !strings.Contains(body, "hit me 1<") || strings.Contains(body, "hit me 3<") ||
 		strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/search?q=hit%20me&amp;after=`+ids[1]+`">&lt; Prev</a>`) {
@@ -429,9 +448,13 @@ func TestSearchAPI(t *testing.T) {
 	}
 }
 
-// statusLine is the page's pager strip, for short failure messages.
-func statusLine(body string) string {
-	i := strings.Index(body, `<div class="pager">`)
+// statusLine is the page's pager strip along the frame's bottom, for
+// short failure messages; topStrip the one heading a list past one page.
+func statusLine(body string) string { return strip(body, `<div class="pager">`) }
+func topStrip(body string) string   { return strip(body, `<div class="pager top">`) }
+
+func strip(body, open string) string {
+	i := strings.Index(body, open)
 	if i < 0 {
 		return "(none)"
 	}

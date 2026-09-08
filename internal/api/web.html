@@ -72,6 +72,11 @@ a { color: #333399; }
 .pager .prev { grid-column: 1; justify-self: start; }
 .pager .stats { grid-column: 2; text-align: center; white-space: nowrap; }
 .pager .next { grid-column: 3; justify-self: end; }
+/* the same strip heads a list that runs past one page, so the buttons
+   are at hand at either end. Its rule is along its bottom, against the
+   first post; above it the find strip's rule or the frame's own edge
+   already draws the seam, so no line of its own there. */
+.pager.top { border-top: 0; border-bottom: 1px solid #262626; }
 .btn { display: inline-block; box-sizing: border-box; min-width: 58px; height: 20px; padding: 2px 13px;
   background: #ddd; color: #262626; text-decoration: none; text-align: center;
   font-size: 12px; line-height: 14px; font-weight: bold; white-space: nowrap;
@@ -188,8 +193,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
+    {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
-    <div class="pager">{{if .Prev}}<a class="btn prev" href="/?after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{.Members}} members · {{.Count}} posts</span>{{if .Next}}<a class="btn next" href="/?before={{.Next}}">Next &gt;</a>{{end}}</div>
+    <div class="pager">{{template "pager" .}}</div>
   </div>
 </div>
 </div>
@@ -207,8 +213,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">Search</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
+    {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else if .Query}}<div class="pad">No post matches.</div>{{else}}<div class="pad">Type a word or two, then Search. Every word must appear in the post.</div>{{end}}
-    {{if .Query}}<div class="pager">{{if .Prev}}<a class="btn prev" href="/search?q={{.Query}}&amp;after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}</span>{{if .Next}}<a class="btn next" href="/search?q={{.Query}}&amp;before={{.Next}}">Next &gt;</a>{{end}}</div>{{end}}
+    {{if .Query}}<div class="pager">{{template "pager" .}}</div>{{end}}
   </div>
 </div>
 {{else if eq .Page "profile"}}
@@ -225,8 +232,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     </div>
   </div>
   <div class="frame">
+    {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">No posts yet.</div>{{end}}
-    <div class="pager">{{if .Prev}}<a class="btn prev" href="/u/{{.Profile.ID}}?after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{if .Since}}{{.Count}} posts{{else}}{{len .Posts}} posts{{end}}</span>{{if .Next}}<a class="btn next" href="/u/{{.Profile.ID}}?before={{.Next}}">Next &gt;</a>{{end}}</div>
+    <div class="pager">{{template "pager" .}}</div>
   </div>
 </div>
 {{else}}
@@ -398,6 +406,15 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </body>
 </html>
 {{end}}
+
+{{/* The pager's cells — Prev, the counts, Next — the same at either end
+     of a list. Which list is the page: the cursor links and the counts
+     follow .Page, the query or profile id carried in the links. */}}
+{{define "pager"}}{{if .Prev}}<a class="btn prev" href="{{template "cursors" .}}after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next" href="{{template "cursors" .}}before={{.Next}}">Next &gt;</a>{{end}}{{end}}
+
+{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{end}}
+
+{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}{{.Members}} members · {{.Count}} posts{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}
