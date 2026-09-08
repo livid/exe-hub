@@ -472,8 +472,8 @@ hub that carries the post.
   Either seam of the top strip is one line: its rule is along its
   bottom, the find strip's rule (or the frame's edge) already drawn
   above it. A thread page is headed by the same strip with one button,
-  `< Feed`, back to the feed (the title bar's close box leads there
-  too), keeps the 15px text status line — text only, the count — along
+  Feed, back to the feed (the title bar's close box leads there too),
+  wearing the Hub app's 11×9 pixel back arrow in currentColor, keeps the 15px text status line — text only, the count — along
   the bottom, and shows the whole tree: a reply to a reply sits under the reply
   it answers, indented one step per level (four at most, so a deep thread
   still fits a phone) and naming that reply with an in-page link

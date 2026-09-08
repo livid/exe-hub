@@ -110,8 +110,9 @@ func TestWebThreadProfile(t *testing.T) {
 	}
 	// the way back to the feed is a push button on the strip heading the
 	// page, above the post; the status line along the bottom is text only
-	if topStrip(body) != `<div class="pager top"><a class="btn prev" href="/">&lt; Feed</a></div>` || strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) {
-		t.Errorf("thread page strip: %q", topStrip(body))
+	if top := topStrip(body); !strings.HasPrefix(top, `<div class="pager top"><a class="btn prev back" href="/"><svg class="gl" viewBox="0 0 11 9"`) ||
+		!strings.HasSuffix(top, `</svg><span>Feed</span></a></div>`) || strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) {
+		t.Errorf("thread page strip: %q", top)
 	}
 	if !strings.Contains(body, `<div class="statusbar"><span>1 reply</span></div>`) {
 		t.Error("thread status line is not the count alone")
