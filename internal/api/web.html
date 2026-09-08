@@ -86,15 +86,18 @@ a { color: #333399; }
   box-shadow: inset 1px 1px 0 #ddd, inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
 .btn:active { background: #666; color: #fff;
   box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
-/* the thread page's Feed button carries the Hub app's back arrow: the
-   same 11×9 pixel glyph in currentColor (a text triangle is an emoji
-   on an iPhone), 5px before the word, the padding pulled in on the
+/* Prev, Next and the thread page's Feed button carry the Hub app's
+   arrow: the same 11×9 pixel glyph in currentColor (a text triangle
+   is an emoji on an iPhone), 5px from the word — before it on a button
+   that leads back, after it on Next — the padding pulled in on the
    arrow's side as the app's button has it. Crisp at whole ratios;
    between 1 and 2 a fractional scale would drop rows, so smooth. */
-.btn.back { display: inline-flex; align-items: center; gap: 5px; padding: 2px 12px 2px 9px; }
-.btn.back .gl { display: block; width: 11px; height: 9px; shape-rendering: crispEdges; }
-.btn.back .gl .k { fill: currentColor; }
-@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .btn.back .gl { shape-rendering: geometricPrecision; } }
+.btn.back, .btn.fwd { display: inline-flex; align-items: center; gap: 5px; }
+.btn.back { padding: 2px 12px 2px 9px; }
+.btn.fwd { padding: 2px 9px 2px 12px; }
+.btn .gl { display: block; width: 11px; height: 9px; shape-rendering: crispEdges; }
+.btn .gl .k { fill: currentColor; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .btn .gl { shape-rendering: geometricPrecision; } }
 /* the find strip, inside the frame along its top on the pager's
    platinum strip: a text field with its Search button 12px to the
    right, a GET form to /search. The field is the desktop's: white,
@@ -422,7 +425,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{/* The pager's cells — Prev, the counts, Next — the same at either end
      of a list. Which list is the page: the cursor links and the counts
      follow .Page, the query or profile id carried in the links. */}}
-{{define "pager"}}{{if .Prev}}<a class="btn prev" href="{{template "cursors" .}}after={{.Prev}}">&lt; Prev</a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next" href="{{template "cursors" .}}before={{.Next}}">Next &gt;</a>{{end}}{{end}}
+{{define "pager"}}{{if .Prev}}<a class="btn prev back" href="{{template "cursors" .}}after={{.Prev}}">{{template "arrow"}}<span>Prev</span></a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next fwd" href="{{template "cursors" .}}before={{.Next}}"><span>Next</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{end}}
 
@@ -431,8 +434,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}
 
-{{/* the Hub app's back arrow, verbatim (sysapps/hub/index.html) */}}
+{{/* the Hub app's back arrow, verbatim (sysapps/hub/index.html), and
+     the same glyph mirrored (x → 10 − x) pointing on, for Next */}}
 {{define "arrow"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M4 0h1v1h-1zM3 1h2v1h-2zM2 2h3v1h-3zM1 3h10v1h-10zM0 4h11v1h-11zM1 5h10v1h-10zM2 6h3v1h-3zM3 7h2v1h-2zM4 8h1v1h-1z"/></svg>{{end}}
+{{define "arrow-r"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M6 0h1v1h-1zM6 1h2v1h-2zM6 2h3v1h-3zM0 3h10v1h-10zM0 4h11v1h-11zM0 5h10v1h-10zM6 6h3v1h-3zM6 7h2v1h-2zM6 8h1v1h-1z"/></svg>{{end}}
 
 {{define "bell"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM4 2h1v1h-1zM9 2h1v1h-1zM3 3h1v1h-1zM10 3h1v1h-1zM3 4h1v1h-1zM10 4h1v1h-1zM3 5h1v1h-1zM10 5h1v1h-1zM3 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM11 7h1v1h-1zM1 8h1v1h-1zM12 8h1v1h-1zM0 9h1v1h-1zM13 9h1v1h-1zM0 10h14v1h-14zM5 11h4v1h-4zM6 12h2v1h-2z"/><path class="s" d="M7 1h1v1h-1zM8 2h1v1h-1zM9 3h1v1h-1zM9 4h1v1h-1zM9 5h1v1h-1zM9 6h1v1h-1zM10 7h1v1h-1zM10 8h2v1h-2zM1 9h12v1h-12z"/><path class="f" d="M6 1h1v1h-1zM6 2h2v1h-2zM5 3h4v1h-4zM5 4h4v1h-4zM5 5h4v1h-4zM4 6h5v1h-5zM3 7h7v1h-7zM2 8h8v1h-8z"/><path class="w" d="M5 2h1v1h-1zM4 3h1v1h-1zM4 4h1v1h-1zM4 5h1v1h-1z"/></svg>{{end}}
 

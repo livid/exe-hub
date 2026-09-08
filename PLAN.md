@@ -462,9 +462,11 @@ hub that carries the post.
 - **Window shape follows the exe desktop's document windows** (Newsfeed,
   the Hub app): posts directly on the white frame. Along the frame's
   bottom, on the desktop's platinum strip under a black rule, the feed
-  and profile pages carry a pager — `< Prev` at the left, the counts
-  centred, `Next >` at the right, as Platinum push buttons that appear
-  only when that page exists. A list that runs past one page is headed
+  and profile pages carry a pager — Prev at the left, the counts
+  centred, Next at the right, as Platinum push buttons that appear
+  only when that page exists, each with the Hub app's 11×9 pixel arrow
+  in currentColor (Prev's the app's back arrow verbatim, Next's the
+  same mirrored) 5px from the word on the side it points. A list that runs past one page is headed
   by the same strip too — under the find strip, above the first post —
   so the buttons are at hand at either end; a list that fits one page
   keeps only the strip at the bottom. One template renders the strip
@@ -473,7 +475,7 @@ hub that carries the post.
   bottom, the find strip's rule (or the frame's edge) already drawn
   above it. A thread page is headed by the same strip with one button,
   Feed, back to the feed (the title bar's close box leads there too),
-  wearing the Hub app's 11×9 pixel back arrow in currentColor, keeps the 15px text status line — text only, the count — along
+  wearing the back arrow like Prev, keeps the 15px text status line — text only, the count — along
   the bottom, and shows the whole tree: a reply to a reply sits under the reply
   it answers, indented one step per level (four at most, so a deep thread
   still fits a phone) and naming that reply with an in-page link

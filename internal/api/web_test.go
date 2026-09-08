@@ -256,11 +256,15 @@ func TestWebPaging(t *testing.T) {
 	}
 
 	_, body := get(t, h, "/")
-	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next" href="/?before=`+oldestOnFirst+`">Next &gt;</a>`) {
+	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next fwd" href="/?before=`+oldestOnFirst+`"><span>Next</span><svg`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
 	if !strings.Contains(body, `<span class="stats">1 members · 32 posts</span>`) {
 		t.Errorf("stats: %q", statusLine(body))
+	}
+	// Next points on: the Hub app's back arrow mirrored
+	if !strings.Contains(body, `<span>Next</span><svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M6 0h1v1h-1z`) {
+		t.Errorf("Next arrow: %q", statusLine(body))
 	}
 	// a list past one page is headed by the same strip, under the find strip
 	if top := topStrip(body); strings.TrimSuffix(strings.TrimPrefix(top, `<div class="pager top">`), "</div>") != strings.TrimSuffix(strings.TrimPrefix(statusLine(body), `<div class="pager">`), "</div>") {
@@ -274,10 +278,10 @@ func TestWebPaging(t *testing.T) {
 	if !strings.Contains(body, "post 2<") || !strings.Contains(body, "post 1<") || strings.Contains(body, "post 3<") {
 		t.Error("second page should hold posts 2 and 1 only")
 	}
-	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[1]+`">&lt; Prev</a>`) {
+	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev back" href="/?after=`+ids[1]+`"><svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M4 0h1v1h-1z`) {
 		t.Errorf("last page: %q", statusLine(body))
 	}
-	if strings.Count(body, `<a class="btn prev" href="/?after=`+ids[1]+`">&lt; Prev</a>`) != 2 {
+	if strings.Count(body, `<a class="btn prev back" href="/?after=`+ids[1]+`"><svg`) != 2 {
 		t.Errorf("last page lacks Prev at the top: %q", topStrip(body))
 	}
 
@@ -290,8 +294,8 @@ func TestWebPaging(t *testing.T) {
 	// 31 posts newer than post 1: the 30 nearest make a middle page, posts 31..2
 	_, body = get(t, h, "/?after="+ids[0])
 	if !strings.Contains(body, "post 31<") || !strings.Contains(body, "post 2<") || strings.Contains(body, "post 32<") || strings.Contains(body, "post 1<") ||
-		!strings.Contains(body, `<a class="btn prev" href="/?after=`+ids[30]+`">&lt; Prev</a>`) ||
-		!strings.Contains(body, `<a class="btn next" href="/?before=`+ids[1]+`">Next &gt;</a>`) {
+		!strings.Contains(body, `<a class="btn prev back" href="/?after=`+ids[30]+`"><svg`) ||
+		!strings.Contains(body, `<a class="btn next fwd" href="/?before=`+ids[1]+`"><span>Next</span><svg`) {
 		t.Errorf("middle newer page: %q", statusLine(body))
 	}
 
@@ -392,7 +396,7 @@ func TestWebSearchPaging(t *testing.T) {
 	oldestOnFirst := ids[2]
 
 	_, body := get(t, h, "/search?q=hit+me")
-	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next" href="/search?q=hit%20me&amp;before=`+oldestOnFirst+`">Next &gt;</a>`) {
+	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next fwd" href="/search?q=hit%20me&amp;before=`+oldestOnFirst+`"><span>Next</span><svg`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
 	if !strings.Contains(body, `<span class="stats">32 posts match</span>`) || strings.Contains(body, "miss 99") {
@@ -406,7 +410,7 @@ func TestWebSearchPaging(t *testing.T) {
 	}
 	_, body = get(t, h, "/search?q=hit+me&before="+oldestOnFirst)
 	if !strings.Contains(body, "hit me 2<") || !strings.Contains(body, "hit me 1<") || strings.Contains(body, "hit me 3<") ||
-		strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev" href="/search?q=hit%20me&amp;after=`+ids[1]+`">&lt; Prev</a>`) {
+		strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev back" href="/search?q=hit%20me&amp;after=`+ids[1]+`"><svg`) {
 		t.Errorf("last page: %q", statusLine(body))
 	}
 	req := httptest.NewRequest("GET", "http://hub.example/search?q=hit+me&after="+ids[1], nil)
