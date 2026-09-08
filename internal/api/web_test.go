@@ -191,12 +191,15 @@ func TestRenderText(t *testing.T) {
 		{"a\nb", "a<br>\nb"},
 		{"`unterminated", "`unterminated"},
 		{"ftp://no.link", "ftp://no.link"},
-		// heading lines: h1–h3, the line break that ends one goes with
-		// it, blank lines around it stay, its words take the inline pipeline
-		{"## Head\nbody", "<h2>Head</h2>\nbody"},
-		{"p\n\n# T  \nq\n", "p<br>\n<br>\n<h1>T</h1>\nq<br>\n"},
-		{"### `code` and https://x.y/", `<h3><code>code</code> and <a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a></h3>` + "\n"},
-		{"# <b>", "<h1>&lt;b&gt;</h1>\n"},
+		// heading lines: h1–h3, the breaks around one and a blank line on
+		// either side go with it, the first in a post is marked, its words
+		// take the inline pipeline
+		{"## Head\nbody", `<h2 class="first">Head</h2>` + "\nbody"},
+		{"p\n\n# T  \nq\n", "p<h1>T</h1>\nq<br>\n"},
+		{"# T\n\nbody\n\n## S\n\nmore", `<h1 class="first">T</h1>` + "\nbody<h2>S</h2>\nmore"},
+		{"# A\n## B\n\n\nc", `<h1 class="first">A</h1>` + "\n<h2>B</h2>\n<br>\nc"},
+		{"### `code` and https://x.y/", `<h3 class="first"><code>code</code> and <a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a></h3>` + "\n"},
+		{"# <b>", `<h1 class="first">&lt;b&gt;</h1>` + "\n"},
 		{"#nospace\n#### four\n ## indented\n## ", "#nospace<br>\n#### four<br>\n ## indented<br>\n## "},
 	}
 	for _, c := range cases {

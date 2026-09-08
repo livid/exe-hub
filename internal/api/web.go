@@ -203,11 +203,14 @@ var (
 
 // renderText turns a post's text into HTML the page may embed: every
 // character escaped, a heading line set as an h1–h3 whose words take
-// the inline pipeline like any others — the line break that ends it
-// goes with it, the block breaks the line itself, and the author's
-// blank lines stay blank lines — and elsewhere URLs outside code spans
-// wrapped in anchors that open in a new tab, code spans set in <code>,
-// newlines kept as line breaks.
+// the inline pipeline like any others — the block breaks the line
+// itself, so the line break before it and the one that ends it go with
+// it, and so does one blank line on either side: the heading's own
+// margins space it, as in Markdown, and "## Title" reads the same with
+// or without a blank line beside it; the heading that opens a post is
+// marked .first, for no room above it — and elsewhere URLs outside code
+// spans wrapped in anchors that open in a new tab, code spans set in
+// <code>, newlines kept as line breaks.
 func renderText(text string) template.HTML {
 	var b strings.Builder
 	lines := strings.Split(text, "\n")
@@ -218,18 +221,28 @@ func renderText(text string) template.HTML {
 			plain = ""
 		}
 	}
-	for i, line := range lines {
-		if m := webHeading.FindStringSubmatch(line); m != nil {
-			flush()
-			tag := "h" + strconv.Itoa(len(m[1]))
-			b.WriteString("<" + tag + ">")
-			writeInline(&b, m[2])
-			b.WriteString("</" + tag + ">\n")
+	for i := 0; i < len(lines); i++ {
+		m := webHeading.FindStringSubmatch(lines[i])
+		if m == nil {
+			plain += lines[i]
+			if i < len(lines)-1 {
+				plain += "\n"
+			}
 			continue
 		}
-		plain += line
-		if i < len(lines)-1 {
-			plain += "\n"
+		plain = strings.TrimSuffix(plain, "\n") // the break before the heading
+		plain = strings.TrimSuffix(plain, "\n") // one blank line above it
+		flush()
+		tag := "h" + strconv.Itoa(len(m[1]))
+		if b.Len() == 0 {
+			b.WriteString("<" + tag + ` class="first">`)
+		} else {
+			b.WriteString("<" + tag + ">")
+		}
+		writeInline(&b, m[2])
+		b.WriteString("</" + tag + ">\n")
+		if i+1 < len(lines) && lines[i+1] == "" {
+			i++ // one blank line below it
 		}
 	}
 	flush()
