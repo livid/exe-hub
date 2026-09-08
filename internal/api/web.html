@@ -130,6 +130,12 @@ a { color: #333399; }
 .meta a:hover { text-decoration: underline; }
 .mono { font-family: Monaco, "Courier New", monospace; font-size: 11px; }
 .text { margin-top: 2px; overflow-wrap: anywhere; }
+/* a heading line (#, ##, ###): bold, a step or two up, no margins of its
+   own — the author's blank lines space the text, as in the Hub app */
+.text h1, .text h2, .text h3 { margin: 0; font-weight: bold; line-height: 1.25; }
+.text h1 { font-size: 16px; }
+.text h2 { font-size: 14px; }
+.text h3 { font-size: 12px; }
 code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0 2px; }
 .embeds img { max-width: 100%; max-height: 420px; border: 1px solid #262626; display: block; margin-top: 8px; }
 .embeds .file { display: block; margin-top: 6px; }

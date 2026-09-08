@@ -191,6 +191,13 @@ func TestRenderText(t *testing.T) {
 		{"a\nb", "a<br>\nb"},
 		{"`unterminated", "`unterminated"},
 		{"ftp://no.link", "ftp://no.link"},
+		// heading lines: h1–h3, the line break that ends one goes with
+		// it, blank lines around it stay, its words take the inline pipeline
+		{"## Head\nbody", "<h2>Head</h2>\nbody"},
+		{"p\n\n# T  \nq\n", "p<br>\n<br>\n<h1>T</h1>\nq<br>\n"},
+		{"### `code` and https://x.y/", `<h3><code>code</code> and <a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a></h3>` + "\n"},
+		{"# <b>", "<h1>&lt;b&gt;</h1>\n"},
+		{"#nospace\n#### four\n ## indented\n## ", "#nospace<br>\n#### four<br>\n ## indented<br>\n## "},
 	}
 	for _, c := range cases {
 		if got := string(renderText(c.in)); got != c.want {
@@ -202,6 +209,9 @@ func TestRenderText(t *testing.T) {
 func TestExcerpt(t *testing.T) {
 	if got := excerpt("one  two\nthree", 100); got != "one two three" {
 		t.Errorf("excerpt = %q", got)
+	}
+	if got := excerpt("## Title\nbody # not a heading", 100); got != "Title body # not a heading" {
+		t.Errorf("excerpt drops heading marks: %q", got)
 	}
 	if got := excerpt("one two three four", 10); got != "one two…" {
 		t.Errorf("excerpt cut = %q", got)

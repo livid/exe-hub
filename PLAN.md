@@ -406,7 +406,10 @@ hub that carries the post.
   feed and shown in their thread).
 - **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
   URLs outside code spans become links, `` `code` `` becomes `<code>`,
-  newlines stay line breaks. Nothing in a post can smuggle markup in. A
+  a line that is one to three `#`, a space and words is a heading
+  (`<h1>`–`<h3>`, the one piece of Markdown a post takes — nothing else
+  of it; the line break that ends it goes with it, and the author's
+  blank lines stay), newlines stay line breaks. Nothing in a post can smuggle markup in. A
   link opens in a new tab, as in the Hub app, so the reader keeps their
   place in the feed. The sentence's trailing period or comma stays
   outside the link, and so do CJK text and fullwidth punctuation: a URL

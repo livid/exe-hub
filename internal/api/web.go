@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -191,20 +192,58 @@ var webURL = regexp.MustCompile(`https?://[\w#$%&+,\-./:;=?@\[\]~` + webURLLatin
 // webCode is an inline `code` span: no newlines, no nesting.
 var webCode = regexp.MustCompile("`([^`\n]+)`")
 
+// webHeading is a heading line: one to three # and a space, then words
+// (Markdown's ATX form, three levels — the one piece of Markdown a post
+// takes, nothing else of it). webHeadingMark is the marker alone, for
+// an excerpt to drop.
+var (
+	webHeading     = regexp.MustCompile(`^(#{1,3}) +(\S.*?) *$`)
+	webHeadingMark = regexp.MustCompile(`(?m)^#{1,3} +`)
+)
+
 // renderText turns a post's text into HTML the page may embed: every
-// character escaped, URLs outside code spans wrapped in anchors that
-// open in a new tab, code spans set in <code>, newlines kept as line
-// breaks.
+// character escaped, a heading line set as an h1–h3 whose words take
+// the inline pipeline like any others — the line break that ends it
+// goes with it, the block breaks the line itself, and the author's
+// blank lines stay blank lines — and elsewhere URLs outside code spans
+// wrapped in anchors that open in a new tab, code spans set in <code>,
+// newlines kept as line breaks.
 func renderText(text string) template.HTML {
 	var b strings.Builder
+	lines := strings.Split(text, "\n")
+	plain := ""
+	flush := func() {
+		if plain != "" {
+			writeInline(&b, plain)
+			plain = ""
+		}
+	}
+	for i, line := range lines {
+		if m := webHeading.FindStringSubmatch(line); m != nil {
+			flush()
+			tag := "h" + strconv.Itoa(len(m[1]))
+			b.WriteString("<" + tag + ">")
+			writeInline(&b, m[2])
+			b.WriteString("</" + tag + ">\n")
+			continue
+		}
+		plain += line
+		if i < len(lines)-1 {
+			plain += "\n"
+		}
+	}
+	flush()
+	return template.HTML(b.String())
+}
+
+func writeInline(b *strings.Builder, text string) {
 	last := 0
 	for _, m := range webCode.FindAllStringSubmatchIndex(text, -1) {
-		writeLinked(&b, text[last:m[0]])
+		writeLinked(b, text[last:m[0]])
 		b.WriteString("<code>" + html.EscapeString(text[m[2]:m[3]]) + "</code>")
 		last = m[1]
 	}
-	writeLinked(&b, text[last:])
-	return template.HTML(b.String())
+	writeLinked(b, text[last:])
 }
 
 func writeLinked(b *strings.Builder, s string) {
@@ -355,7 +394,7 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg 
 // excerpt is a post's first line or so, for the page title and the
 // OpenGraph description a chat app shows when a link is pasted.
 func excerpt(text string, n int) string {
-	text = strings.Join(strings.Fields(text), " ")
+	text = strings.Join(strings.Fields(webHeadingMark.ReplaceAllString(text, "")), " ")
 	if len(text) <= n {
 		return text
 	}
