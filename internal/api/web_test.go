@@ -108,6 +108,14 @@ func TestWebThreadProfile(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "root post") || !strings.Contains(body, "the reply") || !strings.Contains(body, "1 reply<") {
 		t.Errorf("thread page: %d\n%s", code, body)
 	}
+	// the way back to the feed is a push button on the strip heading the
+	// page, above the post; the status line along the bottom is text only
+	if topStrip(body) != `<div class="pager top"><a class="btn prev" href="/">&lt; Feed</a></div>` || strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) {
+		t.Errorf("thread page strip: %q", topStrip(body))
+	}
+	if !strings.Contains(body, `<div class="statusbar"><span>1 reply</span></div>`) {
+		t.Error("thread status line is not the count alone")
+	}
 	// a reply to the reply shows on the root's page, indented under it, and
 	// names the reply it answers with an in-page link; the count is the tree
 	ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "deeper still", "reply_to": reply})

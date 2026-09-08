@@ -54,8 +54,9 @@ a { color: #333399; }
 .frame { margin: 0 4px 4px; border: 1px solid #262626; background: #fff;
   box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
 /* the exe desktop's status line, inside the frame along its bottom: a
-   15px platinum strip under a black rule, 11px text; the paging link
-   rides at its right as text, like the Hub app's clickable address */
+   15px platinum strip under a black rule, 11px text — the thread page's
+   reply count. Text only; the way back to the feed is the push button
+   on the strip heading the page. */
 .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 15px; padding: 0 8px;
   border-top: 1px solid #262626; background: #ddd; font-size: 11px; color: #333;
   box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; white-space: nowrap; overflow: hidden; }
@@ -73,7 +74,8 @@ a { color: #333399; }
 .pager .stats { grid-column: 2; text-align: center; white-space: nowrap; }
 .pager .next { grid-column: 3; justify-self: end; }
 /* the same strip heads a list that runs past one page, so the buttons
-   are at hand at either end. Its rule is along its bottom, against the
+   are at hand at either end, and a thread page, where its one button
+   leads back to the feed. Its rule is along its bottom, against the
    first post; above it the find strip's rule or the frame's own edge
    already draws the seam, so no line of its own there. */
 .pager.top { border-top: 0; border-bottom: 1px solid #262626; }
@@ -203,9 +205,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
+    <div class="pager top"><a class="btn prev" href="/">&lt; Feed</a></div>
     {{template "post" .Post}}
     {{range .Replies}}{{template "post" .}}{{end}}
-    <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span><a href="/">Feed ▸</a></div>
+    <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span></div>
   </div>
 </div>
 {{else if eq .Page "search"}}
