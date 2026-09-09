@@ -167,6 +167,20 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		}
 	}()
 
+	// Re-pin what kubo holds without a pin. Until 2026-09-09 Add hung up on
+	// the add response early and the root pin raced the close, so a share of
+	// uploads were stored but never pinned; this repairs a hub's history at
+	// start and keeps watch daily in case anything else ever drifts.
+	go func() {
+		for {
+			if reconcilePins(st, ipfsc) {
+				time.Sleep(24 * time.Hour)
+			} else {
+				time.Sleep(10 * time.Minute)
+			}
+		}
+	}()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -212,4 +226,36 @@ func listenWait(addr string, wait time.Duration) (net.Listener, error) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+// reconcilePins pins every upload in the pins table that kubo does not
+// list as pinned; false means kubo could not be asked and the caller
+// should try again soon.
+func reconcilePins(st *store.Store, ipfsc *ipfs.Client) bool {
+	want, err := st.PinCIDs()
+	if err != nil {
+		log.Printf("pins: %v", err)
+		return true
+	}
+	have, err := ipfsc.Pinned()
+	if err != nil {
+		log.Printf("pins: %v", err)
+		return false
+	}
+	missing, fixed := 0, 0
+	for _, cid := range want {
+		if have[cid] {
+			continue
+		}
+		missing++
+		if err := ipfsc.Pin(cid); err != nil {
+			log.Printf("pins: re-pin %s: %v", cid, err)
+			continue
+		}
+		fixed++
+	}
+	if missing > 0 {
+		log.Printf("pins: %d of %d uploads had no kubo pin, re-pinned %d", missing, len(want), fixed)
+	}
+	return true
 }

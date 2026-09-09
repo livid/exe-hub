@@ -253,8 +253,16 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   via kubo RPC (`/api/v0/add`), returns the CID. No arbitrary external
   CIDs in v1 (fetching untrusted CIDs hangs and size-bombs; if ever
   allowed, hard timeout + size-capped reader before pinning).
+- The add response is read to its end before the CID is trusted: kubo
+  pins the root only after it has written the file's JSON object, and a
+  client that hangs up on that object cancels the request and loses the
+  pin while the blocks stay. Until 2026-09-09 the hub did exactly that and
+  63 of its 152 uploads were unpinned (the pin/rm 500s in the log were
+  those); the regression test in `internal/ipfs` keeps it fixed.
 - Pins are refcounted in SQLite; when a delete drops a CID's count to
-  zero, unpin.
+  zero, unpin. A reconcile pass at start and daily pins every CID in the
+  pins table that kubo does not list as pinned and logs how many it found,
+  so a hub repairs its own history after that bug and any later drift.
 - Served through the hub: `GET /v1/embed/{cid}` proxies from the IPFS node
   with long cache headers — feed clients need no gateway or IPFS.
 

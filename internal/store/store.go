@@ -803,6 +803,25 @@ func (s *Store) PinInfo(cid string) (*Pin, error) {
 	return p, err
 }
 
+// PinCIDs lists every upload the hub holds a pin row for, referenced or
+// staged, so the pins can be reconciled with what kubo actually pins.
+func (s *Store) PinCIDs() ([]string, error) {
+	rows, err := s.db.Query(`SELECT cid FROM pins ORDER BY created`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cids []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		cids = append(cids, c)
+	}
+	return cids, rows.Err()
+}
+
 // SweepStaged removes never-referenced uploads older than cutoff and
 // returns their CIDs for unpinning.
 func (s *Store) SweepStaged(cutoff time.Time) ([]string, error) {
