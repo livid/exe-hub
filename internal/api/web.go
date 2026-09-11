@@ -176,7 +176,8 @@ type webData struct {
 	Post             *webPost
 	Replies          []webPost
 	Profile          *store.Profile
-	Since            string
+	Since            string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
+	SinceStamp       string
 	Members, Count   int
 	Message          string
 }
@@ -586,6 +587,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	case err == nil:
 		d.Profile, d.Count = pr, pr.Posts
 		d.Since = time.UnixMilli(pr.Created).UTC().Format("2006-01-02")
+		d.SinceStamp = webStamp(pr.Created)
 		d.Desc = excerpt(pr.Bio, 200)
 	case errors.Is(err, store.ErrNotFound) && len(posts) > 0:
 		d.Profile = &store.Profile{ID: id}

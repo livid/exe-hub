@@ -241,7 +241,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
       <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{end}}</span>
       <div>
         <h1>{{if .Profile.Name}}{{.Profile.Name}}{{else}}{{.Profile.ID}}{{end}}</h1>
-        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · since {{.Since}}{{end}}</div>
+        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · since <time datetime="{{.SinceStamp}}" data-date>{{.Since}}</time>{{end}}</div>
         {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
       </div>
     </div>
@@ -262,7 +262,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 // Local time. The server sets every post's time as a UTC stamp inside a
 // <time datetime>; this rewrites it to the reader's clock and locale
 // the way the Hub app shows it: the time alone when the post is from
-// today, the date and time otherwise, the full date on hover. A Chinese
+// today, the date and time otherwise, the full date on hover; a
+// profile's "since", a day, is the date alone (data-date). A Chinese
 // or Japanese locale sets its words against the numbers ("2026年9月10日");
 // a half-width space goes between the two scripts, as Chinese typography
 // has it ("2026 年 9 月 10 日") — Han and kana only: Korean keeps
@@ -277,10 +278,11 @@ function localTimes(root) {
   for (const t of root.querySelectorAll("time[datetime]")) {
     const d = new Date(t.getAttribute("datetime"));
     if (isNaN(d)) continue;
-    t.textContent = spaced(d.toDateString() === today
-      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    const day = t.hasAttribute("data-date");
+    t.textContent = spaced(day ? d.toLocaleDateString([], { dateStyle: "medium" })
+      : d.toDateString() === today ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
       : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }));
-    t.title = spaced(d.toLocaleString([], { dateStyle: "full", timeStyle: "long" }));
+    t.title = spaced(day ? d.toLocaleDateString([], { dateStyle: "full" }) : d.toLocaleString([], { dateStyle: "full", timeStyle: "long" }));
   }
 }
 localTimes(document);

@@ -163,7 +163,7 @@ func TestWebThreadProfile(t *testing.T) {
 	// with a profile.set the page gains the name, count and date
 	ingest(t, s, priv, pub, 4, "profile.set", map[string]any{"name": "Ann", "bio": "hi <there>"})
 	code, body = get(t, h, "/u/"+author)
-	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, "· since 20") || !strings.Contains(body, `<span class="stats">3 posts</span>`) || !strings.Contains(body, "hi &lt;there&gt;") {
+	if code != 200 || !strings.Contains(body, "<h1>Ann</h1>") || !strings.Contains(body, `· since <time datetime="20`) || !strings.Contains(body, `Z" data-date>20`) || !strings.Contains(body, `<span class="stats">3 posts</span>`) || !strings.Contains(body, "hi &lt;there&gt;") {
 		t.Errorf("named profile page: %d %q", code, statusLine(body))
 	}
 	if strings.Contains(body, `class="pager top"`) || strings.Contains(home, `class="pager top"`) {

@@ -433,7 +433,9 @@ hub that carries the post.
   time otherwise, the full date on hover; a Chinese or Japanese
   locale's date gets a half-width space between its words and the
   numbers ("2026 年 9 月 10 日 18:21"), as Chinese typography has it
-  (Han and kana only; Korean keeps "2026년 9월 11일"). The live feed runs the same
+  (Han and kana only; Korean keeps "2026년 9월 11일"). A profile's
+  "since" is a day and gets the date alone, in the reader's zone and
+  locale the same way. The live feed runs the same
   rewrite over what it fetches — and over the feed again, so a post
   whose day ended since the last fetch updates in place — before
   comparing, so the rewrite never makes a post look changed. Without
