@@ -595,8 +595,41 @@ func TestWebPicture(t *testing.T) {
 	if !strings.Contains(body, `<a class="pic" href="/v1/embed/`+cid+`" data-name="cat.jpg"><img src="/v1/embed/`+cid+`" alt="a cat"></a>`) {
 		t.Errorf("picture embed wrong:\n%s", body[strings.Index(body, `<div class="embeds">`):][:300])
 	}
-	if !strings.Contains(body, `closest("a.pic")`) {
+	if !strings.Contains(body, `closest("a.pic, a.page")`) {
 		t.Error("viewer script missing")
+	}
+}
+
+// TestWebPage: an HTML embed from an admin key renders as a page card
+// that the script opens in a sandboxed window, with a download link
+// beside it; the same file from any other key stays a file link, and
+// /v1/embed keeps serving it as an attachment either way.
+func TestWebPage(t *testing.T) {
+	apub, apriv, _ := ed25519.GenerateKey(nil)
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}, Admins: []string{identity.Fingerprint(apub)}})
+	const cid = "bafybeib6ecas7sqgsfw6x5zcveome3237tyzzenjffngrdg6r4o45pfnzq"
+	if err := s.St.AddPin(cid, 4321, "text/html; charset=utf-8", false); err != nil {
+		t.Fatal(err)
+	}
+	ingest(t, s, apriv, apub, 1, "post.create", map[string]any{"text": "a page",
+		"embeds": []map[string]any{{"cid": cid, "mime": "text/html; charset=utf-8", "filename": "Sheet.html"}}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "a file",
+		"embeds": []map[string]any{{"cid": cid, "mime": "text/html; charset=utf-8", "filename": "Sheet.html"}}})
+	_, body := get(t, s.Handler(), "/")
+	if !strings.Contains(body, `<a class="page" href="/v1/embed/`+cid+`" data-cid="`+cid+`" data-name="Sheet.html">Sheet.html</a><a class="pagedl" href="/v1/embed/`+cid+`" download>download</a>`) {
+		t.Errorf("admin page card wrong:\n%s", body[strings.Index(body, `<div class="embeds">`):][:400])
+	}
+	if !strings.Contains(body, `<a class="file" href="/v1/embed/`+cid+`">Sheet.html (text/html; charset=utf-8)</a>`) {
+		t.Error("a non-admin's HTML embed should stay a file link")
+	}
+	for _, want := range []string{`sandbox="allow-scripts allow-popups allow-forms allow-modals"`, `closest("a.pic, a.page")`, `#page=`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page script missing %q", want)
+		}
+	}
+	if strings.Contains(body, `allow-same-origin`) {
+		t.Error("a page must never get allow-same-origin")
 	}
 }
 

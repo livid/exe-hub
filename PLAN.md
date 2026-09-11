@@ -264,7 +264,10 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   pins table that kubo does not list as pinned and logs how many it found,
   so a hub repairs its own history after that bug and any later drift.
 - Served through the hub: `GET /v1/embed/{cid}` proxies from the IPFS node
-  with long cache headers — feed clients need no gateway or IPFS.
+  with long cache headers — feed clients need no gateway or IPFS. Pictures,
+  video and audio are served inline; everything else, HTML included, as an
+  attachment: the hub's origin never serves a stored document as a page
+  (see Pages under Public pages for how an HTML embed is read).
 
 ## HTTP API
 
@@ -474,6 +477,28 @@ hub that carries the post.
   Latin the pages' dates have.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
+- **Pages (built 2026-09-11).** An HTML embed posted by an admin key is a
+  page, and a click on it opens it in a window of its own, like a picture:
+  a fixed, cascading, draggable Platinum window with a close box, a zoom
+  box that fills the viewport, and a status line with the file's name,
+  its size and its CID. Inside is an `<iframe sandbox="allow-scripts
+  allow-popups allow-forms allow-modals" referrerpolicy="no-referrer">`
+  whose `srcdoc` is the file's text, fetched from `/v1/embed/{cid}`. No
+  `allow-same-origin`: the page runs in an opaque origin, so its script
+  cannot read the hub's cookies or storage, make a credentialed request
+  to the hub, or navigate the hub's own window — the reason the hub can
+  show HTML at all without becoming a phishing host, the same isolation
+  the exe desktop gives a Workspace page and claude.ai gives an artifact.
+  The hub's origin never serves the HTML as a document: `/v1/embed` keeps
+  serving it as an attachment, which is also the card's download link and
+  what a reader without script gets. Only `admins` publish pages — the
+  keys that may moderate; an HTML embed from any other key stays a file
+  link. Decided at render time from the author id, so a demoted key's
+  pages become downloads. `/p/{id}#page={cid}` opens the page when the
+  thread loads: a link that shows a page while the top-level document
+  stays the hub. The live feed's delegated click handles pages it brings
+  in. External fonts and images a page links load as they would anywhere;
+  the hub sets no CSP (were it to, `srcdoc` frames inherit it).
 - Icons: `/favicon.ico` (32 + 16) and `/apple-touch-icon.png` (180, the
   icon at 5x on the desktop's lavender), drawn from the Hub app's 32px
   pixel art and embedded in the binary; the home and profile pages use

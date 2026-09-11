@@ -143,6 +143,8 @@ type webPost struct {
 	Stamp  string
 	Images []envelope.Embed
 	Files  []envelope.Embed
+	// HTML embeds from an admin key open in a sandboxed window of their own
+	Pages []envelope.Embed
 	// on a thread page: the reply this one answers is on the same page —
 	// a nested reply links to it in place, by the name it was posted under
 	InThread   bool
@@ -293,14 +295,21 @@ func webStamp(ms int64) string {
 	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
 }
 
-func webPosts(posts []store.FeedPost) []webPost {
+func (s *Server) webPosts(posts []store.FeedPost) []webPost {
+	c := s.Cfg.Get()
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
 		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS)}
+		admin := c.IsAdmin(p.Author)
 		for _, e := range p.Embeds {
-			if strings.HasPrefix(e.MIME, "image/") {
+			switch {
+			case strings.HasPrefix(e.MIME, "image/"):
 				out[i].Images = append(out[i].Images, e)
-			} else {
+			case admin && strings.HasPrefix(e.MIME, "text/html"):
+				// a page: read in a sandboxed window (see PLAN, Pages);
+				// from any other key the same file stays a download
+				out[i].Pages = append(out[i].Pages, e)
+			default:
 				out[i].Files = append(out[i].Files, e)
 			}
 		}
@@ -518,7 +527,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	d := &webData{
 		Page: "home", Desc: webDesc,
 		Image: webBase(r) + "/apple-touch-icon.png",
-		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r), Lang: lang,
+		Posts: s.webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r), Lang: lang,
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
 	}
@@ -577,7 +586,7 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The posts could not be searched.")
 		return
 	}
-	d.Posts, d.Prev, d.Next, d.Count = webPosts(pg.Posts), pg.Prev, pg.Next, count
+	d.Posts, d.Prev, d.Next, d.Count = s.webPosts(pg.Posts), pg.Prev, pg.Next, count
 	s.webRender(w, r, http.StatusOK, d)
 }
 
@@ -597,9 +606,9 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The thread could not be read.")
 		return
 	}
-	post := webPosts([]store.FeedPost{*p})[0]
+	post := s.webPosts([]store.FeedPost{*p})[0]
 	post.Replies = 0 // the replies are right below; no link to this same page
-	replies := webPosts(thread)
+	replies := s.webPosts(thread)
 	names := map[string]string{p.ID: authorLabel(*p)}
 	for _, t := range thread {
 		names[t.ID] = authorLabel(t)
@@ -642,7 +651,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	}
 	posts := pg.Posts
 	pr, err := s.St.Profile(id)
-	d := &webData{Page: "profile", Posts: webPosts(posts), Prev: pg.Prev, Next: pg.Next}
+	d := &webData{Page: "profile", Posts: s.webPosts(posts), Prev: pg.Prev, Next: pg.Next}
 	switch {
 	case err == nil:
 		d.Profile, d.Count = pr, pr.Posts
