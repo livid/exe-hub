@@ -97,6 +97,63 @@ func TestWebHome(t *testing.T) {
 	if code, _ := get(t, h, "/nothing"); code != 404 {
 		t.Errorf("GET /nothing = %d, want 404", code)
 	}
+
+	// a Chinese browser reads the join block in Chinese, the rest of
+	// the page as it is; the response varies on the language
+	req := httptest.NewRequest("GET", "http://hub.example/", nil)
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	for _, want := range []string{
+		`<div class="window join" id="join" lang="zh-Hans">`,
+		`<span class="title">加入这个 hub</span>`,
+		"<b>门槛：</b>开放，任何密钥都可以发帖。每 60 秒可发一帖。",
+		"<code>https://hub.example</code>",
+		"<b>Ann</b>", // the feed stays as it is
+		`<html lang="en">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Chinese home lacks %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "Join this hub") {
+		t.Error("the English join block beside the Chinese one")
+	}
+	if v := rec.Header().Get("Vary"); v != "Accept-Language" {
+		t.Errorf("Vary = %q", v)
+	}
+	// English first, Chinese further down: English
+	if _, body := get(t, h, "/", "Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8"); !strings.Contains(body, "Join this hub") || strings.Contains(body, "加入这个 hub") {
+		t.Error("an English browser with Chinese further down got the Chinese join block")
+	}
+}
+
+// TestWebChinese: the browser's language is its highest-q tag.
+func TestWebChinese(t *testing.T) {
+	for header, want := range map[string]bool{
+		"":                                  false,
+		"en-US,en;q=0.9":                    false,
+		"zh-CN,zh;q=0.9,en;q=0.8":           true,
+		"zh-TW":                             true,
+		"zh-Hant-HK,zh-Hant;q=0.9,zh;q=0.8": true,
+		"zh":                                true,
+		"ZH-cn":                             true,
+		"en;q=0.8, zh;q=0.9":                true,  // q wins over order
+		"en,zh":                             false, // a tie keeps the browser's order
+		"zh;q=0,en":                         false, // q=0 is a refusal
+		"*":                                 false,
+		"zho":                               false, // not a zh- tag
+	} {
+		req := httptest.NewRequest("GET", "http://hub.example/", nil)
+		if header != "" {
+			req.Header.Set("Accept-Language", header)
+		}
+		if got := webChinese(req); got != want {
+			t.Errorf("webChinese(%q) = %v, want %v", header, got, want)
+		}
+	}
 }
 
 // TestWebThreadProfile: a thread page shows the post and its replies, a
@@ -190,6 +247,13 @@ func TestWebJoinToken(t *testing.T) {
 	}
 	if strings.Contains(body, "One post per") {
 		t.Error("cooldown line shown for a hub with cooldown 0")
+	}
+	_, body = get(t, s.Handler(), "/", "Accept-Language", "zh-TW")
+	if !strings.Contains(body, "必须持有至少 <b>10000000000</b> 个最小单位（mint <code>9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump</code>）。") {
+		t.Errorf("Chinese token join block wrong:\n%s", body)
+	}
+	if strings.Contains(body, "秒可发一帖") {
+		t.Error("Chinese cooldown line shown for a hub with cooldown 0")
 	}
 }
 

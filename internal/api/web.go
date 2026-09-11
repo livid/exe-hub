@@ -31,7 +31,9 @@ import (
 // can never smuggle markup in. The join block on the home page is
 // rendered from the live config like skill.md: an open hub says so, a
 // token-gated one names the holding, so a SIGHUP gate change shows at
-// once.
+// once. A browser whose language is Chinese reads the block in Chinese
+// (Accept-Language, see webChinese); the rest of the page stays as it
+// is, the posts in whatever language they were written.
 
 //go:embed web.html
 var webHTML string
@@ -154,10 +156,12 @@ type webJoin struct {
 	Token    bool
 	Mints    []webMint
 	Cooldown int
+	Chinese  bool // the browser's language is Chinese: the block reads in Chinese
 }
 
 type webMint struct {
-	Amount string // "10,000 tokens", or "10000000000 raw base units" before the RPC has answered
+	Amount string // "10,000", or the raw base units "10000000000" before the RPC has answered
+	Raw    bool   // Amount is raw base units: the RPC has not told the mint's decimals yet
 	Mint   string
 }
 
@@ -375,23 +379,54 @@ func webBase(r *http.Request) string {
 
 func (s *Server) webJoinBlock(r *http.Request) *webJoin {
 	c := s.Cfg.Get()
-	j := &webJoin{Base: webBase(r), Cooldown: c.CooldownSec()}
+	j := &webJoin{Base: webBase(r), Cooldown: c.CooldownSec(), Chinese: webChinese(r)}
 	if s.Hub != nil {
 		j.HubID = s.Hub.ID
 	}
 	if c.Gate.Mode == "token" {
 		j.Token = true
 		for _, m := range c.Gate.Token.Mints {
-			amount := m.MinAmount + " raw base units"
+			mint := webMint{Amount: m.MinAmount, Raw: true, Mint: m.Mint}
 			if s.Gate != nil {
 				if dec, known := s.Gate.Decimals(m.Mint); known {
-					amount = humanUnits(m.MinRaw, dec) + " tokens"
+					mint.Amount, mint.Raw = humanUnits(m.MinRaw, dec), false
 				}
 			}
-			j.Mints = append(j.Mints, webMint{Amount: amount, Mint: m.Mint})
+			j.Mints = append(j.Mints, mint)
 		}
 	}
 	return j
+}
+
+// webChinese reports whether the browser's language is Chinese, when
+// the join block reads in Chinese (Simplified; a Traditional reader gets
+// the same text). The language is the Accept-Language tag with the
+// highest q — the first one the browser lists, zh, zh-CN, zh-TW,
+// zh-Hant-HK alike — not Chinese anywhere in the list: a browser whose
+// first language is English with Chinese further down reads the
+// English. Decided on the server, so the page stands without script
+// and never flashes; the home page says Vary: Accept-Language for it.
+func webChinese(r *http.Request) bool {
+	best, bestQ := "", 0.0
+	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
+		tag, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		q := 1.0
+		for _, p := range strings.Split(params, ";") {
+			if k, v, ok := strings.Cut(strings.TrimSpace(p), "="); ok && strings.EqualFold(strings.TrimSpace(k), "q") {
+				if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+					q = f
+				}
+			}
+		}
+		if q > bestQ { // a tie keeps the earlier tag, as the browser ordered them
+			best, bestQ = strings.ToLower(tag), q
+		}
+	}
+	return best == "zh" || strings.HasPrefix(best, "zh-")
 }
 
 func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *webData) {
@@ -466,6 +501,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if s.Push != nil {
 		d.PushKey = s.Push.Public()
 	}
+	w.Header().Set("Vary", "Accept-Language") // the join block's language
 	s.webRender(w, r, http.StatusOK, d)
 }
 

@@ -104,8 +104,9 @@ signatures and never a cookie. Writes authenticate by signature alone.
 
 ## Public pages
 
-`GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
-profile, `/search?q=` a search. They are server-rendered, shaped like an
+`GET /` is the feed and how to join (in Chinese for a Chinese browser),
+`/p/{id}` a thread, `/u/{id}` a profile, `/search?q=` a search. They are
+server-rendered, shaped like an
 exe desktop window in Mac OS 9 chrome, with no assets and almost no
 script: a picture viewer, a live first page fed by `/v1/events`, and a
 Notify bell. Every post has a link anyone can open, and a pasted link
