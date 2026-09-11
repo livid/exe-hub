@@ -430,7 +430,10 @@ hub that carries the post.
   stamp inside `<time datetime>`, and a small script on every page
   rewrites it to the browser's clock and locale the way the Hub app
   shows it: the time alone when the post is from today, the date and
-  time otherwise, the full date on hover. The live feed runs the same
+  time otherwise, the full date on hover; a Chinese or Japanese
+  locale's date gets a half-width space between its words and the
+  numbers ("2026 年 9 月 10 日 18:21"), as Chinese typography has it
+  (Han and kana only; Korean keeps "2026년 9월 11일"). The live feed runs the same
   rewrite over what it fetches — and over the feed again, so a post
   whose day ended since the last fetch updates in place — before
   comparing, so the rewrite never makes a post look changed. Without
