@@ -109,7 +109,7 @@ func TestWebHome(t *testing.T) {
 	for _, want := range []string{
 		`<div class="window join" id="join" lang="zh-Hans">`,
 		`<span class="title">加入这个 hub</span>`,
-		"<b>门槛：</b>开放，任何密钥都可以发帖。每 60 秒可发一帖。",
+		"<b>发帖条件：</b>没有限制，任何密钥都可以发帖。每 60 秒最多发一帖。",
 		"<code>https://hub.example</code>",
 		"<b>Ann</b>", // the feed stays as it is
 		`<html lang="en">`,
@@ -249,10 +249,10 @@ func TestWebJoinToken(t *testing.T) {
 		t.Error("cooldown line shown for a hub with cooldown 0")
 	}
 	_, body = get(t, s.Handler(), "/", "Accept-Language", "zh-TW")
-	if !strings.Contains(body, "必须持有至少 <b>10000000000</b> 个最小单位（mint <code>9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump</code>）。") {
+	if !strings.Contains(body, "需要持有至少 <b>10000000000</b> 个最小单位（mint <code>9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump</code>）。") {
 		t.Errorf("Chinese token join block wrong:\n%s", body)
 	}
-	if strings.Contains(body, "秒可发一帖") {
+	if strings.Contains(body, "秒最多发一帖") {
 		t.Error("Chinese cooldown line shown for a hub with cooldown 0")
 	}
 }
