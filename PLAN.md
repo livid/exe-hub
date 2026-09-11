@@ -459,7 +459,11 @@ hub that carries the post.
   tag with the highest q — the first one the browser lists, zh, zh-CN,
   zh-TW, zh-Hant-HK alike — not Chinese anywhere in the list, so a
   browser whose first language is English with Chinese further down
-  reads the English. Decided on the server, so the page stands without
+  reads the English. `?lang=zh` on the home page asks for the Chinese
+  and `?lang=en` for the English whatever the browser says — a look at
+  the other one, and a link that shows it; the pager links and the
+  redirect to the top carry it (the live feed swaps the feed alone,
+  so it needs nothing). Decided on the server, so the page stands without
   script and never flashes from one language to the other; the home
   page says `Vary: Accept-Language`. Only the join block: the chrome
   stays as it is, and the posts are in whatever language they were

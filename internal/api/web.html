@@ -476,7 +476,7 @@ localTimes(document);
      follow .Page, the query or profile id carried in the links. */}}
 {{define "pager"}}{{if .Prev}}<a class="btn prev back" href="{{template "cursors" .}}after={{.Prev}}">{{template "arrow"}}<span>Prev</span></a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next fwd" href="{{template "cursors" .}}before={{.Next}}"><span>Next</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 
-{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{end}}
+{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}{{end}}
 
 {{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}{{.Members}} members · {{.Count}} posts{{end}}{{end}}
 

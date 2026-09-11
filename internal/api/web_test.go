@@ -128,6 +128,30 @@ func TestWebHome(t *testing.T) {
 	if _, body := get(t, h, "/", "Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8"); !strings.Contains(body, "Join this hub") || strings.Contains(body, "加入这个 hub") {
 		t.Error("an English browser with Chinese further down got the Chinese join block")
 	}
+	// ?lang= overrides the browser either way
+	if _, body := get(t, h, "/?lang=zh", "Accept-Language", "en-US"); !strings.Contains(body, "加入这个 hub") || strings.Contains(body, "Join this hub") {
+		t.Error("?lang=zh did not give an English browser the Chinese join block")
+	}
+	if _, body := get(t, h, "/?lang=en", "Accept-Language", "zh-CN"); !strings.Contains(body, "Join this hub") || strings.Contains(body, "加入这个 hub") {
+		t.Error("?lang=en did not give a Chinese browser the English join block")
+	}
+}
+
+// TestWebLang: ?lang= is zh, en, or nothing.
+func TestWebLang(t *testing.T) {
+	for path, want := range map[string]string{
+		"/": "", "/?lang=zh": "zh", "/?lang=ZH-TW": "zh", "/?lang=en": "en", "/?lang=en-GB": "en",
+		"/?lang=fr": "", "/?lang=": "", "/?lang=zho": "",
+	} {
+		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
+		req.Header.Set("Accept-Language", "zh-CN")
+		if got := webLang(req); got != want {
+			t.Errorf("webLang(%q) = %q, want %q", path, got, want)
+		}
+		if got := webChinese(req); got != (want != "en") { // the browser is Chinese: only ?lang=en says no
+			t.Errorf("webChinese(%q, zh browser) = %v", path, got)
+		}
+	}
 }
 
 // TestWebChinese: the browser's language is its highest-q tag.
@@ -374,6 +398,19 @@ func TestWebPaging(t *testing.T) {
 	if code, _ := get(t, h, "/?before="+strings.Repeat("0", 64)); code != 404 {
 		t.Errorf("unknown cursor = %d", code)
 	}
+	// ?lang= rides the pager links and the redirect to the top
+	_, body = get(t, h, "/?lang=zh")
+	if !strings.Contains(body, "加入这个 hub") || !strings.Contains(body, `<a class="btn next fwd" href="/?lang=zh&amp;before=`+oldestOnFirst+`">`) {
+		t.Errorf("?lang=zh first page: %q", statusLine(body))
+	}
+	_, body = get(t, h, "/?lang=zh&before="+oldestOnFirst)
+	if !strings.Contains(body, `<a class="btn prev back" href="/?lang=zh&amp;after=`) {
+		t.Errorf("?lang=zh last page: %q", statusLine(body))
+	}
+	if code, loc := redirect("/?lang=zh&after=" + ids[len(ids)-1]); code != 302 || loc != "/?lang=zh" {
+		t.Errorf("short newer page with ?lang=zh: %d %q, want 302 /?lang=zh", code, loc)
+	}
+
 }
 
 // TestWebSearch: the home page carries the find strip; /search?q= is

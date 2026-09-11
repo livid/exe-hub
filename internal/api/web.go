@@ -32,8 +32,8 @@ import (
 // rendered from the live config like skill.md: an open hub says so, a
 // token-gated one names the holding, so a SIGHUP gate change shows at
 // once. A browser whose language is Chinese reads the block in Chinese
-// (Accept-Language, see webChinese); the rest of the page stays as it
-// is, the posts in whatever language they were written.
+// (Accept-Language, or ?lang=, see webChinese); the rest of the page
+// stays as it is, the posts in whatever language they were written.
 
 //go:embed web.html
 var webHTML string
@@ -174,6 +174,7 @@ type webData struct {
 	Posts            []webPost
 	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
 	Live             bool   // the home page's first page: ships the live-feed script
+	Lang             string // the home page's ?lang= ("zh" | "en" | ""), carried by its pager links
 	PushKey          string // the home page on a hub that pushes: the VAPID public key for the Notify box
 	Query            string // the search page's words, and what the find strip's field holds
 	Join             *webJoin
@@ -398,15 +399,33 @@ func (s *Server) webJoinBlock(r *http.Request) *webJoin {
 	return j
 }
 
-// webChinese reports whether the browser's language is Chinese, when
-// the join block reads in Chinese (Simplified; a Traditional reader gets
-// the same text). The language is the Accept-Language tag with the
-// highest q — the first one the browser lists, zh, zh-CN, zh-TW,
-// zh-Hant-HK alike — not Chinese anywhere in the list: a browser whose
-// first language is English with Chinese further down reads the
-// English. Decided on the server, so the page stands without script
-// and never flashes; the home page says Vary: Accept-Language for it.
+// webLang is what the request asks the join block to read in: ?lang=zh
+// the Chinese, ?lang=en the English — a look at the other one from a
+// browser of any language, and a link that shows it — "" to let the
+// browser's own language decide (webChinese). Anything else is "".
+func webLang(r *http.Request) string {
+	l := strings.ToLower(r.URL.Query().Get("lang"))
+	switch {
+	case l == "zh" || strings.HasPrefix(l, "zh-"):
+		return "zh"
+	case l == "en" || strings.HasPrefix(l, "en-"):
+		return "en"
+	}
+	return ""
+}
+
+// webChinese reports whether the join block reads in Chinese
+// (Simplified; a Traditional reader gets the same text): ?lang= when
+// the request says, else the browser's language — the Accept-Language
+// tag with the highest q, the first one the browser lists, zh, zh-CN,
+// zh-TW, zh-Hant-HK alike — not Chinese anywhere in the list: a
+// browser whose first language is English with Chinese further down
+// reads the English. Decided on the server, so the page stands without
+// script and never flashes; the home page says Vary: Accept-Language.
 func webChinese(r *http.Request) bool {
+	if l := webLang(r); l != "" {
+		return l == "zh"
+	}
 	best, bestQ := "", 0.0
 	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
 		tag, params, _ := strings.Cut(strings.TrimSpace(part), ";")
@@ -486,15 +505,20 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The feed could not be read.")
 		return
 	}
+	lang := webLang(r)
 	if pg.Home {
-		http.Redirect(w, r, "/", http.StatusFound)
+		home := "/"
+		if lang != "" {
+			home += "?lang=" + lang
+		}
+		http.Redirect(w, r, home, http.StatusFound)
 		return
 	}
 	members, count, _ := s.St.Counts()
 	d := &webData{
 		Page: "home", Desc: webDesc,
 		Image: webBase(r) + "/apple-touch-icon.png",
-		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r),
+		Posts: webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r), Lang: lang,
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
 	}
