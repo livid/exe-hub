@@ -393,8 +393,9 @@ Implementation decisions (v1):
 
 `GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
 profile, `/search?q=` the posts holding some words — server-rendered HTML (`internal/api/web.go` + `web.html`,
-embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond three
-small inline scripts and a push-only service worker: the picture
+embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond four
+small inline scripts and a push-only service worker: the local-time
+rewrite (below), the picture
 viewer — a click on a picture opens it in a window of its own (fixed,
 cascading, dragged by its title bar, closed by its box or Escape, size
 in pixels on its status line), like the desktop's PictureViewer — and,
@@ -424,6 +425,16 @@ hub that carries the post.
   outside the link, and so do CJK text and fullwidth punctuation: a URL
   is ASCII plus accented Latin letters, because Chinese prose sits flush
   against a link with no space.
+- **A post's time is the reader's.** The server sets each post's own
+  timestamp (kept for display; ordering uses receive time) as a UTC
+  stamp inside `<time datetime>`, and a small script on every page
+  rewrites it to the browser's clock and locale the way the Hub app
+  shows it: the time alone when the post is from today, the date and
+  time otherwise, the full date on hover. The live feed runs the same
+  rewrite over what it fetches — and over the feed again, so a post
+  whose day ended since the last fetch updates in place — before
+  comparing, so the rewrite never makes a post look changed. Without
+  script the UTC stamp stands.
 - **Profiles without profile.set.** A key that posted but never set a
   profile has no `profiles` row (the JSON API 404s it), yet the feed
   links to it — the page stands whenever posts exist, headed by the id;

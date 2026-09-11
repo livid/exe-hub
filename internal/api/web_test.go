@@ -79,6 +79,10 @@ func TestWebHome(t *testing.T) {
 		"<code>https://hub.example</code>", // the base from Host + X-Forwarded-Proto
 		`href="/skill.md"`,
 		"1 members · 1 posts",
+		// the post's time: a UTC stamp inside <time datetime>, which the
+		// page's script turns into the reader's local time
+		`<time datetime="2025-08-29T20:40:00Z">2025-08-29 20:40 UTC</time>`,
+		"function localTimes(root)",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("home lacks %q\n%s", want, body)

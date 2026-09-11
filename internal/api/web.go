@@ -130,13 +130,15 @@ var webTmpl = template.Must(template.New("web").Parse(webHTML))
 const webPage = 30
 
 // webPost is a feed post prepared for the template: text rendered to
-// safe HTML, the time as a fixed UTC stamp (the page is static, so a
-// relative time would go stale), embeds split into pictures shown
-// inline and files offered as links.
+// safe HTML, the time as a UTC stamp (When, what the page shows without
+// script) beside its RFC 3339 form (Stamp, the <time> element's
+// datetime, which the page's script turns into the reader's local time),
+// embeds split into pictures shown inline and files offered as links.
 type webPost struct {
 	store.FeedPost
 	HTML   template.HTML
 	When   string
+	Stamp  string
 	Images []envelope.Embed
 	Files  []envelope.Embed
 	// on a thread page: the reply this one answers is on the same page —
@@ -275,15 +277,20 @@ func writePlain(b *strings.Builder, s string) {
 }
 
 // webWhen formats a post's own timestamp (kept for display, as PLAN.md
-// says; ordering uses receive time) as a fixed UTC stamp.
+// says; ordering uses receive time) as a fixed UTC stamp, and webStamp
+// as RFC 3339 for the <time> element's datetime.
 func webWhen(ms int64) string {
 	return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04 UTC")
+}
+
+func webStamp(ms int64) string {
+	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
 }
 
 func webPosts(posts []store.FeedPost) []webPost {
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
-		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS)}
+		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS)}
 		for _, e := range p.Embeds {
 			if strings.HasPrefix(e.MIME, "image/") {
 				out[i].Images = append(out[i].Images, e)

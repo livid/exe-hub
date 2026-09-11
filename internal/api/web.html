@@ -259,6 +259,26 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{end}}
 <script>
+// Local time. The server sets every post's time as a UTC stamp inside a
+// <time datetime>; this rewrites it to the reader's clock and locale
+// the way the Hub app shows it: the time alone when the post is from
+// today, the date and time otherwise, the full date on hover. The live
+// feed runs it over what it fetches before comparing, so the rewrite
+// never makes a post look changed. Without script the UTC stamp stands.
+function localTimes(root) {
+  const today = new Date().toDateString();
+  for (const t of root.querySelectorAll("time[datetime]")) {
+    const d = new Date(t.getAttribute("datetime"));
+    if (isNaN(d)) continue;
+    t.textContent = d.toDateString() === today
+      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    t.title = d.toLocaleString([], { dateStyle: "full", timeStyle: "long" });
+  }
+}
+localTimes(document);
+</script>
+<script>
 // The picture viewer. Everything else on the page works without this.
 (() => {
   let z = 100;
@@ -350,6 +370,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   const swap = html => {
     const fresh = new DOMParser().parseFromString(html, "text/html").querySelector(".feed .frame");
     if (!fresh) return;
+    // both sides in local time — the feed again too, so a post whose
+    // day ended since the last fetch is updated in place, not replaced
+    localTimes(feed);
+    localTimes(fresh);
     const have = new Map([...feed.children].filter(n => n.id).map(n => [n.id, n]));
     const next = [...fresh.children].map(n => {
       const old = have.get(n.id);
@@ -444,7 +468,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}{{if gt .Depth 1}} deep{{end}}" id="{{.ID}}"{{if gt .Depth 1}} style="--d:{{.Depth}}"{{end}}>
   <a class="av" href="/u/{{.Author}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{end}}</a>
   <div>
-    <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}">{{.When}}</a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}{{end}}</div>
+    <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}{{end}}</div>
     {{if .Text}}<div class="text">{{.HTML}}</div>{{end}}
     {{if or .Images .Files}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
     {{if and (not .ReplyTo) .Replies}}<div class="foot"><a href="/p/{{.ID}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a></div>{{end}}
