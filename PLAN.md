@@ -657,6 +657,41 @@ vector) and 8292 (VAPID).
   where it was. The live feed's swap keeps the find strip as it is: the
   field and the bell are the reader's state, never the server's.
 
+## Link cards — the first link, unfurled (built)
+
+A post whose text carries a link and no embeds grows a card under it:
+the page's title, a line of description, a small picture and the host,
+the whole card a link to the page. Posted 2026-09-11 as the nightly
+idea; Livid said do it.
+
+- **Derived, never signed.** The card lives in the `cards` table beside
+  the post, outside the envelope — signatures stay valid, and every hub
+  derives its own cards, replicated posts included (the `OnMessage`
+  ingest hook sees both paths). Like `pins`, `cards` is not rebuilt from
+  the log: `Rebuild` keeps the rows for surviving posts, drops orphans,
+  and restores the pictures' pin refcounts.
+- **One fetch, off the ingest path.** A single worker goroutine takes
+  bare-link posts from a bounded queue (`internal/card`): the first URL
+  in the text — matched by the linkifier's own regexp, moved to
+  `card.URL` so the two can never disagree — is fetched with a 1MB cap
+  and hard timeouts, OpenGraph read with Twitter and `<title>`/
+  `description` fallbacks; the picture (8MB cap, sniffed like an upload,
+  so SVG never passes) goes through the kubo add path and is refcounted
+  in `pins` like an embed (inserted at refs 1, so the staged-upload
+  sweep can't take it). Success or failure is recorded once — no retry
+  loops; a repost gets a fresh try. A backfill pass at start gives the
+  posts from before this feature their cards.
+- **The dial guard.** The link is untrusted text, so the fetcher's
+  dialer resolves every connection (redirects included) and refuses
+  non-public addresses: loopback, RFC 1918, link-local, ULA, multicast
+  and CGNAT 100.64/10 — a post can never point the hub at its own
+  network. Posts with embeds get no card: a post already showing
+  something needs none.
+- **Served everywhere posts are.** `FeedPost` carries `card` ({url,
+  host, title, desc, image}) in every JSON read; the public pages draw
+  it under the text, and a `post.card` event (the one event type with no
+  envelope behind it) makes the live feed slide a finished card in.
+
 ## Open questions
 
 - Whether an aggregator should eventually re-serve mirrored embeds to its

@@ -138,6 +138,20 @@ CREATE TABLE IF NOT EXISTS peer_state (
   hub    TEXT PRIMARY KEY,
   pubkey TEXT NOT NULL DEFAULT '',     -- cached, fingerprint-verified
   cursor INTEGER NOT NULL DEFAULT 0    -- remote messages rowid high-water
+);
+
+-- Link cards are derived from external fetches, not from the log (like
+-- pins, they cannot be rebuilt by replay); a failed row records the
+-- attempt so a dead link is never refetched in a loop.
+CREATE TABLE IF NOT EXISTS cards (
+  post   TEXT PRIMARY KEY,             -- the post the card sits under
+  url    TEXT NOT NULL,                -- the link as posted
+  host   TEXT NOT NULL DEFAULT '',
+  title  TEXT NOT NULL DEFAULT '',
+  descr  TEXT NOT NULL DEFAULT '',
+  image  TEXT NOT NULL DEFAULT '',     -- pinned CID, refcounted like an embed
+  status TEXT NOT NULL,                -- 'ok' | 'failed'
+  ts     INTEGER NOT NULL
 );`)
 	if err != nil {
 		return err
@@ -331,6 +345,19 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM embeds WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
+		// The post's link card goes with it, its picture's pin released.
+		var cimg string
+		if err := tx.QueryRow(`SELECT image FROM cards WHERE post=?`, v.Post).Scan(&cimg); err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if cimg != "" {
+			if unpin, err = dropRef(tx, cimg, unpin); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM cards WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
 		_, err = tx.Exec(`DELETE FROM posts WHERE id=?`, v.Post)
 		return unpin, err
 	case *envelope.BanSet:
@@ -432,6 +459,16 @@ func (s *Store) Rebuild() error {
 			return err
 		}
 	}
+	// Cards survive a rebuild like pins do (they come from external
+	// fetches, not the log), but replay neither recreates one for a post
+	// that is gone nor re-increments its picture's pin ref — so drop the
+	// orphans and put the surviving refs back.
+	if _, err := tx.Exec(`DELETE FROM cards WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE pins SET refs = refs + (SELECT COUNT(*) FROM cards WHERE cards.image = pins.cid AND cards.status='ok')`); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -447,23 +484,40 @@ type FeedPost struct {
 	TS         int64            `json:"ts"`
 	Received   int64            `json:"received"`
 	Embeds     []envelope.Embed `json:"embeds,omitempty"`
+	Card       *Card            `json:"card,omitempty"` // the first link, unfurled (see PLAN.md, Link cards)
 	Replies    int              `json:"replies"`
 	Depth      int              `json:"depth,omitempty"` // set by Thread: steps below the root, 1 = a direct reply
 }
 
+// Card is one post's link card as the feed serves it.
+type Card struct {
+	URL   string `json:"url"`
+	Host  string `json:"host,omitempty"`
+	Title string `json:"title"`
+	Desc  string `json:"desc,omitempty"`
+	Image string `json:"image,omitempty"` // pinned CID, served by /v1/embed
+}
+
 const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received,
-  (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id)`
+  (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id),
+  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,'')`
 
 const feedQuery = `
 SELECT ` + feedCols + `
-FROM posts p LEFT JOIN profiles pr ON pr.id = p.author `
+FROM posts p LEFT JOIN profiles pr ON pr.id = p.author
+LEFT JOIN cards cd ON cd.post = p.id AND cd.status = 'ok' `
 
 func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 	out := []FeedPost{}
 	for rows.Next() {
 		var p FeedPost
-		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Replies); err != nil {
+		var c Card
+		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Replies,
+			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image); err != nil {
 			return nil, err
+		}
+		if c.URL != "" {
+			p.Card = &c
 		}
 		out = append(out, p)
 	}
@@ -493,6 +547,78 @@ func (s *Store) postEmbeds(post string) ([]envelope.Embed, error) {
 			return nil, err
 		}
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// SetCard records a post's link card. An ok card's picture is pinned
+// here in the same transaction (refs start at 1 — never 0, so the staged-
+// upload sweep can't take it); a failed attempt is recorded so the link
+// is not refetched forever. Replacing a card releases the old picture:
+// the caller unpins the returned CIDs, like Ingest's.
+func (s *Store) SetCard(post string, c Card, imageSize int64, imageMIME string, ok bool) (unpin []string, err error) {
+	status := "ok"
+	if !ok {
+		status, c.Host, c.Title, c.Desc, c.Image = "failed", "", "", "", ""
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var old string
+	if err := tx.QueryRow(`SELECT image FROM cards WHERE post=?`, post).Scan(&old); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if old != "" && old != c.Image {
+		if unpin, err = dropRef(tx, old, unpin); err != nil {
+			return nil, err
+		}
+	}
+	if c.Image != "" && c.Image != old {
+		if _, err := tx.Exec(`INSERT INTO pins (cid, size, mime, refs, is_avatar, created) VALUES (?,?,?,1,0,?)
+			ON CONFLICT(cid) DO UPDATE SET refs=refs+1`, c.Image, imageSize, imageMIME, time.Now().UnixMilli()); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO cards (post, url, host, title, descr, image, status, ts) VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT(post) DO UPDATE SET url=excluded.url, host=excluded.host, title=excluded.title,
+		descr=excluded.descr, image=excluded.image, status=excluded.status, ts=excluded.ts`,
+		post, c.URL, c.Host, c.Title, c.Desc, c.Image, status, time.Now().UnixMilli()); err != nil {
+		return nil, err
+	}
+	return unpin, tx.Commit()
+}
+
+// HasCard says whether the post's card was already attempted, ok or not.
+func (s *Store) HasCard(post string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM cards WHERE post=?`, post).Scan(&n)
+	return n > 0, err
+}
+
+// CardPost is one backfill candidate: a post never attempted for a card.
+type CardPost struct{ ID, Author, Text string }
+
+// PostsWithoutCards lists posts with no card attempt yet, newest first —
+// the backfill's worklist. Posts with embeds are out: a card is for a
+// bare link, a post already showing something needs none.
+func (s *Store) PostsWithoutCards(limit int) ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, p.text FROM posts p
+		LEFT JOIN cards c ON c.post = p.id
+		WHERE c.post IS NULL AND NOT EXISTS (SELECT 1 FROM embeds e WHERE e.post = p.id)
+		ORDER BY p.received DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }
@@ -686,6 +812,7 @@ func (s *Store) Thread(id string, limit int) ([]FeedPost, error) {
   SELECT c.id, sub.depth + 1 FROM posts c JOIN sub ON c.reply_to = sub.id WHERE sub.depth < 32)
 SELECT `+feedCols+`
 FROM sub JOIN posts p ON p.id = sub.id LEFT JOIN profiles pr ON pr.id = p.author
+LEFT JOIN cards cd ON cd.post = p.id AND cd.status = 'ok'
 ORDER BY p.received, p.id LIMIT ?`, id, limit)
 	if err != nil {
 		return nil, err

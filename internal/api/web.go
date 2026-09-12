@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"exehub/internal/card"
 	"exehub/internal/envelope"
 	"exehub/internal/store"
 )
@@ -189,15 +190,10 @@ type webData struct {
 	Message          string
 }
 
-// webURL is the Hub app's URL matcher: http(s) only; the period, comma
-// or bracket that ends a sentence stays outside the link; and a URL is
-// ASCII plus accented Latin letters, so CJK prose and its fullwidth
-// punctuation end it — Chinese sits flush against a link with no space
-// ("来自小虾平台（https://xiaoxia.app）的助手", "详见https://x.y的说明").
-// A raw CJK path loses its tail; browsers paste those percent-encoded.
-const webURLLatin = `\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{24F}`
-
-var webURL = regexp.MustCompile(`https?://[\w#$%&+,\-./:;=?@\[\]~` + webURLLatin + `]*[\w#$%&+\-/;=@` + webURLLatin + `]`)
+// webURL is the Hub app's URL matcher; it lives in the card package now,
+// so the linkifier and the link-card deriver can never disagree on what
+// a post's link is.
+var webURL = card.URL
 
 // webCode is an inline `code` span: no newlines, no nesting.
 var webCode = regexp.MustCompile("`([^`\n]+)`")

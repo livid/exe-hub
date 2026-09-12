@@ -9,9 +9,11 @@ import "sync"
 // Event is one feed-visible change. Type is the envelope op that caused
 // it; ID is the post id it concerns (for post.delete, the deleted post,
 // not the delete message's own id; for profile.set, the message itself —
-// Author names the profile that changed).
+// Author names the profile that changed). post.card is the one type with
+// no envelope behind it: the post's link card landed (cards are derived,
+// not signed), so live pages refetch and the card slides in.
 type Event struct {
-	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set"
+	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set" | "post.card"
 	ID      string `json:"id"`                 // post id
 	ReplyTo string `json:"reply_to,omitempty"` // parent post id when the post is a reply
 	Author  string `json:"author"`             // author profile id

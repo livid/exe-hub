@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"exehub/internal/api"
+	"exehub/internal/card"
 	"exehub/internal/config"
 	"exehub/internal/envelope"
 	"exehub/internal/events"
@@ -97,10 +98,20 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Live events: every committed post.create/post.delete/profile.set —
 	// direct or replicated — fans out to /v1/events subscribers.
 	bus := events.New()
+	// Link cards: a bare-link post gets its first link unfurled off the
+	// ingest path (the OnMessage hook sees direct and replicated posts
+	// both); the backfill gives the posts from before this feature their
+	// cards once.
+	cards := card.NewWorker(st, ipfsc, bus)
+	go cards.Run()
+	go cards.Backfill()
 	st.OnMessage = func(e *envelope.Envelope, op any, id string) {
 		switch o := op.(type) {
 		case *envelope.PostCreate:
 			bus.Emit(events.Event{Type: "post.create", ID: id, ReplyTo: o.ReplyTo, Author: e.ProfileID()})
+			if len(o.Embeds) == 0 { // a card is for a bare link; a post already showing something needs none
+				cards.Enqueue(id, e.ProfileID(), o.Text)
+			}
 		case *envelope.PostDelete:
 			bus.Emit(events.Event{Type: "post.delete", ID: o.Post, Author: e.ProfileID()})
 		case *envelope.ProfileSet:
