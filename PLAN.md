@@ -526,9 +526,11 @@ hub that carries the post.
   raw ed25519 key, and a hub account is one, so a browser wallet's own
   key is an account: it signs `"exe-hub:v1\n" + envelope` with
   `solana:signMessage` and the gate checks that same address — the
-  signing protocol, replication and every client are unchanged. The home
-  page's first page carries a strip under the find strip, and a thread a
-  strip above its status line: signed out, **Sign in with Solana**;
+  signing protocol, replication and every client are unchanged. The strip
+  is a window of its own above the posts — **Post** over the feed on
+  the home page's first page (the desk's main column, beside the join
+  window when there is room), **Reply** over the thread on a thread
+  page: signed out, **Sign in with Solana**;
   signed in, the name and profile id with **Profile…** and **Sign Out**,
   the field, and a status line beside **Post** (or **Reply**, to the
   post the thread page shows). One wallet popup per write: a post, a
@@ -553,7 +555,7 @@ hub that carries the post.
   session: the page remembers the wallet's name and address in
   localStorage, nothing secret, and asks that wallet again silently on
   the next visit; a head script classes `<html>` (`js`, `wallet`)
-  before layout so the strip has its final shape and never jumps.
+  before layout so the window has its final shape and never jumps.
   A post refreshes the live feed at
   once; a reply reloads the thread at the new reply. Text and names are
   checked in bytes against the envelope caps before a popup. Not built:

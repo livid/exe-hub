@@ -861,7 +861,11 @@ func TestWebCompose(t *testing.T) {
 	}
 	h := s.Handler()
 	_, home := get(t, h, "/")
-	for _, want := range []string{`<div class="compose" id="compose">`, `Sign in with Solana`, `classList.add("wallet")`,
+	// its own window, above the feed's, both in the desk's main column
+	if a, b, c := strings.Index(home, `<div class="main">`), strings.Index(home, `<div class="window composer">`), strings.Index(home, `<div class="window feed">`); a < 0 || !(a < b && b < c) {
+		t.Errorf("home: main %d, composer window %d, feed window %d — want the composer window first in the main column", a, b, c)
+	}
+	for _, want := range []string{`<span class="title">Post</span>`, `<div class="frame"><div class="compose" id="compose">`, `Sign in with Solana`, `classList.add("wallet")`,
 		`class="btn profile-btn">Profile…</button>`, `role="dialog" aria-modal="true" aria-label="Profile"`,
 		`<button type="button" class="btn left p-edit">Edit</button>`,
 		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`} {
@@ -875,8 +879,11 @@ func TestWebCompose(t *testing.T) {
 		}
 	}
 	_, thread := get(t, h, "/p/"+ids[0])
-	if !strings.Contains(thread, `<div class="compose bottom" id="compose" data-reply-to="`+ids[0]+`">`) {
-		t.Error("thread page lacks the reply strip")
+	if !strings.Contains(thread, `<div class="frame"><div class="compose" id="compose" data-reply-to="`+ids[0]+`">`) {
+		t.Error("thread page lacks the reply window")
+	}
+	if b, c := strings.Index(thread, `<span class="title">Reply</span>`), strings.Index(thread, `title="Back to the feed"`); b < 0 || b > c {
+		t.Errorf("thread: the Reply window (%d) should come before the thread window (%d)", b, c)
 	}
 	for _, path := range []string{"/?before=" + ids[1], "/u/" + identity.Fingerprint(pub), "/search?q=post"} {
 		if _, body := get(t, h, path); strings.Contains(body, `id="compose"`) {

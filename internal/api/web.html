@@ -27,14 +27,16 @@ body { margin: 0; padding: 24px 12px 48px; background: #ccc; color: #262626;
 a { color: #333399; }
 .window { max-width: 640px; margin: 0 auto 22px; background: #ccc; border: 1px solid #262626;
   box-shadow: 2px 2px 0 #262626, inset 1px 1px 0 #fff, inset -1px -1px 0 #999; }
-/* the home page is a desk of two windows: stacked, join first, on a
-   narrow screen; side by side once there is room for both, the join
-   window at the left staying put (sticky) while the feed scrolls */
+/* the home page is a desk: the join window, then a column of the post
+   window over the feed. Stacked, join first, on a narrow screen; side
+   by side once there is room, the join window at the left staying put
+   (sticky) while the column scrolls */
 .desk { max-width: 640px; margin: 0 auto; }
 @media (min-width: 1060px) {
   .desk { max-width: none; display: flex; align-items: flex-start; justify-content: center; gap: 24px; }
   .desk .join { flex: 0 0 360px; position: sticky; top: 24px; margin: 0; }
-  .desk .feed { flex: 0 1 640px; min-width: 0; margin: 0; }
+  .desk .main { flex: 0 1 640px; min-width: 0; }
+  .desk .main > .window:last-child { margin-bottom: 0; }
 }
 /* installed as an app — a home-screen shortcut on a phone, an app
    window on a desktop; the manifest asks for a standalone window — the
@@ -135,19 +137,19 @@ a { color: #333399; }
 .find .bell[aria-pressed=true] .f { fill: #997a1f; } .find .bell[aria-pressed=true] .s { fill: #66511a; } .find .bell[aria-pressed=true] .w { fill: #ccaa44; }
 .find .bell:focus { outline: none; }
 .find .bell:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
-/* posting from a Solana wallet: a strip inside the frame on the find
-   strip's platinum, under it on the home page and above the status line
-   on a thread. Signed out, a line of text and Sign in with Solana;
-   signed in, who is posting with Profile… and Sign Out, the field, and a
-   status line beside the Post button. The head script classes
-   <html> js (the strip is all script) and wallet (a wallet signed in
-   before), so the strip has its final shape before layout and never
-   jumps while the wallet reconnects. */
-.compose { display: none; padding: 8px 12px; border-bottom: 1px solid #262626; background: #ddd;
+/* posting from a Solana wallet: a window of its own above the posts —
+   Post over the feed on the home page, Reply over the thread on a thread
+   page — its frame holding one strip on the find strip's platinum.
+   Signed out, a line of text and Sign in with Solana; signed in, who is
+   posting with Profile… and Sign Out, the field, and a status line
+   beside the Post button. The head script classes <html> js (the window
+   is all script) and wallet (a wallet signed in before), so the window
+   has its final shape before layout and never jumps while the wallet
+   reconnects. */
+.composer { display: none; }
+.js .composer { display: block; }
+.compose { padding: 8px 12px; background: #ddd;
   box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }
-.js .compose { display: block; }
-.compose.bottom { border-bottom: 0; border-top: 1px solid #262626; }
-.post:has(+ .compose.bottom) { border-bottom: 0; }
 .compose [hidden] { display: none !important; }
 .compose .in, .wallet .compose .out { display: none; }
 .wallet .compose .in { display: block; }
@@ -306,25 +308,27 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   </div></div>
 </div>
 {{end}}
+<div class="main">
+{{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window feed">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
-    {{with .Compose}}{{template "compose" .}}{{end}}
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
   </div>
 </div>
 </div>
+</div>
 {{else if eq .Page "thread"}}
+{{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
     <div class="pager top"><a class="btn prev back" href="/">{{template "arrow"}}<span>Feed</span></a></div>
     {{template "post" .Post}}
     {{range .Replies}}{{template "post" .}}{{end}}
-    {{with .Compose}}{{template "compose" .}}{{end}}
     <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span></div>
   </div>
 </div>
@@ -566,9 +570,8 @@ localTimes(document);
     const have = new Map([...feed.children].filter(n => n.id).map(n => [n.id, n]));
     const next = [...fresh.children].map(n => {
       const old = have.get(n.id);
-      // the find and compose strips are the reader's (what they typed,
-      // the Notify box, the wallet that signed in)
-      return old && (n.id === "find" || n.id === "compose" || old.isEqualNode(n)) ? old : n;
+      // the find strip is the reader's (what they typed, the Notify box)
+      return old && (n.id === "find" || old.isEqualNode(n)) ? old : n;
     });
     for (const n of [...feed.children]) if (!next.includes(n)) n.remove();
     next.forEach((n, i) => { if (feed.children[i] !== n) feed.insertBefore(n, feed.children[i] || null); });
@@ -1021,7 +1024,9 @@ localTimes(document);
 {{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}
 
-{{define "compose"}}<div class="compose{{if .ReplyTo}} bottom{{end}}" id="compose"{{if .ReplyTo}} data-reply-to="{{.ReplyTo}}"{{end}}>
+{{define "compose"}}<div class="window composer">
+<div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{if .ReplyTo}}Reply{{else}}Post{{end}}</span><span class="stripe"></span></div>
+<div class="frame"><div class="compose" id="compose"{{if .ReplyTo}} data-reply-to="{{.ReplyTo}}"{{end}}>
   <div class="out">
     <div class="row pick-off"><span class="grow note">{{if .ReplyTo}}Reply{{else}}Post{{end}} from a Solana wallet: one signature a post, never a transaction.</span><button type="button" class="btn signin">Sign in with Solana</button></div>
     <div class="row picker" hidden></div>
@@ -1040,6 +1045,7 @@ localTimes(document);
       <div class="btns"><button type="button" class="btn left p-edit">Edit</button><button type="button" class="btn p-cancel" hidden>Cancel</button><button type="button" class="btn default p-ok">OK</button><button type="button" class="btn default p-save" hidden>Save</button></div>
     </div>
   </div>
+</div></div>
 </div>{{end}}
 
 {{/* the Hub app's back arrow, verbatim (sysapps/hub/index.html), and
