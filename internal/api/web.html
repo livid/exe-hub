@@ -156,6 +156,16 @@ a { color: #333399; }
 .compose .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .compose .grow { flex: 1 1 12em; min-width: 0; font-size: 11px; color: #333; }
 .compose .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* who is posting: the avatar 5px before the name, at the row's 20px —
+   the buttons' height — framed like the feed's, when the profile has
+   one; it arrives with the name and the row stays 20px either way. On a
+   narrow screen the name gives way, ellipsized, rather than pushing the
+   buttons down */
+.compose .who-row { flex-wrap: nowrap; }
+.compose .who-wrap { flex: 1 1 0; display: flex; align-items: center; gap: 5px; }
+.compose .who-wrap .who { flex: 1 1 0; min-width: 0; }
+.compose .me-av { flex: none; box-sizing: border-box; width: 20px; height: 20px; border: 1px solid #262626; background: #ddd; }
+.compose .me-av img { display: block; width: 18px; height: 18px; image-rendering: pixelated; }
 .compose .who b { font-size: 12px; color: #262626; }
 .compose button { font-family: inherit; cursor: default; margin: 0; }
 .compose .btn:disabled { color: #999; }
@@ -812,6 +822,12 @@ localTimes(document);
     const p = await getJSON("/v1/profile/" + out.profile);
     return { author, v: out, profile: p.r.ok ? p.out : null };
   }
+  // the avatar beside the name, when the profile has one
+  function meAva(cid) {
+    const box = q(".me-av"), img = box.querySelector("img");
+    if (cid) { if (img.getAttribute("src") !== "/v1/embed/" + cid) img.src = "/v1/embed/" + cid; box.hidden = false; }
+    else { img.removeAttribute("src"); box.hidden = true; }
+  }
   function adopt(st) {
     if (!me || b64(me.pub) !== st.author) return false;
     verdict = st.v;
@@ -820,6 +836,7 @@ localTimes(document);
     q(".id").textContent = st.v.profile;
     q(".id").title = me.address;
     q(".name").textContent = st.profile && st.profile.name ? st.profile.name : "No name yet";
+    meAva(st.profile && st.profile.avatar);
     render();
     return true;
   }
@@ -842,6 +859,7 @@ localTimes(document);
     root.classList.add("wallet");
     q(".name").textContent = "…";
     q(".id").textContent = short(me.address);
+    meAva("");
     flash = "";
     watch(w);
     await check();
@@ -850,6 +868,7 @@ localTimes(document);
     verdict = null; flash = ""; until = 0;
     remember(null);
     root.classList.remove("wallet");
+    meAva("");
     closeProfile();
   }
   // the wallet switched accounts or forgot this site
@@ -1136,7 +1155,7 @@ localTimes(document);
     <div class="row picker" hidden></div>
   </div>
   <div class="in">
-    <div class="row who-row"><span class="grow who"><b class="name">…</b> <span class="mono id"></span></span><button type="button" class="btn profile-btn">Profile…</button><button type="button" class="btn signout">Sign Out</button></div>
+    <div class="row who-row"><span class="grow who-wrap"><span class="me-av" hidden><img alt=""></span><span class="who"><b class="name">…</b> <span class="mono id"></span></span></span><button type="button" class="btn profile-btn">Profile…</button><button type="button" class="btn signout">Sign Out</button></div>
     <textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea>
     <div class="row"><span class="grow status">Checking this address…</span><button type="button" class="btn send" disabled>{{if .ReplyTo}}Reply{{else}}Post{{end}}</button></div>
   </div>

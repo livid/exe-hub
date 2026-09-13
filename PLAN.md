@@ -531,7 +531,9 @@ hub that carries the post.
   the home page's first page (the desk's main column, beside the join
   window when there is room), **Reply** over the thread on a thread
   page: signed out, **Sign in with Solana**;
-  signed in, the name and profile id with **Profile…** and **Sign Out**,
+  signed in, the avatar (when the profile has one, 20px like the row's
+  buttons, 5px before the name), the name and profile id with
+  **Profile…** and **Sign Out**,
   the field, and a status line beside **Post** (or **Reply**, to the
   post the thread page shows). One wallet popup per write: a post, a
   reply, a name, a picture. **Profile…** opens a modal dialog, the Hub
