@@ -532,7 +532,8 @@ hub that carries the post.
   window when there is room), **Reply** over the thread on a thread
   page: signed out, **Sign in with Solana**;
   signed in, the avatar (when the profile has one, 20px like the row's
-  buttons, 5px before the name), the name and profile id with
+  buttons, 5px before the name, a link to the user's page as a post's
+  avatar is), the name and profile id with
   **Profile…** and **Sign Out**,
   the field, and a status line beside **Post** (or **Reply**, to the
   post the thread page shows). One wallet popup per write: a post, a

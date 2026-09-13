@@ -866,7 +866,7 @@ func TestWebCompose(t *testing.T) {
 		t.Errorf("home: main %d, composer window %d, feed window %d — want the composer window first in the main column", a, b, c)
 	}
 	for _, want := range []string{`<span class="title">Post</span>`, `<div class="frame"><div class="compose" id="compose">`, `Sign in with Solana`, `classList.add("wallet")`,
-		`class="btn profile-btn">Profile…</button>`, `<span class="grow who-wrap"><span class="me-av" hidden><img alt=""></span><span class="who"><b class="name">`, `role="dialog" aria-modal="true" aria-label="Profile"`,
+		`class="btn profile-btn">Profile…</button>`, `<span class="grow who-wrap"><a class="me-av" aria-label="Your page" hidden><img alt=""></a><span class="who"><b class="name">`, `role="dialog" aria-modal="true" aria-label="Profile"`,
 		`<button type="button" class="btn left p-edit">Edit</button>`, `class="btn p-choose" hidden>Choose Picture…</button>`,
 		`accept="image/png,image/jpeg,image/gif"`, `"/v1/avatar"`, `"exe-hub:v1\nupload\n"`,
 		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`} {
