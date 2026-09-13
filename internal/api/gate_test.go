@@ -76,8 +76,8 @@ type gateOut struct {
 	Cooldown int    `json:"cooldown"`
 	Wait     int    `json:"wait"`
 	Mints    []struct {
-		Amount, Mint string
-		Raw          bool
+		Amount, Mint, Held string
+		Raw                bool
 	} `json:"mints"`
 }
 
@@ -108,10 +108,14 @@ func TestGateEndpoint(t *testing.T) {
 		out.Profile != identity.Fingerprint(holder) || len(out.Mints) != 1 || out.Mints[0].Mint != "MintAaa" {
 		t.Fatalf("holder: %d %+v", code, out)
 	}
-	if _, out := gateGet(t, s, poor); out.Gate != "below" {
+	if out.Mints[0].Held != "5000" || !out.Mints[0].Raw {
+		t.Errorf("holder's balance: %+v (raw units: this RPC tells no decimals)", out.Mints[0])
+	}
+	if _, out := gateGet(t, s, poor); out.Gate != "below" || out.Mints[0].Held != "10" {
 		t.Errorf("poor: %+v", out)
 	}
-	if _, out := gateGet(t, s, admin); out.Gate != "admin" || out.Cooldown != 0 {
+	// an admin passes whatever it holds, and still sees the balance
+	if _, out := gateGet(t, s, admin); out.Gate != "admin" || out.Cooldown != 0 || len(out.Mints) != 1 || out.Mints[0].Held != "0" {
 		t.Errorf("admin: %+v", out)
 	}
 
@@ -153,7 +157,7 @@ func TestGateEndpoint(t *testing.T) {
 	// an RPC that is down, with no cached verdict
 	rpc.Close()
 	s2 := tokenServer(t, rpc.URL, nil)
-	if _, out := gateGet(t, s2, holder); out.Gate != "unavailable" {
+	if _, out := gateGet(t, s2, holder); out.Gate != "unavailable" || out.Mints[0].Held != "" {
 		t.Errorf("rpc down: %+v", out)
 	}
 	// open mode

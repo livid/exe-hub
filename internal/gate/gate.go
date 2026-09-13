@@ -24,8 +24,9 @@ var ErrDenied = errors.New("token gate: balance below threshold")
 var ErrUnavailable = errors.New("token gate: RPC unavailable and no cached verdict")
 
 type verdict struct {
-	ok bool
-	at time.Time
+	ok   bool
+	at   time.Time
+	held map[string]uint64 // mint -> raw balance, for each mint this check read (any-of stops at the first pass)
 }
 
 type Gate struct {
@@ -95,6 +96,24 @@ func (g *Gate) Cached(pub ed25519.PublicKey) bool {
 	return ok && time.Since(v.at) < c.Gate.Token.RecheckDur
 }
 
+// Held returns the raw balances the last check of pub read, by mint —
+// what the public pages' profile dialog shows. A mint the check skipped
+// (any-of stops at the first pass) or could not read is absent; nil when
+// pub was never checked.
+func (g *Gate) Held(pub ed25519.PublicKey) map[string]uint64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	v, ok := g.cache[Base58(pub)]
+	if !ok {
+		return nil
+	}
+	out := make(map[string]uint64, len(v.held))
+	for k, n := range v.held {
+		out[k] = n
+	}
+	return out
+}
+
 // Check returns nil if pub may write under the current gate config.
 func (g *Gate) Check(pub ed25519.PublicKey) error {
 	c := g.cfg.Get()
@@ -115,7 +134,7 @@ func (g *Gate) Check(pub ed25519.PublicKey) error {
 	// on one mint doesn't fail the check if a later mint passes; only
 	// when no mint passed and at least one couldn't be checked is the
 	// verdict unknown.
-	pass, firstErr := false, error(nil)
+	pass, firstErr, read := false, error(nil), map[string]uint64{}
 	for _, m := range t.Mints {
 		held, err := g.balance(t, m.Mint, addr)
 		if err != nil {
@@ -124,6 +143,7 @@ func (g *Gate) Check(pub ed25519.PublicKey) error {
 			}
 			continue
 		}
+		read[m.Mint] = held
 		if held >= m.MinRaw {
 			pass = true
 			break
@@ -140,7 +160,7 @@ func (g *Gate) Check(pub ed25519.PublicKey) error {
 		}
 		return fmt.Errorf("%w: %v", ErrUnavailable, firstErr)
 	}
-	v = verdict{ok: pass, at: time.Now()}
+	v = verdict{ok: pass, at: time.Now(), held: read}
 	g.mu.Lock()
 	g.cache[addr] = v
 	g.mu.Unlock()

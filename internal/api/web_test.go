@@ -855,6 +855,8 @@ func TestWebCompose(t *testing.T) {
 	h := s.Handler()
 	_, home := get(t, h, "/")
 	for _, want := range []string{`<div class="compose" id="compose">`, `Sign in with Solana`, `classList.add("wallet")`,
+		`class="btn profile-btn">Profile…</button>`, `role="dialog" aria-modal="true" aria-label="Profile"`,
+		`<button type="button" class="btn left p-edit">Edit</button>`,
 		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`} {
 		if !strings.Contains(home, want) {
 			t.Errorf("home page lacks %q", want)

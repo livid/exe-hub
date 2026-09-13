@@ -164,9 +164,10 @@ type webJoin struct {
 }
 
 type webMint struct {
-	Amount string `json:"amount"` // "10,000", or the raw base units "10000000000" before the RPC has answered
-	Raw    bool   `json:"raw"`    // Amount is raw base units: the RPC has not told the mint's decimals yet
+	Amount string `json:"amount"`         // "10,000", or the raw base units "10000000000" before the RPC has answered
+	Raw    bool   `json:"raw"`            // Amount (and Held) are raw base units: the RPC has not told the mint's decimals yet
 	Mint   string `json:"mint"`
+	Held   string `json:"held,omitempty"` // /v1/gate only: what the key holds, in the same units; absent when unread
 }
 
 // webCompose is the strip that posts from a Solana wallet (see PLAN.md,

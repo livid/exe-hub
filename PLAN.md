@@ -290,7 +290,11 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   now, before it signs anything: `{profile, mode, gate, banned,
   cooldown, wait, mints}`, where `gate` is `open`, `admin`, `pass`,
   `below` or `unavailable`, `wait` the cooldown's seconds left and
-  `mints` the thresholds as the join block shows them. It reaches the
+  `mints` the thresholds as the join block shows them, each with `held`,
+  what the key holds in the same units (absent when the check did not
+  read that mint). The gate's cache keeps the balances a check read
+  beside its verdict, so the numbers cost no extra RPC call; an admin is
+  checked too, for its balance, and stays `admin` whatever it holds. It reaches the
   verdict `policy()` would for a `post.create`, minus the signature.
   A check the gate cannot answer from its per-author cache costs an RPC
   call, so uncached checks share a token bucket (1 a second, 10 burst;
@@ -525,24 +529,32 @@ hub that carries the post.
   signing protocol, replication and every client are unchanged. The home
   page's first page carries a strip under the find strip, and a thread a
   strip above its status line: signed out, **Sign in with Solana**;
-  signed in, the name and profile id with **Name…** and **Sign Out**,
+  signed in, the name and profile id with **Profile…** and **Sign Out**,
   the field, and a status line beside **Post** (or **Reply**, to the
   post the thread page shows). One wallet popup per write: a post, a
-  reply, a name. Wallets are found through the Wallet Standard
+  reply, a name. **Profile…** opens a modal dialog, the Hub app's dialog
+  panel: Name, and Holding (each mint's balance, then whether that is
+  enough, with the threshold), **Edit** at the lower left and **OK**,
+  the default, at the right. It fetches `/v1/gate` and the profile
+  before it shows, so it opens at its final size. Edit turns the name
+  into a field with **Cancel** and **Save** (the default) in place of
+  Edit and OK, at the same height; Save sends `profile.set` with the new
+  name, keeping the bio and avatar the profile already has. Edit is
+  disabled when the gate would refuse the write. Return presses the
+  default, Escape backs out, Tab stays in the dialog. Wallets are found through the Wallet Standard
   (`wallet-standard:app-ready` / `register-wallet`, no library), the
   older injected `window.solana` as a fallback; several wallets get a
   picker. Only a message is ever signed, never a transaction, and the
   page checks that the wallet signed the bytes it was given (a wallet
   that rewrites them before signing cannot post).
   Before anything is signed, `GET /v1/gate` says whether the key may
-  post: below the threshold, banned or unavailable disables Post and
-  Name… with a line saying why, and a cooldown counts down. There is no
+  post: below the threshold, banned or unavailable disables Post (and
+  the dialog's Edit) with a line saying why, and a cooldown counts down. There is no
   session: the page remembers the wallet's name and address in
   localStorage, nothing secret, and asks that wallet again silently on
   the next visit; a head script classes `<html>` (`js`, `wallet`)
   before layout so the strip has its final shape and never jumps.
-  **Name…** sends `profile.set` with the new name, keeping the bio and
-  avatar the profile already has. A post refreshes the live feed at
+  A post refreshes the live feed at
   once; a reply reloads the thread at the new reply. Text and names are
   checked in bytes against the envelope caps before a popup. Not built:
   attachments (each would be another signature, the upload's) and a

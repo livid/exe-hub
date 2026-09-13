@@ -255,8 +255,9 @@ func (s *Server) handleSeq(w http.ResponseWriter, r *http.Request) {
 // anything — for the public pages' wallet sign-in, where every signature
 // is a popup. It reaches the verdict policy() would for a post.create,
 // minus the signature: banned, the gate ("open", "admin", "pass",
-// "below" or "unavailable"), and the cooldown's wait in seconds. Public
-// like every read. A check the gate cannot answer from its cache costs
+// "below" or "unavailable"), the cooldown's wait in seconds, and each
+// mint's threshold with what the key holds (the balances the check read,
+// for the profile dialog). Public like every read. A check the gate cannot answer from its cache costs
 // an RPC call, so those share a small rate limit (429 past it).
 func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
 	pubB, err := base64.StdEncoding.DecodeString(r.URL.Query().Get("author"))
@@ -283,13 +284,9 @@ func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Banned = banned
 	if c.Gate.Mode == "token" {
+		// admins pass whatever they hold, but the balance is still theirs
+		// to see, so every key is checked
 		out.Mode = "token"
-		out.Mints = s.webJoinBlock(r).Mints
-	}
-	switch {
-	case c.IsAdmin(pid):
-		out.Gate, out.Cooldown = "admin", 0
-	case c.Gate.Mode == "token":
 		if !s.Gate.Cached(pub) && !s.gateLimit.allow() {
 			w.Header().Set("Retry-After", "1")
 			writeErr(w, http.StatusTooManyRequests, errors.New("too many gate checks: try again in a second"))
@@ -303,6 +300,24 @@ func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
 		default:
 			out.Gate = "unavailable"
 		}
+		held := s.Gate.Held(pub)
+		for _, m := range c.Gate.Token.Mints {
+			wm := webMint{Amount: m.MinAmount, Raw: true, Mint: m.Mint}
+			n, read := held[m.Mint]
+			if read {
+				wm.Held = strconv.FormatUint(n, 10)
+			}
+			if dec, known := s.Gate.Decimals(m.Mint); known {
+				wm.Amount, wm.Raw = humanUnits(m.MinRaw, dec), false
+				if read {
+					wm.Held = humanUnits(n, dec)
+				}
+			}
+			out.Mints = append(out.Mints, wm)
+		}
+	}
+	if c.IsAdmin(pid) {
+		out.Gate, out.Cooldown = "admin", 0
 	}
 	if out.Cooldown > 0 {
 		last, err := s.St.LastPost(base64.StdEncoding.EncodeToString(pub))

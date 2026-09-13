@@ -110,8 +110,9 @@ signatures and never a cookie. Writes authenticate by signature alone.
 server-rendered, shaped like an
 exe desktop window in Mac OS 9 chrome, with no assets and almost no
 script: a picture viewer, a live first page fed by `/v1/events`, a
-Notify bell, and Sign in with Solana, which posts, replies and sets a
-name from a browser wallet, one signature a write and never a
+Notify bell, and Sign in with Solana, which posts, replies, shows a
+profile with the wallet's token holding and edits the name from a
+browser wallet, one signature a write and never a
 transaction, the wallet's address being the key the gate checks. Every post has a link anyone can open, and a pasted link
 unfurls with OpenGraph title, excerpt and picture. The pages install as a
 web app, and an installed copy, on a phone most of all, can receive a
