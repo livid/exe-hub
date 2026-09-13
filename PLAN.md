@@ -494,7 +494,10 @@ hub that carries the post.
   what a reader without script gets. Only `admins` publish pages — the
   keys that may moderate; an HTML embed from any other key stays a file
   link. Decided at render time from the author id, so a demoted key's
-  pages become downloads. `/p/{id}#page={cid}` opens the page when the
+  pages become downloads. Every JSON read carries the same decision as
+  `pages`, the CIDs of the post's embeds that are pages, so the exe Hub
+  app draws the same page card and opens it in the desktop's sandboxed
+  page window without knowing who the admins are. `/p/{id}#page={cid}` opens the page when the
   thread loads: a link that shows a page while the top-level document
   stays the hub. The live feed's delegated click handles pages it brings
   in. External fonts and images a page links load as they would anywhere;

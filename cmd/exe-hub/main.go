@@ -88,6 +88,7 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	if err != nil {
 		return err
 	}
+	st.PageAuthor = func(id string) bool { return holder.Get().IsAdmin(id) } // an admin's HTML is a page (PLAN.md, Pages)
 	defer st.Close()
 
 	ipfsc := ipfs.New(cfg.IPFSAPI)

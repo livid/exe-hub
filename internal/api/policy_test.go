@@ -24,6 +24,7 @@ func testServer(t *testing.T, cfg *config.Config) *Server {
 	}
 	t.Cleanup(func() { st.Close() })
 	h := config.NewHolder(cfg)
+	st.PageAuthor = func(id string) bool { return h.Get().IsAdmin(id) }
 	return &Server{Cfg: h, St: st, Gate: gate.New(h)}
 }
 

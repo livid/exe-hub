@@ -631,6 +631,26 @@ func TestWebPage(t *testing.T) {
 	if strings.Contains(body, `allow-same-origin`) {
 		t.Error("a page must never get allow-same-origin")
 	}
+	// the JSON reads carry the same decision, for the Hub app
+	_, js := get(t, s.Handler(), "/v1/feed")
+	var feed struct {
+		Posts []struct {
+			Text  string   `json:"text"`
+			Pages []string `json:"pages"`
+		} `json:"posts"`
+	}
+	if err := json.Unmarshal([]byte(js), &feed); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range feed.Posts {
+		want := ""
+		if p.Text == "a page" {
+			want = cid
+		}
+		if got := strings.Join(p.Pages, ","); got != want {
+			t.Errorf("%q: pages = %q, want %q", p.Text, got, want)
+		}
+	}
 }
 
 // TestWebLive: the home page's first page ships the live-feed script

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -292,18 +293,17 @@ func webStamp(ms int64) string {
 }
 
 func (s *Server) webPosts(posts []store.FeedPost) []webPost {
-	c := s.Cfg.Get()
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
 		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS)}
-		admin := c.IsAdmin(p.Author)
 		for _, e := range p.Embeds {
 			switch {
 			case strings.HasPrefix(e.MIME, "image/"):
 				out[i].Images = append(out[i].Images, e)
-			case admin && strings.HasPrefix(e.MIME, "text/html"):
+			case slices.Contains(p.PageCIDs, e.CID):
 				// a page: read in a sandboxed window (see PLAN, Pages);
-				// from any other key the same file stays a download
+				// the store marks an admin's HTML, from any other key the
+				// same file stays a download
 				out[i].Pages = append(out[i].Pages, e)
 			default:
 				out[i].Files = append(out[i].Files, e)

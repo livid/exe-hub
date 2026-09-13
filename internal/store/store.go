@@ -33,6 +33,10 @@ type Store struct {
 	// replays) — the live-events hook. It runs on the ingesting
 	// goroutine, so it must not block.
 	OnMessage func(e *envelope.Envelope, op any, id string)
+	// PageAuthor, when set, says whose HTML embeds are pages — read in a
+	// sandboxed window instead of downloaded (PLAN.md, Pages). It is asked
+	// at read time, so a demoted key's pages turn back into files.
+	PageAuthor func(author string) bool
 }
 
 func Open(path string) (*Store, error) {
@@ -484,7 +488,8 @@ type FeedPost struct {
 	TS         int64            `json:"ts"`
 	Received   int64            `json:"received"`
 	Embeds     []envelope.Embed `json:"embeds,omitempty"`
-	Card       *Card            `json:"card,omitempty"` // the first link, unfurled (see PLAN.md, Link cards)
+	Card       *Card            `json:"card,omitempty"`  // the first link, unfurled (see PLAN.md, Link cards)
+	PageCIDs   []string         `json:"pages,omitempty"` // the embeds that open as pages (see PLAN.md, Pages)
 	Replies    int              `json:"replies"`
 	Depth      int              `json:"depth,omitempty"` // set by Thread: steps below the root, 1 = a direct reply
 }
@@ -530,6 +535,14 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 			return nil, err
 		}
 		out[i].Embeds = embeds
+		if s.PageAuthor == nil {
+			continue
+		}
+		for _, e := range embeds {
+			if strings.HasPrefix(e.MIME, "text/html") && s.PageAuthor(out[i].Author) {
+				out[i].PageCIDs = append(out[i].PageCIDs, e.CID)
+			}
+		}
 	}
 	return out, nil
 }
