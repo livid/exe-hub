@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"testing"
+	"unicode/utf8"
+)
 
 // TestCards: a card joins its post in every read, a failed attempt stays
 // invisible, deleting the post releases the picture's pin, and Rebuild
@@ -36,6 +39,29 @@ func TestCards(t *testing.T) {
 	}
 	if len(left) != 0 {
 		t.Fatalf("PostsWithoutCards = %d, want 0", len(left))
+	}
+
+	// a card stored with raw legacy bytes is listed for a redo; a UTF-8
+	// one and a failed attempt are not
+	notUTF8 := func(title, desc string) bool {
+		return !utf8.ValidString(title + desc)
+	}
+	idMis := ingest(t, s, a, "post.create", map[string]any{"text": "https://mame.example/x"})
+	if _, err := s.SetCard(idMis, Card{URL: "https://mame.example/x", Host: "mame.example", Title: "\x83\x7d\x83\x81"}, 0, "", true); err != nil {
+		t.Fatal(err)
+	}
+	mis, err := s.CardsMisread(notUTF8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mis) != 1 || mis[0].ID != idMis || mis[0].Text != "https://mame.example/x" {
+		t.Fatalf("CardsMisread = %+v, want only the raw-bytes card", mis)
+	}
+	if _, err := s.SetCard(idMis, Card{URL: "https://mame.example/x", Host: "mame.example", Title: "マメ"}, 0, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if mis, _ := s.CardsMisread(notUTF8); len(mis) != 0 {
+		t.Fatalf("redone card still listed: %+v", mis)
 	}
 
 	// a failed attempt is recorded but never served

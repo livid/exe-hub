@@ -22,6 +22,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/htmlindex"
 )
 
 // URL is the one URL matcher, shared with the public pages' linkifier:
@@ -158,7 +161,7 @@ func (f *Fetcher) Fetch(ctx context.Context, link string) (*Meta, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := parseMeta(string(body))
+	m := parseMeta(decode(body, resp.Header.Get("Content-Type")))
 	m.URL = link
 	m.Host = strings.TrimPrefix(pu.Hostname(), "www.")
 	if m.Title == "" {
@@ -201,6 +204,48 @@ func (f *Fetcher) FetchImage(ctx context.Context, u string) (data []byte, mime s
 		return nil, "", fmt.Errorf("not a picture: %s", mime)
 	}
 	return data, mime, nil
+}
+
+// ---- the page's charset ----
+
+var charsetParam = regexp.MustCompile(`(?i)charset\s*=\s*["']?\s*([a-z0-9_:.\-]+)`)
+
+// decode turns the page into UTF-8 the way a browser finds its charset:
+// the Content-Type header's parameter, else the page's own <meta charset>
+// or http-equiv declaration; a page naming none is read as UTF-8. Much of
+// the Japanese and Chinese web still serves Shift_JIS, EUC-JP or GBK with
+// a bare "text/html" header, and read as UTF-8 their titles came out as
+// raw bytes. Bytes that still are not UTF-8 after this (an unknown label,
+// an undeclared legacy page) are dropped, so a card never stores them.
+func decode(body []byte, contentType string) string {
+	label := ""
+	if m := charsetParam.FindStringSubmatch(contentType); m != nil {
+		label = m[1]
+	} else {
+		// Every legacy charset a page can declare keeps ASCII where it is,
+		// so the declaration is readable before the page is decoded.
+		for _, tag := range metaTag.FindAll(body, -1) {
+			if m := charsetParam.FindSubmatch(tag); m != nil {
+				label = string(m[1])
+				break
+			}
+		}
+	}
+	if label != "" {
+		if enc, err := htmlindex.Get(label); err == nil {
+			if out, err := enc.NewDecoder().Bytes(body); err == nil {
+				body = out
+			}
+		}
+	}
+	return strings.ToValidUTF8(string(body), "")
+}
+
+// Misread says a stored card's text is not UTF-8 — a card derived before
+// decode existed, from a page in a legacy charset. Backfill derives those
+// again; a card from decode is always UTF-8, so none is redone twice.
+func Misread(title, desc string) bool {
+	return !utf8.ValidString(title) || !utf8.ValidString(desc)
 }
 
 // ---- the metadata scan ----

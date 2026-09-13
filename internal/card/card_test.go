@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 func TestFirst(t *testing.T) {
@@ -84,6 +87,59 @@ func TestFetchImageSniff(t *testing.T) {
 	f.AllowPrivate = true
 	if _, _, err := f.FetchImage(context.Background(), srv.URL); err == nil {
 		t.Fatal("non-image bytes accepted as a card picture")
+	}
+}
+
+// TestDecode: the charset comes from the header, else the page's own
+// declaration; undeclared pages read as UTF-8, and stray bytes never
+// survive into a card.
+func TestDecode(t *testing.T) {
+	sjis, _ := japanese.ShiftJIS.NewEncoder().String(`<title>マメフルードフィルター【コラボ】</title>
+<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">`)
+	gbk, _ := simplifiedchinese.GBK.NewEncoder().String(`<title>流动过滤器</title>`)
+	for _, c := range []struct{ name, body, ct, want string }{
+		{"http-equiv Shift_JIS, bare header", sjis, "text/html", "マメフルードフィルター【コラボ】"},
+		{"header charset", gbk, "text/html; charset=GBK", "流动过滤器"},
+		{"quoted header charset", gbk, `text/html; charset="gb2312"`, "流动过滤器"},
+		{"meta charset", `<meta charset="utf-8"><title>日本語</title>`, "", "日本語"},
+		{"undeclared UTF-8", `<title>Café</title>`, "text/html", "Café"},
+		{"undeclared stray bytes dropped", "<title>A\xff\xfeB</title>", "text/html", "AB"},
+		{"unknown label", "<meta charset=x-klingon><title>Q\x80</title>", "", "Q"},
+	} {
+		m := parseMeta(decode([]byte(c.body), c.ct))
+		if m.Title != c.want {
+			t.Errorf("%s: title %q, want %q", c.name, m.Title, c.want)
+		}
+		if Misread(m.Title, m.Desc) {
+			t.Errorf("%s: decoded card still misread", c.name)
+		}
+	}
+	if !Misread("\x83\x7d\x83\x81", "") {
+		t.Error("raw Shift_JIS bytes not flagged as misread")
+	}
+}
+
+// TestFetchShiftJIS: a page shaped like mame-design.jp's — Shift_JIS
+// declared only in the page, served as bare text/html — unfurls legibly.
+func TestFetchShiftJIS(t *testing.T) {
+	page, _ := japanese.ShiftJIS.NewEncoder().String(`<html><head>
+<title>マメフルードフィルター</title>
+<meta name="description" content="最強の流動フィルター">
+<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
+</head></html>`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, page)
+	}))
+	defer srv.Close()
+	f := NewFetcher()
+	f.AllowPrivate = true
+	m, err := f.Fetch(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Title != "マメフルードフィルター" || m.Desc != "最強の流動フィルター" {
+		t.Errorf("got title %q desc %q", m.Title, m.Desc)
 	}
 }
 

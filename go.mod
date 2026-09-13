@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	golang.org/x/image v0.45.0
+	golang.org/x/text v0.42.0
 	modernc.org/sqlite v1.57.0
 )
 

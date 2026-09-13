@@ -597,6 +597,29 @@ func (s *Store) HasCard(post string) (bool, error) {
 	return n > 0, err
 }
 
+// CardsMisread lists the posts whose stored card the misread test flags
+// (card.Misread: text that is not UTF-8), for the backfill to derive again.
+func (s *Store) CardsMisread(misread func(title, desc string) bool) ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, p.text, c.title, c.descr FROM cards c
+		JOIN posts p ON p.id = c.post WHERE c.status = 'ok'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		var title, desc string
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text, &title, &desc); err != nil {
+			return nil, err
+		}
+		if misread(title, desc) {
+			out = append(out, p)
+		}
+	}
+	return out, rows.Err()
+}
+
 // CardPost is one backfill candidate: a post never attempted for a card.
 type CardPost struct{ ID, Author, Text string }
 

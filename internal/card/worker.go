@@ -25,7 +25,10 @@ type Worker struct {
 	queue chan job
 }
 
-type job struct{ post, author, text string }
+type job struct {
+	post, author, text string
+	redo               bool // replace a card already stored (a misread one)
+}
 
 func NewWorker(st *store.Store, ipfsc *ipfs.Client, bus *events.Broadcaster) *Worker {
 	return &Worker{St: st, IPFS: ipfsc, Bus: bus, F: NewFetcher(), queue: make(chan job, 256)}
@@ -38,7 +41,7 @@ func (w *Worker) Enqueue(post, author, text string) {
 		return
 	}
 	select {
-	case w.queue <- job{post, author, text}:
+	case w.queue <- job{post: post, author: author, text: text}:
 	default:
 		log.Printf("card: queue full, dropping %s", post)
 	}
@@ -70,10 +73,24 @@ func (w *Worker) Backfill() {
 	if n > 0 {
 		log.Printf("card backfill: %d posts queued", n)
 	}
+	misread, err := w.St.CardsMisread(Misread)
+	if err != nil {
+		log.Printf("card backfill: %v", err)
+		return
+	}
+	for _, p := range misread {
+		select {
+		case w.queue <- job{post: p.ID, author: p.Author, text: p.Text, redo: true}:
+		default:
+		}
+	}
+	if len(misread) > 0 {
+		log.Printf("card backfill: %d misread cards queued again", len(misread))
+	}
 }
 
 func (w *Worker) derive(j job) {
-	if has, err := w.St.HasCard(j.post); err != nil || has {
+	if has, err := w.St.HasCard(j.post); err != nil || (has && !j.redo) {
 		return
 	}
 	link := First(j.text)

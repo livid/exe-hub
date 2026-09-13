@@ -681,6 +681,14 @@ idea; Livid said do it.
   sweep can't take it). Success or failure is recorded once — no retry
   loops; a repost gets a fresh try. A backfill pass at start gives the
   posts from before this feature their cards.
+- **Read in the page's own charset.** Much of the Japanese and Chinese
+  web serves Shift_JIS, EUC-JP or GBK under a bare `text/html` header.
+  The page is decoded the way a browser finds its charset — the
+  Content-Type parameter, else the page's `<meta charset>` or
+  http-equiv declaration, else UTF-8 — and any byte still not UTF-8 is
+  dropped, so a card never stores raw bytes. Cards derived before this
+  (their text not UTF-8) are derived again by the start-up backfill;
+  a redone card is UTF-8, so none repeats.
 - **The dial guard.** The link is untrusted text, so the fetcher's
   dialer resolves every connection (redirects included) and refuses
   non-public addresses: loopback, RFC 1918, link-local, ULA, multicast
