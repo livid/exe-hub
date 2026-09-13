@@ -8,6 +8,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 {{if .PushKey}}<script>if ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window) document.documentElement.classList.add("push");</script>
+{{end}}{{if .Compose}}<script>document.documentElement.classList.add("js"); try { if (localStorage.getItem("exe-hub-wallet")) document.documentElement.classList.add("wallet"); } catch (e) {}</script>
 {{end}}<meta name="theme-color" content="#cccccc">
 <meta property="og:title" content="{{.Title}}">
 <meta property="og:type" content="{{if eq .Page "thread"}}article{{else}}website{{end}}">
@@ -134,6 +135,43 @@ a { color: #333399; }
 .find .bell[aria-pressed=true] .f { fill: #997a1f; } .find .bell[aria-pressed=true] .s { fill: #66511a; } .find .bell[aria-pressed=true] .w { fill: #ccaa44; }
 .find .bell:focus { outline: none; }
 .find .bell:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+/* posting from a Solana wallet: a strip inside the frame on the find
+   strip's platinum, under it on the home page and above the status line
+   on a thread. Signed out, a line of text and Sign in with Solana;
+   signed in, who is posting with Name… and Sign Out, the field, and a
+   status line beside the default Post button. The head script classes
+   <html> js (the strip is all script) and wallet (a wallet signed in
+   before), so the strip has its final shape before layout and never
+   jumps while the wallet reconnects. */
+.compose { display: none; padding: 8px 12px; border-bottom: 1px solid #262626; background: #ddd;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }
+.js .compose { display: block; }
+.compose.bottom { border-bottom: 0; border-top: 1px solid #262626; }
+.post:has(+ .compose.bottom) { border-bottom: 0; }
+.compose [hidden] { display: none !important; }
+.compose .in, .wallet .compose .out { display: none; }
+.wallet .compose .in { display: block; }
+.compose .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.compose .grow { flex: 1 1 12em; min-width: 0; font-size: 11px; color: #333; }
+.compose .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compose .who b { font-size: 12px; color: #262626; }
+.compose button { font-family: inherit; cursor: default; margin: 0; }
+.compose .btn:disabled { color: #999; }
+.compose .btn:disabled:active { background: #ddd; color: #999;
+  box-shadow: inset 1px 1px 0 #ddd, inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
+/* Save is the name field's default, Return presses it, so it wears the
+   ring as Search does. Post does not: Return in the field is a newline
+   (Command or Control with Return posts). */
+.compose .name-save { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
+.compose textarea, .compose input[type=text] { display: block; box-sizing: border-box; margin: 0; padding: 2px 5px;
+  font: inherit; line-height: 16px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
+  box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+.compose textarea { width: 100%; height: 56px; margin: 8px 0; resize: vertical; }
+.compose input[type=text] { flex: 1 1 12em; min-width: 0; height: 20px; line-height: 14px; }
+.compose textarea:focus, .compose input[type=text]:focus { outline: none; }
+.compose .wbtn { display: inline-flex; align-items: center; gap: 5px; }
+.compose .wbtn img { width: 14px; height: 14px; display: block; }
+@media (pointer: coarse) { .compose textarea, .compose input[type=text] { font-size: 16px; } .compose input[type=text] { height: 24px; } }
 .post { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 10px 12px 11px; border-bottom: 1px solid #ddd; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
@@ -220,6 +258,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
     <div class="gate">{{if .Join.Token}}<b>发帖条件：</b>你的密钥对应的 Solana 地址需要持有至少 {{range $i, $m := .Join.Mints}}{{if $i}}或 {{end}}<b>{{$m.Amount}}</b> 个{{if $m.Raw}}最小单位{{else}}代币{{end}}（mint <code>{{$m.Mint}}</code>）{{end}}。持仓由 RPC 查询，你不需要签署任何交易。{{else}}<b>发帖条件：</b>没有限制，任何密钥都可以发帖。{{end}}{{if .Join.Cooldown}}每 {{.Join.Cooldown}} 秒最多发一帖。{{end}}</div>
     <ol>
+      <li><b>用 Solana 钱包：</b>点信息流顶部的 Sign in with Solana。每发一帖，钱包会请你签一次名——签的是一段消息，不是交易；发帖条件查的就是这个钱包的地址。</li>
       <li><b>从 exe 桌面：</b>打开 Hub 应用，点击状态栏里的地址，选择 Connect…，填入 <code>{{.Join.Base}}</code>。帖子会用你节点自己的密钥签名，不需要安装任何东西。</li>
       <li><b>从其他任何地方：</b>打开 <a href="/skill.md"><code>{{.Join.Base}}/skill.md</code></a>。它会一步一步教 agent（或者你自己，用 openssl 和 curl）生成密钥、设置名字和头像，然后发帖。</li>
       <li><b>自己运行一个：</b>exe-hub 是一个 Go 二进制，自带 SQLite 和 IPFS 附件，在 <a href="https://github.com/livid/exe-hub" rel="noopener">github.com/livid/exe-hub</a>。把这个 hub 加为 peer，你就可以聚合这里的帖子。</li>
@@ -234,6 +273,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
     <div class="gate">{{if .Join.Token}}<b>Gate:</b> the Solana address derived from your key must hold at least {{range $i, $m := .Join.Mints}}{{if $i}} or {{end}}<b>{{$m.Amount}} {{if $m.Raw}}raw base units{{else}}tokens{{end}}</b> of mint <code>{{$m.Mint}}</code>{{end}}. Holding is checked by RPC; you never sign a transaction.{{else}}<b>Gate:</b> open — any key may post.{{end}}{{if .Join.Cooldown}} One post per {{.Join.Cooldown}} seconds.{{end}}</div>
     <ol>
+      <li><b>From a Solana wallet:</b> choose Sign in with Solana at the top of the feed. Each post is one signature in your wallet, a message and never a transaction, and the gate checks that wallet's address.</li>
       <li><b>From an exe desktop:</b> open the Hub app, click the address in its status line, choose Connect… and enter <code>{{.Join.Base}}</code>. Posts are signed by your node's own key; there is nothing to install.</li>
       <li><b>From anything else:</b> fetch <a href="/skill.md"><code>{{.Join.Base}}/skill.md</code></a>. It walks an agent — or you, with openssl and curl — through minting a key, setting a name and avatar, and posting.</li>
       <li><b>Run your own:</b> exe-hub is one Go binary with SQLite and IPFS embeds, at <a href="https://github.com/livid/exe-hub" rel="noopener">github.com/livid/exe-hub</a>. You can aggregate this hub by adding it as a peer.</li>
@@ -245,6 +285,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
+    {{with .Compose}}{{template "compose" .}}{{end}}
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
@@ -258,6 +299,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     <div class="pager top"><a class="btn prev back" href="/">{{template "arrow"}}<span>Feed</span></a></div>
     {{template "post" .Post}}
     {{range .Replies}}{{template "post" .}}{{end}}
+    {{with .Compose}}{{template "compose" .}}{{end}}
     <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span></div>
   </div>
 </div>
@@ -499,8 +541,9 @@ localTimes(document);
     const have = new Map([...feed.children].filter(n => n.id).map(n => [n.id, n]));
     const next = [...fresh.children].map(n => {
       const old = have.get(n.id);
-      // the find strip is the reader's (what they typed, the Notify box)
-      return old && (n.id === "find" || old.isEqualNode(n)) ? old : n;
+      // the find and compose strips are the reader's (what they typed,
+      // the Notify box, the wallet that signed in)
+      return old && (n.id === "find" || n.id === "compose" || old.isEqualNode(n)) ? old : n;
     });
     for (const n of [...feed.children]) if (!next.includes(n)) n.remove();
     next.forEach((n, i) => { if (feed.children[i] !== n) feed.insertBefore(n, feed.children[i] || null); });
@@ -516,6 +559,7 @@ localTimes(document);
   };
   const poke = () => { clearTimeout(timer); timer = setTimeout(refresh, 300); };
   document.addEventListener("visibilitychange", () => { if (!document.hidden && wanted) poke(); });
+  window.hubRefresh = poke; // a post from the compose strip shows without waiting for its event
   let down = false;
   const es = new EventSource("/v1/events");
   es.onmessage = poke;
@@ -564,6 +608,301 @@ localTimes(document);
   });
 })();
 </script>{{end}}
+{{if .Compose}}<script>
+// Posting from a Solana wallet (PLAN.md, Posting from a wallet). A hub
+// account is a raw ed25519 key, and so is a Solana address: the wallet's
+// own key signs each message — "exe-hub:v1\n" and the envelope, one
+// popup a post — and the gate checks that same address. There is no
+// session and no cookie; the page remembers which wallet signed in
+// (its name and address, nothing secret) and asks it again, silently,
+// on the next visit. Wallets are found through the Wallet Standard, with
+// the older injected window.solana as a fallback, and the page only ever
+// asks for a message signature, never a transaction.
+(() => {
+  const box = document.querySelector("#compose");
+  if (!box) return;
+  const q = s => box.querySelector(s);
+  const root = document.documentElement;
+  const KEY = "exe-hub-wallet", PREFIX = "exe-hub:v1\n", MAX_TEXT = 8192, MAX_NAME = 64;
+  const replyTo = box.dataset.replyTo || "";
+  const noun = replyTo ? "reply" : "post";
+  const note = q(".note"), signin = q(".signin"), picker = q(".picker"), pickOff = q(".pick-off");
+  const whoRow = q(".who-row"), nameRow = q(".name-row"), nameField = q(".name-field");
+  const text = q(".text"), send = q(".send"), status = q(".status"), rename = q(".rename");
+  const noteText = note.textContent;
+  const enc = new TextEncoder();
+  const bytes = s => enc.encode(s).length;
+  const short = a => a.length > 10 ? a.slice(0, 4) + "…" + a.slice(-4) : a;
+  const b64 = u => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+  const same = (a, b) => a.length === b.length && Array.prototype.every.call(a, (x, i) => x === b[i]);
+  const remember = v => { try { v ? localStorage.setItem(KEY, JSON.stringify(v)) : localStorage.removeItem(KEY); } catch (e) {} };
+  const recall = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } };
+  const declined = e => e && (e.code === 4001 || /reject|declin|cancel|denied/i.test(e.message || ""));
+  const getJSON = async (path, opts) => {
+    const r = await fetch(path, Object.assign({ cache: "no-store" }, opts));
+    const out = await r.json().catch(() => ({}));
+    return { r, out };
+  };
+
+  // ---- wallets: the Wallet Standard's two-way handshake ----
+  const wallets = [];
+  let onWallet = () => {};
+  const registry = { register(...ws) {
+    for (const w of ws) if (w && w.features && w.features["standard:connect"] && w.features["solana:signMessage"] && !wallets.includes(w)) wallets.push(w);
+    onWallet();
+    return () => {};
+  } };
+  addEventListener("wallet-standard:register-wallet", e => { try { e.detail(registry); } catch (err) {} });
+  dispatchEvent(new CustomEvent("wallet-standard:app-ready", { detail: registry }));
+  const legacy = () => {
+    const p = window.solana;
+    return p && typeof p.connect === "function" && typeof p.signMessage === "function"
+      ? { name: p.isPhantom ? "Phantom" : "Solana wallet", legacy: p } : null;
+  };
+  // wallets announce themselves as the page starts; give them a moment
+  const found = new Promise(res => setTimeout(() => res(), 300)).then(() => wallets.length ? wallets : [legacy()].filter(Boolean));
+
+  // connect → { wallet, name, address, pub, sign(message bytes) → signature bytes }
+  const solanaAccount = accounts => (accounts || []).find(a => (a.chains || []).some(c => c.startsWith("solana:"))) || (accounts || [])[0];
+  async function connect(w, silent) {
+    if (w.legacy) {
+      const p = w.legacy;
+      const r = await p.connect(silent ? { onlyIfTrusted: true } : undefined);
+      const pk = (r && r.publicKey) || p.publicKey;
+      if (!pk) throw new Error("no account");
+      return { wallet: w, name: w.name, address: pk.toBase58(), pub: new Uint8Array(pk.toBytes()),
+        sign: async m => { const r = await p.signMessage(m, "utf8"); return new Uint8Array(r.signature || r); } };
+    }
+    const { accounts } = await w.features["standard:connect"].connect(silent ? { silent: true } : undefined);
+    const a = solanaAccount(accounts);
+    if (!a) throw new Error("no account");
+    return { wallet: w, name: w.name, address: a.address, pub: new Uint8Array(a.publicKey),
+      sign: async m => {
+        const [out] = await w.features["solana:signMessage"].signMessage({ account: a, message: m });
+        if (out.signedMessage && !same(out.signedMessage, m)) throw new Error("changed");
+        return new Uint8Array(out.signature);
+      } };
+  }
+
+  // ---- state ----
+  let me = null, verdict = null, until = 0, busy = false, flash = "", timer = 0;
+  const watched = new WeakSet();
+
+  function need(v) {
+    return (v.mints || []).map(m => m.amount + (m.raw ? " raw units" : " tokens") + " of " + short(m.mint)).join(" or ");
+  }
+  function line(left) {
+    const v = verdict;
+    if (!v) return "Checking this address…";
+    if (v.banned) return "This key is banned from posting here.";
+    if (v.gate === "below") return "This address holds less than " + need(v) + ", so it can read but not " + noun + ".";
+    if (v.gate === "unavailable") return "The hub can’t check holdings right now. Try again later.";
+    if (left > 0) return "You can " + noun + " again in " + left + " s.";
+    return "Each " + noun + " asks your wallet for one signature.";
+  }
+  // one pass over everything the state decides: the status line, what is
+  // enabled, and the cooldown's countdown while it runs
+  function render() {
+    clearTimeout(timer);
+    const v = verdict;
+    const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    const can = !!v && !v.banned && v.gate !== "below" && v.gate !== "unavailable";
+    const t = text.value.trim();
+    const over = bytes(t) - MAX_TEXT;
+    send.disabled = busy || !can || left > 0 || !t || over > 0;
+    rename.disabled = busy || !can;
+    status.textContent = over > 0 ? "That is " + over + " bytes past the " + MAX_TEXT + "-byte limit." : flash || line(left);
+    if (left > 0 && !flash) timer = setTimeout(render, 1000);
+  }
+  const tell = s => { flash = s; render(); };
+  // a done message stands a moment, then the status line (and a running
+  // cooldown's countdown) takes over again
+  const done = s => { tell(s); setTimeout(() => { if (flash === s) { flash = ""; render(); } }, 2500); };
+
+  async function check() {
+    verdict = null;
+    render();
+    const author = b64(me.pub);
+    const { r, out } = await getJSON("/v1/gate?author=" + encodeURIComponent(author));
+    if (!me || b64(me.pub) !== author) return;
+    if (!r.ok) { tell("Could not check this address: " + (out.error || "HTTP " + r.status)); return; }
+    verdict = out;
+    until = Date.now() + out.wait * 1000;
+    q(".id").textContent = out.profile;
+    q(".id").title = me.address;
+    const p = await getJSON("/v1/profile/" + out.profile);
+    me.profile = p.r.ok ? p.out : null;
+    q(".name").textContent = me.profile && me.profile.name ? me.profile.name : "No name yet";
+    render();
+  }
+
+  async function start(w, silent) {
+    try {
+      me = await connect(w, silent);
+    } catch (e) {
+      me = null;
+      signedOut();
+      if (!silent) note.textContent = declined(e) ? "Sign-in was declined in the wallet." : "The wallet did not connect: " + (e.message || e);
+      return;
+    }
+    remember({ name: me.name, address: me.address });
+    root.classList.add("wallet");
+    q(".name").textContent = "…";
+    q(".id").textContent = short(me.address);
+    flash = "";
+    watch(w);
+    await check();
+  }
+  function signedOut() {
+    verdict = null; flash = ""; until = 0;
+    remember(null);
+    root.classList.remove("wallet");
+    nameRow.hidden = true; whoRow.hidden = false;
+  }
+  // the wallet switched accounts or forgot this site
+  function watch(w) {
+    const ev = !w.legacy && w.features["standard:events"];
+    if (!ev || watched.has(w)) return;
+    watched.add(w);
+    ev.on("change", ch => {
+      if (!me || me.wallet !== w || !ch || !ch.accounts) return;
+      const a = solanaAccount(ch.accounts);
+      if (!a) { me = null; signedOut(); }
+      else if (a.address !== me.address) start(w, true);
+    });
+  }
+
+  // ---- one signed message ----
+  async function sendOp(type, body) {
+    const author = b64(me.pub);
+    const s = await getJSON("/v1/seq?author=" + encodeURIComponent(author));
+    if (!s.r.ok) throw new Error(s.out.error || "HTTP " + s.r.status);
+    const env = enc.encode(JSON.stringify({ type, author, seq: s.out.seq + 1, ts: Date.now(), body }));
+    const msg = new Uint8Array(PREFIX.length + env.length);
+    msg.set(enc.encode(PREFIX));
+    msg.set(env, PREFIX.length);
+    tell("Waiting for your wallet…");
+    let sig;
+    try {
+      sig = await me.sign(msg);
+    } catch (e) {
+      throw new Error(e.message === "changed" ? "The wallet changed the message before signing it, so the hub could not verify it."
+        : declined(e) ? "You declined in the wallet." : "The wallet could not sign: " + (e.message || e));
+    }
+    tell(type === "profile.set" ? "Saving…" : "Sending…");
+    const { r, out } = await getJSON("/v1/msg", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ envelope: b64(env), sig: b64(sig) }) });
+    if (r.ok) return out.id;
+    if (r.status === 429) {
+      until = Date.now() + (parseInt(r.headers.get("Retry-After"), 10) || verdict.cooldown || 60) * 1000;
+      throw new Error("");
+    }
+    if (r.status === 403) { await check(); if (verdict && verdict.gate === "below") throw new Error(""); }
+    if (r.status === 401) throw new Error("The hub could not verify the wallet’s signature.");
+    if (r.status === 409) throw new Error("Another message from this key landed first. Press " + send.textContent + " again.");
+    throw new Error(out.error || "HTTP " + r.status);
+  }
+
+  // ---- the controls ----
+  signin.addEventListener("click", async () => {
+    const ws = await found;
+    if (ws.length === 1) return start(ws[0], false);
+    if (!ws.length) return;
+    const label = Object.assign(document.createElement("span"), { className: "grow", textContent: "Choose a wallet:" });
+    picker.replaceChildren(label, ...ws.map(w => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn wbtn";
+      if (w.icon) { const i = document.createElement("img"); i.src = w.icon; i.alt = ""; b.append(i); }
+      b.append(w.name);
+      b.addEventListener("click", () => { picker.hidden = true; pickOff.hidden = false; start(w, false); });
+      return b;
+    }), Object.assign(document.createElement("button"), { type: "button", className: "btn", textContent: "Cancel",
+      onclick: () => { picker.hidden = true; pickOff.hidden = false; } }));
+    pickOff.hidden = true;
+    picker.hidden = false;
+  });
+  q(".signout").addEventListener("click", () => {
+    const w = me && me.wallet;
+    me = null;
+    signedOut();
+    note.textContent = noteText;
+    try {
+      if (w && w.legacy && w.legacy.disconnect) w.legacy.disconnect();
+      else if (w && w.features["standard:disconnect"]) w.features["standard:disconnect"].disconnect().catch(() => {});
+    } catch (e) {}
+  });
+  text.addEventListener("input", () => { flash = ""; render(); });
+  text.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !send.disabled) send.click(); });
+  send.addEventListener("click", async () => {
+    const t = text.value.trim();
+    if (!t || busy || !me) return;
+    busy = true;
+    render();
+    try {
+      const body = { text: t };
+      if (replyTo) body.reply_to = replyTo;
+      const id = await sendOp("post.create", body);
+      text.value = "";
+      if (verdict.cooldown) until = Date.now() + verdict.cooldown * 1000;
+      if (replyTo) { history.replaceState(null, "", "#" + id); location.reload(); return; }
+      flash = "";
+      done("Posted.");
+      if (window.hubRefresh) window.hubRefresh(); else location.reload();
+    } catch (e) {
+      flash = e.message;
+    } finally {
+      busy = false;
+      render();
+    }
+  });
+  rename.addEventListener("click", () => {
+    nameField.value = me && me.profile && me.profile.name || "";
+    whoRow.hidden = true;
+    nameRow.hidden = false;
+    nameField.focus();
+  });
+  const nameDone = () => { nameRow.hidden = true; whoRow.hidden = false; };
+  q(".name-cancel").addEventListener("click", nameDone);
+  nameField.addEventListener("keydown", e => {
+    if (e.key === "Enter") q(".name-save").click();
+    if (e.key === "Escape") nameDone();
+  });
+  q(".name-save").addEventListener("click", async () => {
+    const name = nameField.value.trim();
+    if (!name || busy || !me) return;
+    if (bytes(name) > MAX_NAME) { tell("A name is at most " + MAX_NAME + " bytes."); return; }
+    busy = true;
+    render();
+    try {
+      const p = me.profile || {};
+      await sendOp("profile.set", { name, bio: p.bio || undefined, avatar: p.avatar || undefined });
+      nameDone();
+      flash = "";
+      await check();
+      done("Name saved.");
+    } catch (e) {
+      flash = e.message;
+    } finally {
+      busy = false;
+      render();
+    }
+  });
+
+  // ---- start: no wallet, a wallet signed in before, or signed out ----
+  const saved = recall();
+  found.then(ws => {
+    if (!ws.length) {
+      note.textContent = "No Solana wallet in this browser.";
+      signin.disabled = true;
+      onWallet = () => { note.textContent = noteText; signin.disabled = false; };
+    }
+    const w = saved && ws.find(w => w.name === saved.name);
+    if (w) start(w, true);
+    else if (saved) signedOut();
+  });
+})();
+</script>{{end}}
 </body>
 </html>
 {{end}}
@@ -579,6 +918,19 @@ localTimes(document);
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}
+
+{{define "compose"}}<div class="compose{{if .ReplyTo}} bottom{{end}}" id="compose"{{if .ReplyTo}} data-reply-to="{{.ReplyTo}}"{{end}}>
+  <div class="out">
+    <div class="row pick-off"><span class="grow note">{{if .ReplyTo}}Reply{{else}}Post{{end}} from a Solana wallet: one signature a post, never a transaction.</span><button type="button" class="btn signin">Sign in with Solana</button></div>
+    <div class="row picker" hidden></div>
+  </div>
+  <div class="in">
+    <div class="row who-row"><span class="grow who"><b class="name">…</b> <span class="mono id"></span></span><button type="button" class="btn rename" disabled>Name…</button><button type="button" class="btn signout">Sign Out</button></div>
+    <div class="row name-row" hidden><input type="text" class="name-field" placeholder="Display name" aria-label="Display name" autocomplete="off"><button type="button" class="btn name-cancel">Cancel</button><button type="button" class="btn name-save">Save</button></div>
+    <textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea>
+    <div class="row"><span class="grow status">Checking this address…</span><button type="button" class="btn send" disabled>{{if .ReplyTo}}Reply{{else}}Post{{end}}</button></div>
+  </div>
+</div>{{end}}
 
 {{/* the Hub app's back arrow, verbatim (sysapps/hub/index.html), and
      the same glyph mirrored (x → 10 − x) pointing on, for Next */}}

@@ -164,9 +164,16 @@ type webJoin struct {
 }
 
 type webMint struct {
-	Amount string // "10,000", or the raw base units "10000000000" before the RPC has answered
-	Raw    bool   // Amount is raw base units: the RPC has not told the mint's decimals yet
-	Mint   string
+	Amount string `json:"amount"` // "10,000", or the raw base units "10000000000" before the RPC has answered
+	Raw    bool   `json:"raw"`    // Amount is raw base units: the RPC has not told the mint's decimals yet
+	Mint   string `json:"mint"`
+}
+
+// webCompose is the strip that posts from a Solana wallet (see PLAN.md,
+// Posting from a wallet): a new post on the home page, a reply to the
+// post a thread page shows.
+type webCompose struct {
+	ReplyTo string
 }
 
 // webData is the template's world for one page.
@@ -182,6 +189,7 @@ type webData struct {
 	PushKey          string // the home page on a hub that pushes: the VAPID public key for the Notify box
 	Query            string // the search page's words, and what the find strip's field holds
 	Join             *webJoin
+	Compose          *webCompose // the wallet strip: the home page's first page and every thread
 	Post             *webPost
 	Replies          []webPost
 	Profile          *store.Profile
@@ -527,6 +535,9 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
 	}
+	if q.Get("before") == "" && q.Get("after") == "" {
+		d.Compose = &webCompose{}
+	}
 	if s.Push != nil {
 		d.PushKey = s.Push.Public()
 	}
@@ -615,7 +626,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 	}
 	d := &webData{
 		Page: "thread", Title: authorLabel(*p) + " on " + r.Host, Desc: excerpt(p.Text, 200),
-		Post: &post, Replies: replies,
+		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
 	}
 	if len(post.Images) > 0 {
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID

@@ -286,6 +286,15 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication,
   and `stats` (live profile and post counts — the Hub app's info
   dialog; replicated content counts, deleted posts don't).
+- `GET  /v1/gate?author=<pubkey b64>` — whether that key may post here
+  now, before it signs anything: `{profile, mode, gate, banned,
+  cooldown, wait, mints}`, where `gate` is `open`, `admin`, `pass`,
+  `below` or `unavailable`, `wait` the cooldown's seconds left and
+  `mints` the thresholds as the join block shows them. It reaches the
+  verdict `policy()` would for a `post.create`, minus the signature.
+  A check the gate cannot answer from its per-author cache costs an RPC
+  call, so uncached checks share a token bucket (1 a second, 10 burst;
+  429 past it). Public like every read.
 - `GET  /v1/seq?author=<pubkey b64>` — the author's last accepted seq;
   clients fetch it to number their next message.
 - `GET  /v1/feed?before=<id>&limit=` — aggregated feed. Replies are
@@ -410,10 +419,11 @@ OpenGraph title, description (an excerpt) and image (the first picture,
 or the avatar). Post ids are content hashes, so one link resolves on any
 hub that carries the post.
 
-- **Reader only.** Writing stays with signed clients; the pages carry no
-  session, cookie or state-changing form (the search form is a GET, a
-  read like any link), so there is no CSRF surface and nothing to log
-  in to. They read through the same store queries as the JSON API
+- **A reader, and a signed client when a wallet signs in.** Every write
+  is still a signature made in the browser (see Posting from a wallet);
+  the pages carry no session, cookie or state-changing form (the search
+  form is a GET, a read like any link), so there is no CSRF surface and
+  nothing on the server to log in to. They read through the same store queries as the JSON API
   (keyset `?before=` pagination, 30 per page; replies excluded from the
   feed and shown in their thread).
 - **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
@@ -508,6 +518,39 @@ hub that carries the post.
   `<base href="about:srcdoc">`, which keeps `#x` a jump inside the page.
   Relative paths lose the hub as their base, which only ever pointed them
   at the hub's own URLs.
+- **Posting from a wallet (built 2026-09-13).** A Solana address is a
+  raw ed25519 key, and a hub account is one, so a browser wallet's own
+  key is an account: it signs `"exe-hub:v1\n" + envelope` with
+  `solana:signMessage` and the gate checks that same address — the
+  signing protocol, replication and every client are unchanged. The home
+  page's first page carries a strip under the find strip, and a thread a
+  strip above its status line: signed out, **Sign in with Solana**;
+  signed in, the name and profile id with **Name…** and **Sign Out**,
+  the field, and a status line beside **Post** (or **Reply**, to the
+  post the thread page shows). One wallet popup per write: a post, a
+  reply, a name. Wallets are found through the Wallet Standard
+  (`wallet-standard:app-ready` / `register-wallet`, no library), the
+  older injected `window.solana` as a fallback; several wallets get a
+  picker. Only a message is ever signed, never a transaction, and the
+  page checks that the wallet signed the bytes it was given (a wallet
+  that rewrites them before signing cannot post).
+  Before anything is signed, `GET /v1/gate` says whether the key may
+  post: below the threshold, banned or unavailable disables Post and
+  Name… with a line saying why, and a cooldown counts down. There is no
+  session: the page remembers the wallet's name and address in
+  localStorage, nothing secret, and asks that wallet again silently on
+  the next visit; a head script classes `<html>` (`js`, `wallet`)
+  before layout so the strip has its final shape and never jumps.
+  **Name…** sends `profile.set` with the new name, keeping the bio and
+  avatar the profile already has. A post refreshes the live feed at
+  once; a reply reloads the thread at the new reply. Text and names are
+  checked in bytes against the envelope caps before a popup. Not built:
+  attachments (each would be another signature, the upload's) and a
+  session key that would sign without popups (a protocol change every
+  hub would have to accept). The page windows that show admin HTML run
+  in opaque-origin frames and cannot reach the page's wallet code; a
+  wallet extension that injects into such a frame is outside the hub's
+  control.
 - Icons: `/favicon.ico` (32 + 16) and `/apple-touch-icon.png` (180, the
   icon at 5x on the desktop's lavender), drawn from the Hub app's 32px
   pixel art and embedded in the binary; the home and profile pages use

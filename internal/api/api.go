@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"exehub/internal/avatar"
@@ -45,6 +46,38 @@ type Server struct {
 	Hub    *identity.Identity
 	Events *events.Broadcaster // live post activity; nil disables /v1/events
 	Push   *push.Key           // Web Push (the VAPID key); nil disables subscribing and the page's Notify box
+
+	gateLimit bucket // uncached /v1/gate checks, each an RPC call
+}
+
+// bucket is a token bucket, usable at its zero value: gateRate a second,
+// gateBurst at most.
+type bucket struct {
+	mu     sync.Mutex
+	tokens float64
+	last   time.Time
+}
+
+const (
+	gateRate  = 1.0
+	gateBurst = 10.0
+)
+
+func (b *bucket) allow() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := time.Now()
+	if b.last.IsZero() {
+		b.tokens = gateBurst
+	} else {
+		b.tokens = min(gateBurst, b.tokens+now.Sub(b.last).Seconds()*gateRate)
+	}
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
 }
 
 //go:embed skill.md
@@ -109,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/search", s.handleSearch)
 	mux.HandleFunc("GET /v1/embed/{cid}", s.handleEmbed)
 	mux.HandleFunc("GET /v1/seq", s.handleSeq)
+	mux.HandleFunc("GET /v1/gate", s.handleGate)
 	mux.HandleFunc("GET /v1/events", s.handleEvents)
 	mux.HandleFunc("GET /v1/replicate", s.handleReplicate)
 	mux.HandleFunc("GET /v1/peers", s.handlePeers)
@@ -215,6 +249,72 @@ func (s *Server) handleSeq(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int64{"seq": n})
+}
+
+// handleGate says whether a key may post here now, before it signs
+// anything — for the public pages' wallet sign-in, where every signature
+// is a popup. It reaches the verdict policy() would for a post.create,
+// minus the signature: banned, the gate ("open", "admin", "pass",
+// "below" or "unavailable"), and the cooldown's wait in seconds. Public
+// like every read. A check the gate cannot answer from its cache costs
+// an RPC call, so those share a small rate limit (429 past it).
+func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
+	pubB, err := base64.StdEncoding.DecodeString(r.URL.Query().Get("author"))
+	if err != nil || len(pubB) != ed25519.PublicKeySize {
+		writeErr(w, http.StatusBadRequest, errors.New("author must be a base64 ed25519 public key"))
+		return
+	}
+	pub := ed25519.PublicKey(pubB)
+	c := s.Cfg.Get()
+	pid := identity.Fingerprint(pub)
+	out := struct {
+		Profile  string    `json:"profile"`
+		Mode     string    `json:"mode"`
+		Gate     string    `json:"gate"`
+		Banned   bool      `json:"banned"`
+		Cooldown int       `json:"cooldown"`
+		Wait     int       `json:"wait"`
+		Mints    []webMint `json:"mints,omitempty"`
+	}{Profile: pid, Mode: "open", Gate: "open", Cooldown: c.CooldownSec()}
+	banned, err := s.St.Banned(pid)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	out.Banned = banned
+	if c.Gate.Mode == "token" {
+		out.Mode = "token"
+		out.Mints = s.webJoinBlock(r).Mints
+	}
+	switch {
+	case c.IsAdmin(pid):
+		out.Gate, out.Cooldown = "admin", 0
+	case c.Gate.Mode == "token":
+		if !s.Gate.Cached(pub) && !s.gateLimit.allow() {
+			w.Header().Set("Retry-After", "1")
+			writeErr(w, http.StatusTooManyRequests, errors.New("too many gate checks: try again in a second"))
+			return
+		}
+		switch err := s.Gate.Check(pub); {
+		case err == nil:
+			out.Gate = "pass"
+		case errors.Is(err, gate.ErrDenied):
+			out.Gate = "below"
+		default:
+			out.Gate = "unavailable"
+		}
+	}
+	if out.Cooldown > 0 {
+		last, err := s.St.LastPost(base64.StdEncoding.EncodeToString(pub))
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if wait := int64(out.Cooldown)*1000 - (time.Now().UnixMilli() - last); last > 0 && wait > 0 {
+			out.Wait = int((wait + 999) / 1000)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {

@@ -841,3 +841,37 @@ func TestWebPush(t *testing.T) {
 		t.Errorf("still subscribed: %d", n)
 	}
 }
+
+// TestWebCompose: the wallet strip is on the home page's first page and on
+// every thread (replying to the post the page shows), never on an older
+// page, a profile or search; the script asks only for message signatures.
+func TestWebCompose(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	var ids []string
+	for i := int64(1); i <= webPage+1; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, i, "post.create", map[string]any{"text": fmt.Sprintf("post %d", i)}))
+	}
+	h := s.Handler()
+	_, home := get(t, h, "/")
+	for _, want := range []string{`<div class="compose" id="compose">`, `Sign in with Solana`, `classList.add("wallet")`,
+		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`} {
+		if !strings.Contains(home, want) {
+			t.Errorf("home page lacks %q", want)
+		}
+	}
+	for _, never := range []string{"signTransaction", "signAndSendTransaction"} {
+		if strings.Contains(home, never) {
+			t.Errorf("the page mentions %s", never)
+		}
+	}
+	_, thread := get(t, h, "/p/"+ids[0])
+	if !strings.Contains(thread, `<div class="compose bottom" id="compose" data-reply-to="`+ids[0]+`">`) {
+		t.Error("thread page lacks the reply strip")
+	}
+	for _, path := range []string{"/?before=" + ids[1], "/u/" + identity.Fingerprint(pub), "/search?q=post"} {
+		if _, body := get(t, h, path); strings.Contains(body, `id="compose"`) {
+			t.Errorf("%s carries the compose strip", path)
+		}
+	}
+}

@@ -91,6 +91,7 @@ signatures and never a cookie. Writes authenticate by signature alone.
 | `POST /v1/msg` | every mutation, as a signed envelope |
 | `POST /v1/upload`, `POST /v1/avatar` | embed and avatar minting, signed |
 | `GET /v1/hub` | id, pubkey, gate mode, replication flag, live counts, push key |
+| `GET /v1/gate?author=` | whether a key may post now: gate verdict, ban, cooldown wait |
 | `GET /v1/seq?author=` | an author's last accepted `seq` |
 | `GET /v1/feed?before=&limit=` | the feed, replies excluded unless `replies=1` |
 | `GET /v1/post/{id}` | one post with its replies |
@@ -108,8 +109,10 @@ signatures and never a cookie. Writes authenticate by signature alone.
 `/p/{id}` a thread, `/u/{id}` a profile, `/search?q=` a search. They are
 server-rendered, shaped like an
 exe desktop window in Mac OS 9 chrome, with no assets and almost no
-script: a picture viewer, a live first page fed by `/v1/events`, and a
-Notify bell. Every post has a link anyone can open, and a pasted link
+script: a picture viewer, a live first page fed by `/v1/events`, a
+Notify bell, and Sign in with Solana, which posts, replies and sets a
+name from a browser wallet, one signature a write and never a
+transaction, the wallet's address being the key the gate checks. Every post has a link anyone can open, and a pasted link
 unfurls with OpenGraph title, excerpt and picture. The pages install as a
 web app, and an installed copy, on a phone most of all, can receive a
 push notification for every post that lands: RFC 8030, 8291 and 8292 in

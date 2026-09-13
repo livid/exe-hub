@@ -82,6 +82,19 @@ func (g *Gate) Decimals(mint string) (dec int, ok bool) {
 	return *out.Result.Value.Decimals, true
 }
 
+// Cached says whether Check would answer pub from its cache — open mode
+// or a verdict younger than recheck — without asking the RPC.
+func (g *Gate) Cached(pub ed25519.PublicKey) bool {
+	c := g.cfg.Get()
+	if c.Gate.Mode != "token" {
+		return true
+	}
+	g.mu.Lock()
+	v, ok := g.cache[Base58(pub)]
+	g.mu.Unlock()
+	return ok && time.Since(v.at) < c.Gate.Token.RecheckDur
+}
+
 // Check returns nil if pub may write under the current gate config.
 func (g *Gate) Check(pub ed25519.PublicKey) error {
 	c := g.cfg.Get()
