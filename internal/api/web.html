@@ -181,11 +181,20 @@ a { color: #333399; }
 .compose .dlg h2 { font-size: 12px; margin: 0 0 10px; }
 .compose .irow { display: flex; gap: 8px; margin: 0 0 6px; align-items: baseline; }
 .compose .name-irow { align-items: center; min-height: 20px; }
+/* the picture: the hub's 128px avatar in a 48px box, with Choose
+   Picture… beside it while editing; the row is the box's height in
+   both modes, so Edit changes nothing's place */
+.compose .pic-irow { align-items: center; }
+.compose .ival.pic { display: flex; align-items: center; gap: 12px; }
+.compose .p-ava { flex: none; box-sizing: border-box; width: 48px; height: 48px; border: 1px solid #262626; background: #ccc; }
+.compose .p-ava img { display: block; width: 46px; height: 46px; }
 .compose .ilab { width: 56px; flex: none; font-size: 11px; color: #555; text-align: right; }
 .compose .ival { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .compose .ival .line { display: block; }
 .compose .ival .sub { display: block; font-size: 11px; color: #555; }
-.compose .p-note { font-size: 11px; min-height: 14px; margin-top: 6px; color: #555; }
+/* the dialog's message line holds two lines of room before anything is
+   said, so a note or an error (a declined signature wraps) moves nothing */
+.compose .p-note { font-size: 11px; line-height: 16px; min-height: 32px; margin-top: 6px; color: #555; }
 .compose .p-note.err { color: #cc3333; }
 .compose .btns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; }
 .compose .btns .left { margin-right: auto; }
@@ -651,13 +660,15 @@ localTimes(document);
   if (!box) return;
   const q = s => box.querySelector(s);
   const root = document.documentElement;
-  const KEY = "exe-hub-wallet", PREFIX = "exe-hub:v1\n", MAX_TEXT = 8192, MAX_NAME = 64;
+  const KEY = "exe-hub-wallet", PREFIX = "exe-hub:v1\n", UPLOAD = "exe-hub:v1\nupload\n";
+  const MAX_TEXT = 8192, MAX_NAME = 64, MAX_PICTURE = 8 << 20;
   const replyTo = box.dataset.replyTo || "";
   const noun = replyTo ? "reply" : "post";
   const note = q(".note"), signin = q(".signin"), picker = q(".picker"), pickOff = q(".pick-off");
   const text = q(".text"), send = q(".send"), status = q(".status"), profileBtn = q(".profile-btn");
   const veil = q(".veil"), pName = q(".p-name"), nameField = q(".name-field"), pHeld = q(".p-held"), pNote = q(".p-note");
   const pEdit = q(".p-edit"), pOk = q(".p-ok"), pCancel = q(".p-cancel"), pSave = q(".p-save");
+  const pAva = q(".p-ava img"), pChoose = q(".p-choose"), pFile = q(".p-file");
   const noteText = note.textContent;
   const enc = new TextEncoder();
   const bytes = s => enc.encode(s).length;
@@ -667,6 +678,49 @@ localTimes(document);
   const remember = v => { try { v ? localStorage.setItem(KEY, JSON.stringify(v)) : localStorage.removeItem(KEY); } catch (e) {} };
   const recall = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } };
   const declined = e => e && (e.code === 4001 || /reject|declin|cancel|denied/i.test(e.message || ""));
+  // SHA-256 as hex, for the upload signature: the browser's own where the
+  // page is a secure context (https, localhost); this small one where it
+  // is not — the host hub is plain http on its Tailscale address, and
+  // crypto.subtle is absent there
+  const sha256js = data => {
+    const frac = x => (x - Math.floor(x)) * 4294967296 >>> 0;
+    const primes = [];
+    for (let n = 2; primes.length < 64; n++) if (primes.every(p => n % p)) primes.push(n);
+    const K = primes.map(p => frac(Math.cbrt(p)));
+    const H = primes.slice(0, 8).map(p => frac(Math.sqrt(p)));
+    const len = data.length, n = Math.ceil((len + 9) / 64) * 64;
+    const m = new Uint8Array(n);
+    m.set(data);
+    m[len] = 0x80;
+    const dv = new DataView(m.buffer);
+    dv.setUint32(n - 8, Math.floor(len / 0x20000000));
+    dv.setUint32(n - 4, (len * 8) >>> 0);
+    const r = (x, k) => (x >>> k) | (x << (32 - k));
+    const w = new Uint32Array(64);
+    for (let i = 0; i < n; i += 64) {
+      for (let t = 0; t < 16; t++) w[t] = dv.getUint32(i + t * 4);
+      for (let t = 16; t < 64; t++) {
+        const x = w[t - 2], y = w[t - 15];
+        w[t] = ((r(x, 17) ^ r(x, 19) ^ (x >>> 10)) + w[t - 7] + (r(y, 7) ^ r(y, 18) ^ (y >>> 3)) + w[t - 16]) >>> 0;
+      }
+      let [a, b, c, d, e, f, g, h] = H;
+      for (let t = 0; t < 64; t++) {
+        const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[t] + w[t]) >>> 0;
+        const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+        h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    return H.map(x => x.toString(16).padStart(8, "0")).join("");
+  };
+  const sha256hex = async data => {
+    if (window.crypto && crypto.subtle) {
+      const d = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+      return Array.from(d, x => x.toString(16).padStart(2, "0")).join("");
+    }
+    return sha256js(data);
+  };
   const getJSON = async (path, opts) => {
     const r = await fetch(path, Object.assign({ cache: "no-store" }, opts));
     const out = await r.json().catch(() => ({}));
@@ -812,6 +866,14 @@ localTimes(document);
   }
 
   // ---- one signed message ----
+  async function signed(msg) {
+    try {
+      return await me.sign(msg);
+    } catch (e) {
+      throw new Error(e.message === "changed" ? "The wallet changed the message before signing it, so the hub could not verify it."
+        : declined(e) ? "You declined in the wallet." : "The wallet could not sign: " + (e.message || e));
+    }
+  }
   async function sendOp(type, body, say = tell) {
     const author = b64(me.pub);
     const s = await getJSON("/v1/seq?author=" + encodeURIComponent(author));
@@ -821,13 +883,7 @@ localTimes(document);
     msg.set(enc.encode(PREFIX));
     msg.set(env, PREFIX.length);
     say("Waiting for your wallet…");
-    let sig;
-    try {
-      sig = await me.sign(msg);
-    } catch (e) {
-      throw new Error(e.message === "changed" ? "The wallet changed the message before signing it, so the hub could not verify it."
-        : declined(e) ? "You declined in the wallet." : "The wallet could not sign: " + (e.message || e));
-    }
+    const sig = await signed(msg);
     say(type === "profile.set" ? "Saving…" : "Sending…");
     const { r, out } = await getJSON("/v1/msg", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ envelope: b64(env), sig: b64(sig) }) });
@@ -913,8 +969,16 @@ localTimes(document);
       : "";
     return why ? [...lines, span("sub", why)] : lines;
   }
+  let pending = ""; // a picture uploaded while editing, not yet saved
+  const showAva = cid => {
+    if (cid) { pAva.src = "/v1/embed/" + cid; pAva.hidden = false; }
+    else { pAva.removeAttribute("src"); pAva.hidden = true; }
+  };
+  const lock = on => { pChoose.disabled = pSave.disabled = pCancel.disabled = nameField.disabled = on; };
   function editMode(on) {
     editing = on;
+    pending = "";
+    pChoose.hidden = !on;
     pName.hidden = on;
     nameField.hidden = !on;
     pEdit.hidden = pOk.hidden = on;
@@ -924,6 +988,7 @@ localTimes(document);
   function fillProfile() {
     const v = verdict;
     pName.textContent = me.profile && me.profile.name ? me.profile.name : "No name yet";
+    showAva(me.profile && me.profile.avatar);
     pHeld.replaceChildren(...holding(v));
     // profile.set meets the gate like a post
     pEdit.disabled = v.banned || v.gate === "below" || v.gate === "unavailable";
@@ -956,7 +1021,46 @@ localTimes(document);
     nameField.focus();
     nameField.select();
   });
-  pCancel.addEventListener("click", () => { editMode(false); pEdit.focus(); });
+  // Cancel drops a picture uploaded meanwhile; the hub sweeps it within a day
+  pCancel.addEventListener("click", () => { editMode(false); fillProfile(); pEdit.focus(); });
+  // Choose Picture…: one signature authorizes the upload — the text says
+  // upload, the time and the file's SHA-256 — and the hub, which checks
+  // it against the gate like a post, answers with its own 128px PNG
+  pChoose.addEventListener("click", () => pFile.click());
+  pFile.addEventListener("change", async () => {
+    const f = pFile.files[0];
+    pFile.value = "";
+    if (!f || !me || busy) return;
+    if (f.size > MAX_PICTURE) { pSay("A picture is at most 8 MB.", true); return; }
+    busy = true;
+    lock(true);
+    render();
+    try {
+      const body = new Uint8Array(await f.arrayBuffer());
+      const ts = String(Date.now());
+      const digest = await sha256hex(body);
+      pSay("Waiting for your wallet…");
+      const sig = await signed(enc.encode(UPLOAD + ts + "\n" + digest));
+      pSay("Uploading…");
+      const { r, out } = await getJSON("/v1/avatar", { method: "POST", body,
+        headers: { "Content-Type": f.type || "application/octet-stream", "X-Hub-Author": b64(me.pub), "X-Hub-Ts": ts, "X-Hub-Sig": b64(sig) } });
+      if (!r.ok) {
+        throw new Error(r.status === 413 ? "A picture is at most 8 MB."
+          : r.status === 503 ? "The hub can’t store pictures right now. Try again later."
+          : r.status === 400 && /decod|dimension/i.test(out.error || "") ? "That file isn’t a picture the hub can read. Try a PNG, JPEG or GIF."
+          : out.error || "HTTP " + r.status);
+      }
+      pending = out.cid;
+      showAva(pending);
+      pSay("Save to use this picture.");
+    } catch (e) {
+      pSay(e.message, true);
+    } finally {
+      busy = false;
+      lock(false);
+      render();
+    }
+  });
   // a modal: Return is the default, Escape backs out, Tab stays inside
   document.addEventListener("keydown", e => {
     if (veil.hidden) return;
@@ -975,21 +1079,21 @@ localTimes(document);
     if (!name) { pSay("A name is required.", true); return; }
     if (bytes(name) > MAX_NAME) { pSay("A name is at most " + MAX_NAME + " bytes.", true); return; }
     busy = true;
-    pSave.disabled = pCancel.disabled = nameField.disabled = true;
+    lock(true);
     render();
     try {
       const p = me.profile || {};
-      await sendOp("profile.set", { name, bio: p.bio || undefined, avatar: p.avatar || undefined }, t => pSay(t));
+      await sendOp("profile.set", { name, bio: p.bio || undefined, avatar: pending || p.avatar || undefined }, t => pSay(t));
       adopt(await load());
       editMode(false);
       fillProfile();
-      pSay("Name saved.");
+      pSay("Profile saved.");
       pOk.focus();
     } catch (e) {
       pSay(e.message || line(0), true);
     } finally {
       busy = false;
-      pSave.disabled = pCancel.disabled = nameField.disabled = false;
+      lock(false);
       render();
     }
   });
@@ -1039,6 +1143,7 @@ localTimes(document);
   <div class="veil" hidden>
     <div class="dlg" role="dialog" aria-modal="true" aria-label="Profile">
       <h2>Profile</h2>
+      <div class="irow pic-irow"><span class="ilab">Picture</span><span class="ival pic"><span class="p-ava"><img alt="" hidden></span><button type="button" class="btn p-choose" hidden>Choose Picture…</button><input type="file" class="p-file" accept="image/png,image/jpeg,image/gif" hidden></span></div>
       <div class="irow name-irow"><span class="ilab">Name</span><span class="ival p-name"></span><input type="text" class="name-field" aria-label="Display name" autocomplete="off" hidden></div>
       <div class="irow"><span class="ilab">Holding</span><span class="ival p-held"></span></div>
       <div class="p-note"></div>

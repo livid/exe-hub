@@ -867,7 +867,8 @@ func TestWebCompose(t *testing.T) {
 	}
 	for _, want := range []string{`<span class="title">Post</span>`, `<div class="frame"><div class="compose" id="compose">`, `Sign in with Solana`, `classList.add("wallet")`,
 		`class="btn profile-btn">Profile…</button>`, `role="dialog" aria-modal="true" aria-label="Profile"`,
-		`<button type="button" class="btn left p-edit">Edit</button>`,
+		`<button type="button" class="btn left p-edit">Edit</button>`, `class="btn p-choose" hidden>Choose Picture…</button>`,
+		`accept="image/png,image/jpeg,image/gif"`, `"/v1/avatar"`, `"exe-hub:v1\nupload\n"`,
 		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`} {
 		if !strings.Contains(home, want) {
 			t.Errorf("home page lacks %q", want)

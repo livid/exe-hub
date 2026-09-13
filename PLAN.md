@@ -534,14 +534,23 @@ hub that carries the post.
   signed in, the name and profile id with **Profile…** and **Sign Out**,
   the field, and a status line beside **Post** (or **Reply**, to the
   post the thread page shows). One wallet popup per write: a post, a
-  reply, a name. **Profile…** opens a modal dialog, the Hub app's dialog
-  panel: Name, and Holding (each mint's balance, then whether that is
-  enough, with the threshold), **Edit** at the lower left and **OK**,
-  the default, at the right. It fetches `/v1/gate` and the profile
+  reply, a name, a picture. **Profile…** opens a modal dialog, the Hub
+  app's dialog panel: Picture (the avatar in a 48px box), Name, and
+  Holding (each mint's balance, then whether that is enough, with the
+  threshold), **Edit** at the lower left and **OK**, the default, at the
+  right. It fetches `/v1/gate` and the profile
   before it shows, so it opens at its final size. Edit turns the name
   into a field with **Cancel** and **Save** (the default) in place of
-  Edit and OK, at the same height; Save sends `profile.set` with the new
-  name, keeping the bio and avatar the profile already has. Edit is
+  Edit and OK, at the same height; Edit also shows **Choose Picture…**: the
+  page hashes the file (SHA-256, the browser's own on a secure page and
+  a small built-in one on the host hub's plain http), the wallet signs
+  the upload authorization `"exe-hub:v1\nupload\n" + ts + "\n" + hex
+  digest` — one popup — and `POST /v1/avatar` answers with the hub's
+  128px PNG, shown in the box. Save sends `profile.set` with the name
+  and the new picture (or the one the profile had), keeping the bio: a
+  second popup. Cancel drops an uploaded picture, which the staged-upload
+  sweep unpins within a day. The dialog's message line keeps two lines
+  of room, so a note or a wrapped error moves nothing. Edit is
   disabled when the gate would refuse the write. Return presses the
   default, Escape backs out, Tab stays in the dialog. Wallets are found through the Wallet Standard
   (`wallet-standard:app-ready` / `register-wallet`, no library), the
@@ -559,7 +568,7 @@ hub that carries the post.
   A post refreshes the live feed at
   once; a reply reloads the thread at the new reply. Text and names are
   checked in bytes against the envelope caps before a popup. Not built:
-  attachments (each would be another signature, the upload's) and a
+  attachments in posts (each would be another signature, the upload's) and a
   session key that would sign without popups (a protocol change every
   hub would have to accept). The page windows that show admin HTML run
   in opaque-origin frames and cannot reach the page's wallet code; a
