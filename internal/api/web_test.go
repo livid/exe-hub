@@ -632,6 +632,13 @@ func TestWebPage(t *testing.T) {
 	if strings.Contains(body, `allow-same-origin`) {
 		t.Error("a page must never get allow-same-origin")
 	}
+	// the zoom glyph is positioned inside its box, not at the window's
+	// corner over the close box
+	for _, want := range []string{`.tbox { position: relative;`, `.viewer.pageview .tbox.zoom::after { content: ""; position: absolute; left: -1px; top: -1px; width: 7px; height: 7px;`, `box-sizing: border-box; border: 1px solid #262626; }`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page window CSS lacks %q", want)
+		}
+	}
 	// the JSON reads carry the same decision, for the Hub app
 	_, js := get(t, s.Handler(), "/v1/feed")
 	var feed struct {

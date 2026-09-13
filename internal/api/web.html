@@ -45,7 +45,7 @@ a { color: #333399; }
   .desk .join { display: none; }
 }
 .titlebar { display: flex; align-items: center; gap: 4px; padding: 2px 4px; }
-.tbox { width: 9px; height: 9px; border: 1px solid #262626; background: #ddd; flex: none;
+.tbox { position: relative; width: 9px; height: 9px; border: 1px solid #262626; background: #ddd; flex: none;
   box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #888; }
 .tbox a { display: block; width: 100%; height: 100%; }
 .stripe { flex: 1; height: 12px; min-width: 8px; background-color: #ddd;
@@ -258,7 +258,12 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .viewer.pageview .statusbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .viewer.pageview.dragging iframe { pointer-events: none; }
 .viewer.pageview .tbox.zoom { cursor: default; }
-.viewer.pageview .tbox.zoom::after { content: ""; position: absolute; left: 2px; top: 2px; width: 5px; height: 5px; border: 1px solid #262626; border-width: 1px 0 0 1px; }
+/* the zoom glyph, as the desktop draws it: a small square in the box's
+   top-left whose top and left edges are the box's own frame (so its
+   right and bottom edges show). The box is positioned (.tbox) so the
+   square lands in it, not at the window's corner over the close box. */
+.viewer.pageview .tbox.zoom::after { content: ""; position: absolute; left: -1px; top: -1px; width: 7px; height: 7px;
+  box-sizing: border-box; border: 1px solid #262626; }
 .profile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
 .profile .av { width: 64px; height: 64px; }
 .profile .av img { width: 62px; height: 62px; }
