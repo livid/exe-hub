@@ -399,6 +399,18 @@ localTimes(document);
     if (full) { w.style.left = "4px"; w.style.top = "4px"; }
   };
   addEventListener("resize", () => document.querySelectorAll(".viewer.pageview").forEach(size));
+  // A srcdoc page resolves its links against this page, so its own #anchor
+  // links loaded the hub's thread into the frame. A base of about:srcdoc
+  // keeps #x a jump inside the page. It opens <head>, or follows the doctype
+  // when there is none: anything before the doctype drops a page into quirks
+  // mode. Relative paths lose the hub as their base, which only ever pointed
+  // them at the hub's own URLs.
+  const withBase = text => {
+    const base = '<base href="about:srcdoc">';
+    const m = /<head(?:\s[^>]*)?>/i.exec(text) || /<!doctype[^>]*>/i.exec(text);
+    const at = m ? m.index + m[0].length : 0;
+    return text.slice(0, at) + base + text.slice(at);
+  };
   const openPage = async (href, name, cid) => {
     const w = document.createElement("div");
     w.className = "window viewer pageview";
@@ -437,7 +449,7 @@ localTimes(document);
       const res = await fetch(href, { credentials: "omit" });
       if (!res.ok) throw new Error(res.status + " " + res.statusText);
       const text = await res.text();
-      w.querySelector("iframe").srcdoc = text;
+      w.querySelector("iframe").srcdoc = withBase(text);
       const kb = Math.max(1, Math.round(text.length / 1024));
       status.textContent = name + " \u00b7 " + kb + " KB \u00b7 " + cid;
     } catch (err) {

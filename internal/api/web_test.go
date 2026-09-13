@@ -623,7 +623,8 @@ func TestWebPage(t *testing.T) {
 	if !strings.Contains(body, `<a class="file" href="/v1/embed/`+cid+`">Sheet.html (text/html; charset=utf-8)</a>`) {
 		t.Error("a non-admin's HTML embed should stay a file link")
 	}
-	for _, want := range []string{`sandbox="allow-scripts allow-popups allow-forms allow-modals"`, `closest("a.pic, a.page")`, `#page=`} {
+	for _, want := range []string{`sandbox="allow-scripts allow-popups allow-forms allow-modals"`, `closest("a.pic, a.page")`, `#page=`,
+		`'<base href="about:srcdoc">'`, `.srcdoc = withBase(text)`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page script missing %q", want)
 		}

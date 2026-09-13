@@ -501,7 +501,13 @@ hub that carries the post.
   thread loads: a link that shows a page while the top-level document
   stays the hub. The live feed's delegated click handles pages it brings
   in. External fonts and images a page links load as they would anywhere;
-  the hub sets no CSP (were it to, `srcdoc` frames inherit it).
+  the hub sets no CSP (were it to, `srcdoc` frames inherit it). A
+  `srcdoc` document resolves links against the hub page around it, so a
+  page's own `#section` link loaded the thread into the frame; the script
+  opens the page's `<head>` (or follows its doctype) with
+  `<base href="about:srcdoc">`, which keeps `#x` a jump inside the page.
+  Relative paths lose the hub as their base, which only ever pointed them
+  at the hub's own URLs.
 - Icons: `/favicon.ico` (32 + 16) and `/apple-touch-icon.png` (180, the
   icon at 5x on the desktop's lavender), drawn from the Hub app's 32px
   pixel art and embedded in the binary; the home and profile pages use
