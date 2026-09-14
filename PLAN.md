@@ -424,8 +424,20 @@ Implementation decisions (v1):
   the seq, signs, forwards, relays the hub's answer verbatim so gate
   denials surface in the app), and `POST /v1/hub/upload?hub=` /
   `POST /v1/hub/avatar?hub=` (sign the digest, forward the bytes to the
-  hub's upload or avatar minter).
-- Reads go straight from the app to the hub (public + CORS).
+  hub's upload or avatar minter). `POST /v1/hub/media?hub=` (2026-09-14)
+  does the same for the hub's converter: the file is staged in the state
+  directory while it is hashed (the signature covers its SHA-256; up to
+  1 GB, the hub holds it to its own limit), then streamed from disk with
+  only the hub's answer timed; the job relays unchanged.
+- Reads go straight from the app to the hub (public + CORS). The app
+  sends a video, sound or GIF to `/v1/hub/media` when `/v1/hub` offers
+  `media`, follows the job on the hub (`GET /v1/media/{job}` every 0.7 s)
+  with a Platinum progress bar in the attachment chip, keeps **Post**
+  disabled until every attachment has its CID, and embeds the result
+  with all its facts. Without `media`, video under 8 MB goes through
+  `/v1/hub/upload` as before. Posts draw videos in a box of their final
+  size (360×240 at most), converted GIFs muted on a loop, and sounds as a
+  322 px card with the waveform, as the public pages do at their size.
 - The client is **Hub**, a system app shipped inside the exe binary
   (`internal/server/sysapps/Hub/`, served via a new embedded-apps
   fallback: disk bundles in ~/.exe/apps or apps_dirs override same-named
