@@ -624,7 +624,7 @@ func TestWebMedia(t *testing.T) {
 	_, body := get(t, s.Handler(), "/p/"+id)
 	for _, want := range []string{
 		`<div class="vid" style="width: 236px; aspect-ratio: 236 / 420"><video src="/v1/embed/` + vid + `" poster="/v1/embed/` + poster + `" controls playsinline preload="none"></video></div>`,
-		`<div class="vid" style="width: 480px; aspect-ratio: 480 / 270"><video src="/v1/embed/` + gif + `" poster="/v1/embed/` + gposter + `" autoplay loop muted playsinline preload="auto"></video></div>`,
+		`<div class="vid" data-loop style="width: 480px; aspect-ratio: 480 / 270"><video src="/v1/embed/` + gif + `" poster="/v1/embed/` + gposter + `" autoplay loop muted playsinline preload="auto"></video></div>`,
 		`<div class="aud"><img class="wave" src="/v1/embed/` + wave + `" alt=""><audio controls preload="none" src="/v1/embed/` + snd + `"></audio><span class="afoot">waves.m4a · 1:23</span></div>`,
 		`<div class="vid" style="width: 100%; aspect-ratio: 16 / 9"><video src="/v1/embed/` + bare + `" controls playsinline preload="metadata" aria-label="a clip"></video></div>`,
 		`<meta property="og:image" content="http://hub.example/v1/embed/` + poster + `">`,

@@ -450,9 +450,9 @@ Implementation decisions (v1):
 
 `GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
 profile, `/search?q=` the posts holding some words — server-rendered HTML (`internal/api/web.go` + `web.html`,
-embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond four
+embedded), Mac OS 9 chrome, no assets, and no JavaScript beyond a few
 small inline scripts and a push-only service worker: the local-time
-rewrite (below), the picture
+rewrite (below), videos that play in view (see Video and sound), the picture
 viewer — a click on a picture opens it in a window of its own (fixed,
 cascading, dragged by its title bar, closed by its box or Escape, size
 in pixels on its status line), like the desktop's PictureViewer — and,
@@ -545,6 +545,24 @@ hub that carries the post.
   the first picture, else the first video's frame or sound's waveform.
   Native controls come first; a Platinum movie controller sampled from
   QuickTime on the Mac OS 9 guest is still to do.
+- **Videos in view play themselves** (2026-09-14, after sepia.sol.build's
+  script, which Livid pointed at): an IntersectionObserver plays a video,
+  muted and looping, once half of it is in view (or half the view, for
+  one taller than that) and pauses it when it leaves — `isIntersecting`
+  alone is any sliver, which the reference script trips on. A video's
+  controls show while the mouse moves over it (hidden 2 s after it goes
+  still, at once when it leaves) or for 3 s after a tap, and stay while
+  it is paused; a video its reader paused stays paused when scrolled back.
+  Unmuting one mutes the rest. The script takes a converted GIF's
+  `autoplay` (there for readers without script) so the observer decides,
+  and a GIF never wears controls. With `prefers-reduced-motion` or
+  Save-Data nothing starts on its own and every video has controls;
+  without script every video keeps its own. A MutationObserver picks up
+  the live feed's new posts, and videos that leave the document are
+  unobserved. The Hub app does the same in its feed. Checked by
+  `~/tools/playwright/exe-hub-video-autoplay-test.js` (MODE=pages or
+  app), which answers every video embed with a WebM stand-in: Playwright's
+  Chromium has no H.264.
 - **Pages (built 2026-09-11).** An HTML embed posted by an admin key is a
   page, and a click on it opens it in a window of its own, like a picture:
   a fixed, cascading, draggable Platinum window with a close box, a zoom
