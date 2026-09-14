@@ -193,6 +193,9 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 	case *envelope.PostCreate:
 		for _, em := range v.Embeds {
 			p.mirror(base, hub, em.CID, false)
+			if em.Poster != "" {
+				p.mirror(base, hub, em.Poster, false)
+			}
 		}
 	case *envelope.ProfileSet:
 		if v.Avatar != "" {

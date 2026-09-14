@@ -248,6 +248,19 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 
 - Up to 4 per post. Fields: `cid` (required, CIDv1), `mime` (required),
   `filename` (optional), `alt` (optional). Each ≤ 8 MB.
+- A video, a sound or an animated picture may also carry its player
+  facts, signed with the post (2026-09-14): `poster` (a pinned CID — a
+  JPEG frame for video, a PNG waveform for sound), `width` and `height`
+  (as displayed, rotation applied; both or neither, ≤ 16384), `duration`
+  (seconds) and `loop` (an animated picture: muted, looping, no
+  controls). Every hub draws the player box at its final size from them,
+  a hub without ffmpeg included. The poster is refcounted with the embed
+  (released on delete, restored by a rebuild) and mirrored beside it. A
+  file `/v1/media` converted keeps what the conversion measured in its
+  pin row; a post naming it must repeat those facts exactly or leave them
+  all out (`ErrFacts`, 400), so no one can sign another's video into a
+  wrong shape. A plain upload declares its own. Older hubs ignore the
+  fields: body decoding is not strict.
 - **Hub-mediated upload only in v1:** client POSTs bytes → hub enforces
   size, sniffs the real MIME (doesn't trust the declaration), adds + pins
   via kubo RPC (`/api/v0/add`), returns the CID. No arbitrary external
@@ -268,6 +281,14 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   video and audio are served inline; everything else, HTML included, as an
   attachment: the hub's origin never serves a stored document as a page
   (see Pages under Public pages for how an HTML embed is read).
+- Byte ranges (2026-09-14): the handler is `http.ServeContent` over a
+  seekable view of the pin (`ipfs.File`), so Range, If-Range,
+  If-None-Match (the ETag is the quoted CID) and HEAD work, and every span
+  is one kubo `cat` with `offset`/`length` — a seek costs only the blocks
+  it reads. Safari will not play a video from a server that answers a
+  Range request with the whole body. cat streams through its own client
+  whose only timeout is kubo's response headers (30 s); the body lives as
+  long as the request, so a slow reader is never cut off at a minute.
 
 ## HTTP API
 
@@ -316,7 +337,7 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   match" line. 400 without `q`.
 - `GET  /v1/embed/{cid}` — embed bytes proxy (pinned CIDs only, immutable
   cache headers; inline disposition for image/video/audio, attachment
-  otherwise).
+  otherwise; byte ranges, HEAD and If-None-Match, see Embeds & IPFS).
 - `GET  /v1/events` — live activity as SSE, public like all reads (it
   reveals nothing the feed doesn't). Unnamed events; the data is
   `{"type","id","reply_to?","author"}` where type is `post.create`,
@@ -368,7 +389,12 @@ Implementation decisions (v1):
 - Config-assigned admins bypass the token gate for their own writes too —
   it's their hub; the gate is for strangers.
 - The upload's declared MIME is advisory: the hub sniffs the real type and
-  the sniffed type is what `/v1/embed` serves with.
+  the sniffed type is what `/v1/embed` serves with. `media.Sniff` reads an
+  ISO media file's ftyp brands before Go's sniffer, which knows only
+  "mp4…" brands and called a QuickTime movie, an .m4a and ffmpeg's own mp4
+  (major brand isom) application/octet-stream: `qt  ` is video/quicktime,
+  `M4A ` audio/mp4, `3gp*` video/3gpp, the isom/mp4/avc1 family video/mp4,
+  HEIF and AVIF brands stay pictures; FLAC is audio/flac.
 - Staged uploads (refcount 0) that no post references within 24h are swept
   and unpinned hourly.
 - Content caps: post text 8KB, name 64B, bio 1KB, alt 512B, filename 128B,

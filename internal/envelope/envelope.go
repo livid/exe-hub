@@ -51,7 +51,23 @@ type Embed struct {
 	MIME     string `json:"mime"`
 	Filename string `json:"filename,omitempty"`
 	Alt      string `json:"alt,omitempty"`
+	// A video, a sound or an animated picture converted by /v1/media
+	// carries what its player needs before the file loads (PLAN.md,
+	// Media), signed like the rest: every hub draws the box at its final
+	// size, the ones without ffmpeg included.
+	Poster   string  `json:"poster,omitempty"` // a pinned CID: a JPEG frame for video, a PNG waveform for sound
+	Width    int     `json:"width,omitempty"`  // pixels as displayed, rotation applied
+	Height   int     `json:"height,omitempty"`
+	Duration float64 `json:"duration,omitempty"` // seconds
+	Loop     bool    `json:"loop,omitempty"`     // an animated picture: plays muted, over and over, without controls
 }
+
+// MaxSide bounds an embed's declared width and height; MaxDuration its
+// length in seconds.
+const (
+	MaxSide     = 16384
+	MaxDuration = 86400
+)
 
 type ProfileSet struct {
 	Name   string `json:"name"`
@@ -203,6 +219,15 @@ func (e *Envelope) Op() (any, error) {
 			}
 			if len(em.Filename) > MaxFilename || len(em.Alt) > MaxAlt {
 				return nil, errors.New("embed filename/alt too long")
+			}
+			if em.Poster != "" && !validCID(em.Poster) {
+				return nil, errors.New("embed poster: not a CID")
+			}
+			if em.Width < 0 || em.Height < 0 || em.Width > MaxSide || em.Height > MaxSide || (em.Width == 0) != (em.Height == 0) {
+				return nil, fmt.Errorf("embed width and height: both or neither, at most %d", MaxSide)
+			}
+			if em.Duration < 0 || em.Duration > MaxDuration {
+				return nil, errors.New("embed duration out of range")
 			}
 		}
 		return v, nil

@@ -27,6 +27,7 @@ import (
 	"exehub/internal/gate"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/media"
 	"exehub/internal/push"
 	"exehub/internal/store"
 )
@@ -379,7 +380,7 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err)
 		return
 	case errors.Is(err, store.ErrNotOwner), errors.Is(err, store.ErrNoPin),
-		errors.Is(err, store.ErrNotAvatar), errors.Is(err, store.ErrNotFound):
+		errors.Is(err, store.ErrNotAvatar), errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrFacts):
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	case err != nil:
@@ -519,10 +520,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	// Sniff the real MIME; the declared one is advisory. The sniffed type
 	// is what /v1/embed will serve with.
-	mime := http.DetectContentType(body)
-	if i := strings.Index(mime, ";"); i > 0 {
-		mime = mime[:i]
-	}
+	mime := media.Sniff(body)
 	cid, ok := s.pinBytes(w, body, mime, false)
 	if !ok {
 		return
@@ -665,17 +663,13 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	rc, err := s.IPFS.Cat(cid)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
-		return
-	}
-	defer rc.Close()
+	f := s.IPFS.Open(r.Context(), cid, pin.Size)
+	defer f.Close()
 	w.Header().Set("Content-Type", pin.MIME)
-	w.Header().Set("Content-Length", strconv.FormatInt(pin.Size, 10))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// Content-addressed: the bytes behind a CID can never change.
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+cid+`"`)
 	switch {
 	case strings.HasPrefix(pin.MIME, "image/"), strings.HasPrefix(pin.MIME, "video/"),
 		strings.HasPrefix(pin.MIME, "audio/"):
@@ -683,7 +677,10 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.Header().Set("Content-Disposition", "attachment")
 	}
-	io.Copy(w, rc)
+	// Range, If-Range, If-None-Match and HEAD: a player seeks by asking for
+	// byte spans (Safari will not play a video served without them), and
+	// each span is one cat of just those bytes
+	http.ServeContent(w, r, "", time.Time{}, f)
 }
 
 // replicateNonce accepts 8–64 hex chars — enough entropy to prove

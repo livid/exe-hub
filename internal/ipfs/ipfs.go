@@ -11,16 +11,22 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
 type Client struct {
 	api    string // e.g. http://127.0.0.1:5001
 	client *http.Client
+	// stream serves cat: a video read at a phone's pace outlasts any
+	// whole-request timeout, so only the wait for kubo's headers is
+	// bounded and the body lives as long as the caller's context
+	stream *http.Client
 }
 
 func New(api string) *Client {
-	return &Client{api: api, client: &http.Client{Timeout: 60 * time.Second}}
+	return &Client{api: api, client: &http.Client{Timeout: 60 * time.Second},
+		stream: &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 30 * time.Second}}}
 }
 
 // Available pings the kubo API; embeds degrade to 503 without it.
@@ -141,9 +147,22 @@ func (c *Client) Unpin(cid string) error {
 	return nil
 }
 
-// Cat streams a pinned CID's bytes. The caller must Close the reader.
-func (c *Client) Cat(cid string) (io.ReadCloser, error) {
-	resp, err := c.client.Post(c.api+"/api/v0/cat?arg="+url.QueryEscape(cid), "", nil)
+// Cat streams a pinned CID's bytes, or length bytes of them from offset
+// when length > 0 (kubo's cat reads only the blocks that span). The body
+// lives until ctx ends or the caller closes the reader, which it must.
+func (c *Client) Cat(ctx context.Context, cid string, offset, length int64) (io.ReadCloser, error) {
+	q := "?arg=" + url.QueryEscape(cid)
+	if offset > 0 {
+		q += "&offset=" + strconv.FormatInt(offset, 10)
+	}
+	if length > 0 {
+		q += "&length=" + strconv.FormatInt(length, 10)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.api+"/api/v0/cat"+q, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.stream.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -153,4 +172,66 @@ func (c *Client) Cat(cid string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("ipfs cat %s: %s: %s", cid, resp.Status, b)
 	}
 	return resp.Body, nil
+}
+
+// File is a pinned CID of known size as an io.ReadSeeker, for
+// http.ServeContent: a seek only moves the offset, and the next read asks
+// kubo for the bytes from there, so a Range request costs one cat of just
+// that span. Close releases the read in flight.
+type File struct {
+	c    *Client
+	ctx  context.Context
+	cid  string
+	size int64
+	off  int64
+	rc   io.ReadCloser
+}
+
+func (c *Client) Open(ctx context.Context, cid string, size int64) *File {
+	return &File{c: c, ctx: ctx, cid: cid, size: size}
+}
+
+func (f *File) Read(p []byte) (int, error) {
+	if f.off >= f.size {
+		return 0, io.EOF
+	}
+	if f.rc == nil {
+		rc, err := f.c.Cat(f.ctx, f.cid, f.off, f.size-f.off)
+		if err != nil {
+			return 0, err
+		}
+		f.rc = rc
+	}
+	n, err := f.rc.Read(p)
+	f.off += int64(n)
+	if err == io.EOF && f.off < f.size {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+func (f *File) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekCurrent:
+		offset += f.off
+	case io.SeekEnd:
+		offset += f.size
+	}
+	if offset < 0 {
+		return 0, fmt.Errorf("ipfs: seek to %d", offset)
+	}
+	if offset != f.off {
+		f.Close()
+		f.off = offset
+	}
+	return offset, nil
+}
+
+func (f *File) Close() error {
+	if f.rc == nil {
+		return nil
+	}
+	err := f.rc.Close()
+	f.rc = nil
+	return err
 }

@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ var (
 	ErrStaleSeq  = errors.New("stale seq")
 	ErrNotOwner  = errors.New("not the author of that post")
 	ErrNoPin     = errors.New("embed CID not uploaded to this hub")
+	ErrFacts     = errors.New("embed player facts differ from the conversion's")
 	ErrNotAvatar = errors.New("avatar must be a CID from /v1/avatar")
 	ErrNotFound  = errors.New("not found")
 )
@@ -177,6 +179,20 @@ CREATE TABLE IF NOT EXISTS cards (
 		`ALTER TABLE cards ADD COLUMN archive TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE cards ADD COLUMN archive_tries INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE cards ADD COLUMN archive_ts INTEGER NOT NULL DEFAULT 0`,
+		// an embed's player facts (PLAN.md, Media), as its post was signed
+		`ALTER TABLE embeds ADD COLUMN poster TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE embeds ADD COLUMN width INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE embeds ADD COLUMN height INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE embeds ADD COLUMN duration REAL NOT NULL DEFAULT 0`,
+		`ALTER TABLE embeds ADD COLUMN loop INTEGER NOT NULL DEFAULT 0`,
+		// what a /v1/media conversion measured for its output (media=1),
+		// which a post naming that file must repeat
+		`ALTER TABLE pins ADD COLUMN media INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pins ADD COLUMN poster TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE pins ADD COLUMN width INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pins ADD COLUMN height INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pins ADD COLUMN duration REAL NOT NULL DEFAULT 0`,
+		`ALTER TABLE pins ADD COLUMN loop INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
@@ -314,8 +330,22 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 			if k, _ := res.RowsAffected(); k == 0 && !replay {
 				return nil, ErrNoPin
 			}
-			if _, err = tx.Exec(`INSERT INTO embeds (post, idx, cid, mime, filename, alt) VALUES (?,?,?,?,?,?)`,
-				id, i, em.CID, em.MIME, em.Filename, em.Alt); err != nil {
+			if em.Poster != "" {
+				res, err := tx.Exec(`UPDATE pins SET refs=refs+1 WHERE cid=?`, em.Poster)
+				if err != nil {
+					return nil, err
+				}
+				if k, _ := res.RowsAffected(); k == 0 && !replay {
+					return nil, ErrNoPin
+				}
+			}
+			if !replay {
+				if err := checkFacts(tx, em); err != nil {
+					return nil, err
+				}
+			}
+			if _, err = tx.Exec(`INSERT INTO embeds (post, idx, cid, mime, filename, alt, poster, width, height, duration, loop) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+				id, i, em.CID, em.MIME, em.Filename, em.Alt, em.Poster, em.Width, em.Height, em.Duration, em.Loop); err != nil {
 				return nil, err
 			}
 		}
@@ -332,18 +362,21 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if owner != pid {
 			return nil, ErrNotOwner
 		}
-		rows, err := tx.Query(`SELECT cid FROM embeds WHERE post=?`, v.Post)
+		rows, err := tx.Query(`SELECT cid, poster FROM embeds WHERE post=?`, v.Post)
 		if err != nil {
 			return nil, err
 		}
 		var cids []string
 		for rows.Next() {
-			var c string
-			if err := rows.Scan(&c); err != nil {
+			var c, poster string
+			if err := rows.Scan(&c, &poster); err != nil {
 				rows.Close()
 				return nil, err
 			}
 			cids = append(cids, c)
+			if poster != "" {
+				cids = append(cids, poster)
+			}
 		}
 		rows.Close()
 		for _, c := range cids {
@@ -392,6 +425,33 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		return nil, err
 	}
 	return nil, fmt.Errorf("apply: unhandled op %T", op)
+}
+
+// checkFacts holds a post to what /v1/media measured: an embed naming a
+// converted file either leaves the player facts out or repeats them
+// exactly, so a signed post cannot give another's video a wrong shape
+// or poster. Uploads without a conversion record declare their own.
+func checkFacts(tx *sql.Tx, em envelope.Embed) error {
+	var media, loop int
+	var poster string
+	var width, height int
+	var duration float64
+	err := tx.QueryRow(`SELECT media, poster, width, height, duration, loop FROM pins WHERE cid=?`, em.CID).
+		Scan(&media, &poster, &width, &height, &duration, &loop)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil || media == 0 {
+		return err
+	}
+	if em.Poster == "" && em.Width == 0 && em.Duration == 0 && !em.Loop {
+		return nil
+	}
+	if em.Poster != poster || em.Width != width || em.Height != height ||
+		math.Abs(em.Duration-duration) > 0.01 || em.Loop != (loop == 1) {
+		return fmt.Errorf("%w: poster %q %dx%d %.3fs loop=%v", ErrFacts, poster, width, height, duration, loop == 1)
+	}
+	return nil
 }
 
 // dropRef decrements a pin's refcount, deleting the row and queuing the
@@ -571,7 +631,7 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 }
 
 func (s *Store) postEmbeds(post string) ([]envelope.Embed, error) {
-	rows, err := s.db.Query(`SELECT cid, mime, filename, alt FROM embeds WHERE post=? ORDER BY idx`, post)
+	rows, err := s.db.Query(`SELECT cid, mime, filename, alt, poster, width, height, duration, loop FROM embeds WHERE post=? ORDER BY idx`, post)
 	if err != nil {
 		return nil, err
 	}
@@ -579,7 +639,7 @@ func (s *Store) postEmbeds(post string) ([]envelope.Embed, error) {
 	var out []envelope.Embed
 	for rows.Next() {
 		var e envelope.Embed
-		if err := rows.Scan(&e.CID, &e.MIME, &e.Filename, &e.Alt); err != nil {
+		if err := rows.Scan(&e.CID, &e.MIME, &e.Filename, &e.Alt, &e.Poster, &e.Width, &e.Height, &e.Duration, &e.Loop); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -1020,6 +1080,25 @@ func (s *Store) AddPin(cid string, size int64, mime string, avatar bool) error {
 	_, err := s.db.Exec(`INSERT INTO pins (cid, size, mime, refs, is_avatar, created) VALUES (?,?,?,0,?,?)
 		ON CONFLICT(cid) DO UPDATE SET is_avatar = MAX(is_avatar, excluded.is_avatar)`,
 		cid, size, mime, av, time.Now().UnixMilli())
+	return err
+}
+
+// Facts is what a /v1/media conversion measured for its output file.
+type Facts struct {
+	Poster   string
+	Width    int
+	Height   int
+	Duration float64
+	Loop     bool
+}
+
+// AddMediaPin records a conversion's output with its facts; a post that
+// names the file must repeat them (checkFacts). Its poster is pinned on
+// its own, with AddPin.
+func (s *Store) AddMediaPin(cid string, size int64, mime string, f Facts) error {
+	_, err := s.db.Exec(`INSERT INTO pins (cid, size, mime, refs, is_avatar, created, media, poster, width, height, duration, loop) VALUES (?,?,?,0,0,?,1,?,?,?,?,?)
+		ON CONFLICT(cid) DO UPDATE SET media=1, poster=excluded.poster, width=excluded.width, height=excluded.height, duration=excluded.duration, loop=excluded.loop`,
+		cid, size, mime, time.Now().UnixMilli(), f.Poster, f.Width, f.Height, f.Duration, f.Loop)
 	return err
 }
 
