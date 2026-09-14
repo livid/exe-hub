@@ -335,6 +335,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   included, newest first, paged like the feed. `{"query","posts","total"}`
   — the normalised query, the page, and the match count for a "N posts
   match" line. 400 without `q`.
+- `POST /v1/media` / `GET /v1/media/{job}` — conversion of video, sound
+  and animated GIFs through ffmpeg, on a hub configured for it (see
+  Media).
 - `GET  /v1/embed/{cid}` — embed bytes proxy (pinned CIDs only, immutable
   cache headers; inline disposition for image/video/audio, attachment
   otherwise; byte ranges, HEAD and If-None-Match, see Embeds & IPFS).
@@ -839,6 +842,85 @@ page and the copy, since a link cannot sit inside another.
   lookup, then a save and its polls), an hour apart: one when its card
   lands, the rest from an hourly sweep, which also gives the cards from
   before this feature their copies.
+
+## Media — video, sound and animated pictures through ffmpeg (built)
+
+A phone's video was a download: the pages drew only pictures, Go sniffed
+an iPhone .mov as application/octet-stream, the embed cap is 8 MB (about
+ten seconds of 4K), and the file carried the phone's GPS. Since
+2026-09-14 a hub with a `media` block in its config converts what people
+post into files every browser plays, the way `/v1/avatar` normalizes a
+picture. The host hub has it; the hub behind hub.v2core.com (no GPU, no
+ffmpeg) does not, and draws what it mirrors all the same.
+
+- **Config** (read at start; a reload does not change it):
+  `"media": {"ffmpeg", "ffprobe", "encoder": "auto"|"nvenc"|"x264",
+  "max_mb": 256, "max_video_s": 180, "max_audio_s": 600}` — paths default
+  to PATH, limits to those numbers. At start `media.New` settles the
+  encoder with a tiny test run of NVENC and of the Vulkan filters
+  (libplacebo); "auto" uses what runs, "nvenc" refuses to start without
+  it, and a failure leaves `/v1/media` off with a log line. `GET /v1/hub`
+  says `media: {max_mb, max_video_s, max_audio_s, encoder}` when on.
+- **`POST /v1/media`** takes the raw file, authorized like `/v1/upload`
+  (the author signs the body's SHA-256). The key's form, time, ban and
+  gate are checked before a byte is read; the body streams to a job
+  directory (`<state>/media/<job>`, emptied at start) through a size
+  limit (413 past `max_mb`), hashed on the way, and the signature is
+  checked once it is in. One open job per author (429), sixteen waiting
+  at most (503). 202 with the job.
+- **`GET /v1/media/{job}`** — `{job, status: uploading|queued|converting|
+  done|failed, progress 0–1, ahead (jobs before it), error, result: {kind,
+  cid, mime, size, poster, width, height, duration, loop}}`. Public like
+  every read (the id is 96 random bits); kept an hour after it ends, and
+  in memory only, so a restart forgets jobs (their files stay pinned and
+  staged until swept).
+- **One job converts at a time.** Each ffmpeg runs niced in its own
+  process group, killed with the group after twice the media's length
+  plus 30 s. The input is deleted when the job ends; it never reaches
+  IPFS.
+- **Probe first**, through a demuxer whitelist (`mov, matroska, ogg, mp3,
+  wav, flac, aac, gif`) with `file` the only protocol, for every probe and
+  conversion: an HLS or concat playlist named .mp4 is the known way to
+  make ffmpeg read other local files, and is refused as unreadable.
+  Videos over `max_video_s`, sounds over `max_audio_s`, pictures over
+  8192×8192 and files that do not say their length are refused with
+  the reason.
+- **Video → H.264 High + AAC mp4, faststart.** The frame fits a box by
+  length — 1920×1080 up to 30 s, 1280×720 up to a minute, 854×480 beyond
+  (never enlarged, even sides) — at up to 60 fps (30 past 30 s). The rate
+  is a quality target under a ceiling: NVENC `-cq 25`, x264 `-crf 22`,
+  capped at the rate that fills 7.6 MB less the sound (AAC 128 kb/s, 96
+  past a minute). Filling the cap outright wrote an iPhone Air's 12 s 4K
+  night clip as 7.25 MB at SSIM 0.9980; cq 26 wrote 2.5 MB at 0.9969. An
+  output over 7.6 MB is converted again with the ceiling lowered by the
+  ratio it missed by; NVENC has a floor on grainy video (even QP 51 wrote
+  megabytes of noise), so a second miss switches to x264. Global,
+  stream and chapter metadata (the GPS, the camera), subtitles and data
+  tracks are dropped. The poster is a JPEG of the most representative of
+  the first 48 frames (`thumbnail`).
+- **The GPU chain** (H.264 and HEVC when the Vulkan filters run): Vulkan
+  decode → libplacebo scale and tone-map to bt709 SDR → download → a CPU
+  `transpose` for the display rotation → NVENC. Verified on the GB10:
+  ffmpeg's autorotate skips GPU frames but still drops the display
+  matrix, so an all-GPU chain wrote portrait phone video sideways; the
+  turn is made explicitly. `transpose_vulkan` left a green row along one
+  edge, so the turn happens after download, at the output size. Any other
+  codec, or a GPU run that fails, goes through the CPU: swscale (zscale +
+  hable for PQ/HLG) with autorotate. A test compares GPU and CPU frames
+  and edges for 90, −90 and 180 on H.264 and HEVC.
+- **Sound → AAC m4a** (`ipod` muxer, brand M4A; up to 160 kb/s, less if
+  the cap needs it), with a PNG waveform as its poster (`showwavespic`,
+  1200×96, #262626 on clear, drawn at twice the size shown).
+- **An animated GIF → a silent looping mp4** (`loop` true, first frame as
+  poster): the hub's biggest GIF, 4.9 MB, came out 1.6 MB. A still GIF
+  (one packet) is kept as it came, as a picture.
+- **Outputs pin like uploads**, staged at refs 0 and swept after a day if
+  no post names them: the poster with `AddPin`, the file with
+  `AddMediaPin`, which records its facts (see Embeds & IPFS) for
+  `post.create` to hold the post to.
+- The exe daemon's Hub client forwards `POST /v1/hub/media` (the node key
+  signs, the file streams through) and the Hub app shows the job's
+  progress in the attachment chip; see Client wiring.
 
 ## Open questions
 

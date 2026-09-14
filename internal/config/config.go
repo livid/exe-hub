@@ -55,6 +55,19 @@ type Config struct {
 	// Cooldown is the minimum seconds between an author's posts
 	// (post.create, replies included). Absent = 60; 0 disables.
 	Cooldown *int `json:"cooldown"`
+	// Media turns on POST /v1/media, conversion through ffmpeg (PLAN.md,
+	// Media). Absent leaves it off. Read at start only: a reload does not
+	// change it.
+	Media *Media `json:"media,omitempty"`
+}
+
+type Media struct {
+	FFmpeg   string `json:"ffmpeg,omitempty"`      // default: ffmpeg on PATH
+	FFprobe  string `json:"ffprobe,omitempty"`     // default: ffprobe on PATH
+	Encoder  string `json:"encoder,omitempty"`     // "auto" (default), "nvenc" or "x264"
+	MaxMB    int    `json:"max_mb,omitempty"`      // an input's size limit; default 256
+	MaxVideo int    `json:"max_video_s,omitempty"` // the longest video or animation, seconds; default 180
+	MaxAudio int    `json:"max_audio_s,omitempty"` // the longest sound, seconds; default 600
 }
 
 func (c *Config) CooldownSec() int {
@@ -96,6 +109,17 @@ func Load(path string) (*Config, error) {
 	}
 	if c.IPFSAPI == "" {
 		c.IPFSAPI = "http://127.0.0.1:5001"
+	}
+	if m := c.Media; m != nil {
+		if m.MaxMB <= 0 {
+			m.MaxMB = 256
+		}
+		if m.MaxVideo <= 0 {
+			m.MaxVideo = 180
+		}
+		if m.MaxAudio <= 0 {
+			m.MaxAudio = 600
+		}
 	}
 	switch c.Gate.Mode {
 	case "", "open":
@@ -146,5 +170,5 @@ func NewHolder(c *Config) *Holder {
 	return h
 }
 
-func (h *Holder) Get() *Config    { return h.v.Load() }
-func (h *Holder) Set(c *Config)   { h.v.Store(c) }
+func (h *Holder) Get() *Config  { return h.v.Load() }
+func (h *Holder) Set(c *Config) { h.v.Store(c) }

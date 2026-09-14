@@ -47,6 +47,7 @@ type Server struct {
 	Hub    *identity.Identity
 	Events *events.Broadcaster // live post activity; nil disables /v1/events
 	Push   *push.Key           // Web Push (the VAPID key); nil disables subscribing and the page's Notify box
+	Media  *Media              // conversion through ffmpeg (media.go); nil turns /v1/media off
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
 }
@@ -136,6 +137,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
 	mux.HandleFunc("POST /v1/upload", s.handleUpload)
 	mux.HandleFunc("POST /v1/avatar", s.handleAvatar)
+	mux.HandleFunc("POST /v1/media", s.handleMedia)
+	mux.HandleFunc("GET /v1/media/{job}", s.handleMediaJob)
 	mux.HandleFunc("GET /v1/feed", s.handleFeed)
 	mux.HandleFunc("GET /v1/profile/{id}", s.handleProfile)
 	mux.HandleFunc("GET /v1/profile/{id}/feed", s.handleProfileFeed)
@@ -191,6 +194,9 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Push != nil {
 		info["push"] = map[string]string{"key": s.Push.Public()} // pushManager.subscribe's applicationServerKey
+	}
+	if s.Media != nil {
+		info["media"] = s.Media.Info() // clients send video and sound to /v1/media
 	}
 	writeJSON(w, http.StatusOK, info)
 }
@@ -451,32 +457,52 @@ func (s *Server) policy(e *envelope.Envelope) error {
 // couldn't post the result. On failure the response is written and ok is
 // false.
 func (s *Server) uploadAuth(w http.ResponseWriter, r *http.Request, body []byte) (ok bool) {
+	pub, sig, ok := uploadHeaders(w, r)
+	if !ok || !uploadSigned(w, r, pub, sig, envelope.MsgID(body)) {
+		return false
+	}
+	return s.uploadPolicy(w, pub)
+}
+
+// uploadHeaders reads an upload authorization's key, time and signature,
+// checking their form and the time's skew; the signature itself needs
+// the body's digest (uploadSigned).
+func uploadHeaders(w http.ResponseWriter, r *http.Request) (ed25519.PublicKey, []byte, bool) {
 	pubB, err := base64.StdEncoding.DecodeString(r.Header.Get("X-Hub-Author"))
 	if err != nil || len(pubB) != ed25519.PublicKeySize {
 		writeErr(w, http.StatusBadRequest, errors.New("X-Hub-Author must be a base64 ed25519 public key"))
-		return false
+		return nil, nil, false
 	}
-	pub := ed25519.PublicKey(pubB)
 	ms, err := strconv.ParseInt(r.Header.Get("X-Hub-Ts"), 10, 64)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, errors.New("bad X-Hub-Ts"))
-		return false
+		return nil, nil, false
 	}
 	if d := time.Since(time.UnixMilli(ms)); d > uploadSkew || d < -uploadSkew {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("upload timestamp skew %s", d.Round(time.Second)))
-		return false
+		return nil, nil, false
 	}
 	sig, err := base64.StdEncoding.DecodeString(r.Header.Get("X-Hub-Sig"))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, errors.New("bad X-Hub-Sig encoding"))
-		return false
+		return nil, nil, false
 	}
-	msg := []byte(envelope.UploadPrefix + r.Header.Get("X-Hub-Ts") + "\n" + envelope.MsgID(body))
+	return ed25519.PublicKey(pubB), sig, true
+}
+
+// uploadSigned checks the signature over UploadPrefix + ts + hex digest.
+func uploadSigned(w http.ResponseWriter, r *http.Request, pub ed25519.PublicKey, sig []byte, digest string) bool {
+	msg := []byte(envelope.UploadPrefix + r.Header.Get("X-Hub-Ts") + "\n" + digest)
 	if !ed25519.Verify(pub, msg, sig) {
 		writeErr(w, http.StatusUnauthorized, errors.New("bad upload signature"))
 		return false
 	}
+	return true
+}
 
+// uploadPolicy is the posting policy for a key that wants to store
+// something: not banned, through the gate (admins pass), and IPFS up.
+func (s *Server) uploadPolicy(w http.ResponseWriter, pub ed25519.PublicKey) bool {
 	pid := identity.Fingerprint(pub)
 	if banned, err := s.St.Banned(pid); err != nil || banned {
 		writeErr(w, http.StatusForbidden, errors.New("this key is banned from posting here"))

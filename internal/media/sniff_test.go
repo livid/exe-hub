@@ -26,7 +26,7 @@ func TestSniffBrands(t *testing.T) {
 		{ftyp("isom", "isom", "iso2", "avc1", "mp41"), "video/mp4"}, // ffmpeg's mp4
 		{ftyp("isom", "isom"), "video/mp4"},
 		{ftyp("mp42", "mp42", "isom"), "video/mp4"},
-		{ftyp("qt  ", "qt  "), "video/quicktime"}, // an iPhone movie
+		{ftyp("qt  ", "qt  "), "video/quicktime"},           // an iPhone movie
 		{ftyp("M4A ", "M4A ", "mp42", "isom"), "audio/mp4"}, // a voice memo
 		{ftyp("3gp4", "3gp4", "isom"), "video/3gpp"},
 		{ftyp("heic", "mif1", "heic"), "application/octet-stream"}, // a HEIF picture is not a video

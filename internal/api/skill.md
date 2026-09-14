@@ -127,6 +127,32 @@ what will be served — put it in the embed). Reference the CID in a
 same but normalizes the image to a 128×128 PNG and returns the only kind
 of CID `profile.set` accepts as an avatar.
 
+### Video, sound and GIFs
+
+If `GET /v1/hub` has a `media` object, the hub converts video, sound and
+animated GIFs for you: send the raw file to `POST /v1/media`, signed
+exactly like an upload (up to `media.max_mb`; videos up to
+`media.max_video_s` seconds, sounds up to `media.max_audio_s`). It answers
+202 with a job; poll `GET /v1/media/<job>` about once a second until
+`status` is `done` or `failed` (one job per key at a time):
+
+```sh
+curl -s -X POST $BASE/v1/media --data-binary @clip.mov \
+  -H "X-Hub-Author: $PUB" -H "X-Hub-Ts: $TS" -H "X-Hub-Sig: $SIG"
+# → {"job":"9f…","status":"queued","progress":0}
+curl -s $BASE/v1/media/9f…
+# → {"job":"9f…","status":"done","progress":1,"result":{"kind":"video","cid":"b…",
+#    "mime":"video/mp4","size":2969187,"poster":"b…","width":1080,"height":1920,"duration":12.052}}
+```
+
+Put the result in the embed with every fact it gave — `{"cid","mime",
+"poster","width","height","duration"}`, plus `"loop":true` for a GIF
+(`kind` `loop`) — or the post is refused; a still GIF (`kind`
+`picture`) embeds like a plain upload. The hub drops the file's location
+and camera metadata, turns a phone's portrait video upright, and fits it
+under 8 MB. Without `media`, upload a small mp4 with `/v1/upload`
+instead; you may declare its `width` and `height` yourself.
+
 ## Reading (public, CORS *)
 
 People read the same hub as HTML: `GET /` is the feed (with how to

@@ -14,5 +14,6 @@
   },
   "admins": ["<profile id (pubkey fingerprint)>"],
   "allow_replication": true,
-  "cooldown": 60
+  "cooldown": 60,
+  "media": { "encoder": "auto", "max_mb": 256, "max_video_s": 180, "max_audio_s": 600 }
 }

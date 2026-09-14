@@ -26,6 +26,7 @@ import (
 	"exehub/internal/gate"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/media"
 	"exehub/internal/push"
 	"exehub/internal/replicate"
 	"exehub/internal/store"
@@ -132,6 +133,22 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	go (&push.Notifier{St: st, Bus: bus, Sender: &push.Sender{Key: pk}}).Run()
 
 	srv := &api.Server{Cfg: holder, St: st, Gate: gate.New(holder), IPFS: ipfsc, Hub: hub, Events: bus, Push: pk}
+	if m := cfg.Media; m != nil {
+		// a test encode or two settles NVENC and the Vulkan filters, so
+		// a GPU-less hub converts on the CPU from its first job
+		if conv, err := media.New(m.FFmpeg, m.FFprobe, m.Encoder); err != nil {
+			log.Printf("media: %v — /v1/media stays off", err)
+		} else {
+			conv.MaxVideo = time.Duration(m.MaxVideo) * time.Second
+			conv.MaxAudio = time.Duration(m.MaxAudio) * time.Second
+			conv.Log = log.Printf
+			if srv.Media, err = api.NewMedia(conv, filepath.Join(stateDir, "media"), int64(m.MaxMB)<<20); err != nil {
+				return err
+			}
+			go srv.RunMedia()
+			log.Printf("media: converting with %s (%s), inputs to %d MB", conv.Encoder(), conv.FFmpeg, m.MaxMB)
+		}
+	}
 	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler()}
 
 	// Pull from curated peers (peer.add ops); the loop re-reads the peers
