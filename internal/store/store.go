@@ -172,6 +172,11 @@ CREATE TABLE IF NOT EXISTS cards (
 		// author+seq for everything it serves)
 		`DROP INDEX IF EXISTS messages_author_seq`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS messages_author_seq_origin ON messages(author, seq, origin)`,
+		// a card's archived copy (see PLAN.md, Archived copies): the
+		// Wayback URL once found or saved, and the rounds spent on it
+		`ALTER TABLE cards ADD COLUMN archive TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE cards ADD COLUMN archive_tries INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE cards ADD COLUMN archive_ts INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
@@ -501,11 +506,29 @@ type Card struct {
 	Title string `json:"title"`
 	Desc  string `json:"desc,omitempty"`
 	Image string `json:"image,omitempty"` // pinned CID, served by /v1/embed
+	// the page's copy in the Wayback Machine, https://web.archive.org/web/<timestamp>/<link>
+	Archive string `json:"archive,omitempty"`
+}
+
+// ArchiveDate is the archived copy's capture day as YYYY-MM-DD, read
+// from the Wayback URL's timestamp; "" when there is no copy.
+func (c Card) ArchiveDate() string {
+	const prefix = "https://web.archive.org/web/"
+	ts, ok := strings.CutPrefix(c.Archive, prefix)
+	if !ok || len(ts) < 8 {
+		return ""
+	}
+	for _, r := range ts[:8] {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return ts[:4] + "-" + ts[4:6] + "-" + ts[6:8]
 }
 
 const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received,
   (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id),
-  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,'')`
+  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,''), IFNULL(cd.archive,'')`
 
 const feedQuery = `
 SELECT ` + feedCols + `
@@ -518,7 +541,7 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 		var p FeedPost
 		var c Card
 		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Replies,
-			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image); err != nil {
+			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image, &c.Archive); err != nil {
 			return nil, err
 		}
 		if c.URL != "" {
@@ -644,6 +667,49 @@ func (s *Store) PostsWithoutCards(limit int) ([]CardPost, error) {
 		LEFT JOIN cards c ON c.post = p.id
 		WHERE c.post IS NULL AND NOT EXISTS (SELECT 1 FROM embeds e WHERE e.post = p.id)
 		ORDER BY p.received DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// BeginArchive opens an archive round for a post (see PLAN.md, Archived
+// copies): when its card is ok, has no copy yet, has rounds left and
+// began none since before (unix ms), the round is counted and stamped
+// now and the card's link returned; else the link is "" and there is
+// nothing to do.
+func (s *Store) BeginArchive(post string, maxTries int, before int64) (link string, err error) {
+	err = s.db.QueryRow(`UPDATE cards SET archive_tries = archive_tries + 1, archive_ts = ?
+		WHERE post = ? AND status = 'ok' AND archive = '' AND archive_tries < ? AND archive_ts < ?
+		RETURNING url`, time.Now().UnixMilli(), post, maxTries, before).Scan(&link)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return link, err
+}
+
+// SetArchive records the card's archived copy.
+func (s *Store) SetArchive(post, archive string) error {
+	_, err := s.db.Exec(`UPDATE cards SET archive = ? WHERE post = ?`, archive, post)
+	return err
+}
+
+// CardsToArchive lists the posts whose ok card still has no copy, rounds
+// left, and no round begun since before (unix ms) — the sweep's worklist,
+// oldest round first. Text carries the card's link.
+func (s *Store) CardsToArchive(maxTries int, before int64, limit int) ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, c.url FROM cards c JOIN posts p ON p.id = c.post
+		WHERE c.status = 'ok' AND c.archive = '' AND c.archive_tries < ? AND c.archive_ts < ?
+		ORDER BY c.archive_ts, p.received DESC LIMIT ?`, maxTries, before, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -102,8 +102,12 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Link cards: a bare-link post gets its first link unfurled off the
 	// ingest path (the OnMessage hook sees direct and replicated posts
 	// both); the backfill gives the posts from before this feature their
-	// cards once.
+	// cards once. Each card's page also gets a copy in the Internet
+	// Archive, found or saved; the sweep retries and covers older cards.
 	cards := card.NewWorker(st, ipfsc, bus)
+	cards.Archive = card.NewArchiver(st, bus)
+	go cards.Archive.Run()
+	go cards.Archive.Sweep()
 	go cards.Run()
 	go cards.Backfill()
 	st.OnMessage = func(e *envelope.Envelope, op any, id string) {

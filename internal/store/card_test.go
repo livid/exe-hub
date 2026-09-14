@@ -2,6 +2,7 @@ package store
 
 import (
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -91,6 +92,48 @@ func TestCards(t *testing.T) {
 	}
 	if p1.Card == nil {
 		t.Fatal("card gone after rebuild")
+	}
+
+	// an archive round: begun once per window, counted, bounded, and the
+	// copy served in the card once set (see PLAN.md, Archived copies)
+	far := time.Now().Add(time.Hour).UnixMilli()
+	todo, err := s.CardsToArchive(3, far, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(todo) != 2 { // the ok cards; the failed one is never sent to the Archive
+		t.Fatalf("CardsToArchive = %+v, want the two ok cards", todo)
+	}
+	if link, err := s.BeginArchive(id2, 3, far); err != nil || link != "" {
+		t.Fatalf("BeginArchive on a failed card = %q, %v", link, err)
+	}
+	link, err := s.BeginArchive(id, 3, time.Now().UnixMilli()+1)
+	if err != nil || link != "https://a.example/x" {
+		t.Fatalf("BeginArchive = %q, %v", link, err)
+	}
+	if again, _ := s.BeginArchive(id, 3, time.Now().Add(-time.Hour).UnixMilli()); again != "" {
+		t.Fatal("a second round began inside the window")
+	}
+	if todo, _ := s.CardsToArchive(3, time.Now().Add(-time.Hour).UnixMilli(), 10); len(todo) != 1 || todo[0].ID != idMis || todo[0].Text != "https://mame.example/x" {
+		t.Fatalf("sweep after a round = %+v, want only the untried card", todo)
+	}
+	for i := 0; i < 2; i++ {
+		if l, _ := s.BeginArchive(id, 3, far); l == "" {
+			t.Fatalf("round %d refused", i+2)
+		}
+	}
+	if l, _ := s.BeginArchive(id, 3, far); l != "" {
+		t.Fatal("a fourth round began")
+	}
+	const copyURL = "https://web.archive.org/web/20180523210631/https://a.example/x"
+	if err := s.SetArchive(id, copyURL); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.Post(id); p.Card == nil || p.Card.Archive != copyURL || p.Card.ArchiveDate() != "2018-05-23" {
+		t.Fatalf("card after SetArchive = %+v", p.Card)
+	}
+	if (Card{}).ArchiveDate() != "" || (Card{Archive: "https://web.archive.org/web/2018x/y"}).ArchiveDate() != "" {
+		t.Error("ArchiveDate of no copy or a bad stamp should be empty")
 	}
 
 	// deleting the post takes the card and queues the picture's unpin

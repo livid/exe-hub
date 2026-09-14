@@ -18,11 +18,14 @@ import (
 // success or failure is recorded — so a dead link never turns into a
 // retry loop; a repost gets a fresh try.
 type Worker struct {
-	St    *store.Store
-	IPFS  *ipfs.Client
-	Bus   *events.Broadcaster
-	F     *Fetcher
-	queue chan job
+	St   *store.Store
+	IPFS *ipfs.Client
+	Bus  *events.Broadcaster
+	F    *Fetcher
+	// Archive, when set, is asked for the page's archived copy once a
+	// card lands (see PLAN.md, Archived copies).
+	Archive *Archiver
+	queue   chan job
 }
 
 type job struct {
@@ -135,5 +138,8 @@ func (w *Worker) store(j job, c store.Card, imageSize int64, imageMIME string, o
 	}
 	if ok && w.Bus != nil {
 		w.Bus.Emit(events.Event{Type: "post.card", ID: j.post, Author: j.author})
+	}
+	if ok && w.Archive != nil {
+		w.Archive.Enqueue(j.post, j.author)
 	}
 }

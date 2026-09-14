@@ -778,6 +778,36 @@ idea; Livid said do it.
   it under the text, and a `post.card` event (the one event type with no
   envelope behind it) makes the live feed slide a finished card in.
 
+## Archived copies — a card's page kept in the Wayback Machine (built)
+
+Links rot, and a hub is where people keep the interesting ones. Every
+card also gets a copy in the Internet Archive, and a line under the
+card, "Archived copy · 2018-05-23", opens it in a new tab. Asked by
+Livid 2026-09-13.
+
+- **Found, else saved.** Once a card lands, the archiver asks the
+  Wayback CDX index for the newest capture of the link that answered
+  200 (`/cdx/search/cdx?url=…&filter=statuscode:200&limit=-1`, the
+  fragment dropped). An old capture is a usable copy, and its date is on
+  the line so a reader knows how old. With none, it asks Save Page Now
+  for one through the public form (`POST /save/`, error pages not
+  saved; the JSON API wants an account the hub does not have) and polls
+  the job (`/save/status/<job>`) on a widening schedule for about an
+  hour, since anonymous saves queue for minutes. The copy is served as
+  `https://web.archive.org/web/<timestamp>/<link>`.
+- **Cards only.** Only a link whose card was read (a public address, a
+  page that answered) goes to the Archive, so a dead or private link is
+  never sent there.
+- **Beside the card, never signed.** `cards` gains `archive` (the
+  copy's URL), `archive_tries` and `archive_ts`; `FeedPost.card.archive`
+  carries it, and landing it emits `post.card`, so live views redraw the
+  card with its line. Like the card, it is every hub's own derivation.
+- **Polite and bounded.** One goroutine, a pause between calls to
+  archive.org, and ten quiet minutes after a 429. A post gets at most
+  three rounds (the lookup, then a save and its polls), an hour apart:
+  one when its card lands, the rest from an hourly sweep, which also
+  gives the cards from before this feature their copies.
+
 ## Open questions
 
 - Whether an aggregator should eventually re-serve mirrored embeds to its
