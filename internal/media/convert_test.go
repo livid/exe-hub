@@ -202,7 +202,7 @@ func TestConvertAudio(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if img.Bounds().Dx() != 1200 || img.Bounds().Dy() != 96 {
+	if img.Bounds().Dx() != 960 || img.Bounds().Dy() != 96 {
 		t.Errorf("waveform %v", img.Bounds())
 	}
 	if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {

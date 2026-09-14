@@ -601,6 +601,43 @@ func TestWebPicture(t *testing.T) {
 	}
 }
 
+// TestWebMedia: a video is a player in a box of its final size, with its
+// poster and no download until played; a looping animation plays muted
+// without controls; a sound shows its waveform, player, name and length;
+// a video without facts gets a 16:9 box; the thread page's preview
+// image is the video's frame.
+func TestWebMedia(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	const vid, poster, gif, gposter, snd, wave, bare = "bafybeivid", "bafybeivposter", "bafybeigif", "bafybeigposter", "bafybeisnd", "bafybeiwave", "bafybeibare"
+	for cid, mime := range map[string]string{vid: "video/mp4", poster: "image/jpeg", gif: "video/mp4", gposter: "image/jpeg", snd: "audio/mp4", wave: "image/png", bare: "video/mp4"} {
+		if err := s.St.AddPin(cid, 1000, mime, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	id := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "the beach", "embeds": []map[string]any{
+		{"cid": vid, "mime": "video/mp4", "poster": poster, "width": 1080, "height": 1920, "duration": 12.052},
+		{"cid": gif, "mime": "video/mp4", "poster": gposter, "width": 480, "height": 270, "loop": true},
+		{"cid": snd, "mime": "audio/mp4", "poster": wave, "duration": 83.4, "filename": "waves.m4a"},
+		{"cid": bare, "mime": "video/mp4", "alt": "a clip"},
+	}})
+	_, body := get(t, s.Handler(), "/p/"+id)
+	for _, want := range []string{
+		`<div class="vid" style="width: 236px; aspect-ratio: 236 / 420"><video src="/v1/embed/` + vid + `" poster="/v1/embed/` + poster + `" controls playsinline preload="none"></video></div>`,
+		`<div class="vid" style="width: 480px; aspect-ratio: 480 / 270"><video src="/v1/embed/` + gif + `" poster="/v1/embed/` + gposter + `" autoplay loop muted playsinline preload="auto"></video></div>`,
+		`<div class="aud"><img class="wave" src="/v1/embed/` + wave + `" alt=""><audio controls preload="none" src="/v1/embed/` + snd + `"></audio><span class="afoot">waves.m4a · 1:23</span></div>`,
+		`<div class="vid" style="width: 100%; aspect-ratio: 16 / 9"><video src="/v1/embed/` + bare + `" controls playsinline preload="metadata" aria-label="a clip"></video></div>`,
+		`<meta property="og:image" content="http://hub.example/v1/embed/` + poster + `">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s\nin %s", want, body[strings.Index(body, `<div class="embeds">`):][:900])
+		}
+	}
+	if strings.Contains(body, `class="file"`) {
+		t.Error("a video is still offered as a file link")
+	}
+}
+
 // TestWebArchive: a card with an archived copy grows a strip at its
 // foot, inside the card, dated from the copy's timestamp and opening in
 // a new tab; the JSON read carries the copy too.

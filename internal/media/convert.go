@@ -455,10 +455,11 @@ func (c *Converter) audio(ctx context.Context, in, dir string, p *Probe, progres
 		"-movflags", "+faststart", "-f", "ipod", out); err != nil {
 		return nil, err
 	}
-	// the waveform, dark on clear, drawn at twice the size it is shown
+	// the waveform, dark on clear, 10:1, drawn at twice the 480×48 the
+	// pages show it at
 	wave := filepath.Join(dir, "wave.png")
 	if err := run(nil, "-protocol_whitelist", "file", "-i", out, "-filter_complex",
-		"aformat=channel_layouts=mono,showwavespic=s=1200x96:colors=0x262626:scale=sqrt:draw=full",
+		"aformat=channel_layouts=mono,showwavespic=s=960x96:colors=0x262626:scale=sqrt:draw=full",
 		"-frames:v", "1", wave); err != nil {
 		return nil, err
 	}
@@ -467,7 +468,7 @@ func (c *Converter) audio(ctx context.Context, in, dir string, p *Probe, progres
 		d = op.Duration
 	}
 	return &Result{Kind: Audio, File: out, MIME: "audio/mp4", Poster: wave, PosterMIME: "image/png",
-		Width: 1200, Height: 96, Duration: math.Round(d*1000) / 1000}, nil
+		Duration: math.Round(d*1000) / 1000}, nil
 }
 
 // limit bounds one ffmpeg run over d seconds of media: twice its length

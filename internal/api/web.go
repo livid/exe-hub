@@ -144,6 +144,8 @@ type webPost struct {
 	When   string
 	Stamp  string
 	Images []envelope.Embed
+	Videos []webMedia // video, a looping animation among them, drawn as players
+	Sounds []webMedia
 	Files  []envelope.Embed
 	// HTML embeds from an admin key open in a sandboxed window of their own
 	Pages []envelope.Embed
@@ -151,6 +153,37 @@ type webPost struct {
 	// a nested reply links to it in place, by the name it was posted under
 	InThread   bool
 	ParentName string
+}
+
+// webMedia is a video or sound embed for the template: the player box's
+// final size, set before the file loads (no jump when it does), and the
+// length to print.
+type webMedia struct {
+	envelope.Embed
+	Box    template.CSS
+	Length string
+}
+
+// webMediaMaxH is the tallest a video stands in a post, as pictures do.
+const webMediaMaxH = 420
+
+func newWebMedia(e envelope.Embed) webMedia {
+	m := webMedia{Embed: e}
+	w, h := e.Width, e.Height
+	if w <= 0 || h <= 0 {
+		// an upload that did not say its shape: a 16:9 box as wide as the post
+		m.Box = template.CSS("width: 100%; aspect-ratio: 16 / 9")
+	} else {
+		// whole pixels both ways, so the border never lands between two
+		bw := max(1, min(w, w*webMediaMaxH/h))
+		bh := max(1, (bw*h+w/2)/w)
+		m.Box = template.CSS(fmt.Sprintf("width: %dpx; aspect-ratio: %d / %d", bw, bw, bh))
+	}
+	if e.Duration > 0 {
+		sec := int(e.Duration + 0.5)
+		m.Length = fmt.Sprintf("%d:%02d", sec/60, sec%60)
+	}
+	return m
 }
 
 // webJoin is the join block: where this hub is, what its gate asks for.
@@ -309,6 +342,10 @@ func (s *Server) webPosts(posts []store.FeedPost) []webPost {
 			switch {
 			case strings.HasPrefix(e.MIME, "image/"):
 				out[i].Images = append(out[i].Images, e)
+			case strings.HasPrefix(e.MIME, "video/"):
+				out[i].Videos = append(out[i].Videos, newWebMedia(e))
+			case strings.HasPrefix(e.MIME, "audio/"):
+				out[i].Sounds = append(out[i].Sounds, newWebMedia(e))
 			case slices.Contains(p.PageCIDs, e.CID):
 				// a page: read in a sandboxed window (see PLAN, Pages);
 				// the store marks an admin's HTML, from any other key the
@@ -631,6 +668,8 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(post.Images) > 0 {
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID
+	} else if v := append(post.Videos, post.Sounds...); len(v) > 0 && v[0].Poster != "" {
+		d.Image = webBase(r) + "/v1/embed/" + v[0].Poster // a video's frame, or a sound's waveform
 	}
 	s.webRender(w, r, http.StatusOK, d)
 }

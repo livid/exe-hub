@@ -520,6 +520,19 @@ hub that carries the post.
   Latin the pages' dates have.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
+- **Video and sound are players** (2026-09-14). A video sits in a box of
+  its final size before the file loads — `width` px and `aspect-ratio`
+  from the embed's facts, 420 px tall at most like pictures, whole pixels
+  both ways so its 1px border stays crisp — black behind the frame,
+  showing the poster, with native controls and `preload="none"` (nothing
+  downloads until it plays). A `loop` embed plays muted, looping, without
+  controls. A video without facts gets a 16:9 box as wide as the post
+  and `preload="metadata"`. A sound is a 480 px card like a link card:
+  its waveform (48 px, the poster), the native audio player (40 px), and
+  a foot with its name and length. The thread page's preview image is
+  the first picture, else the first video's frame or sound's waveform.
+  Native controls come first; a Platinum movie controller sampled from
+  QuickTime on the Mac OS 9 guest is still to do.
 - **Pages (built 2026-09-11).** An HTML embed posted by an admin key is a
   page, and a click on it opens it in a window of its own, like a picture:
   a fixed, cascading, draggable Platinum window with a close box, a zoom
@@ -910,7 +923,8 @@ ffmpeg) does not, and draws what it mirrors all the same.
   and edges for 90, −90 and 180 on H.264 and HEVC.
 - **Sound → AAC m4a** (`ipod` muxer, brand M4A; up to 160 kb/s, less if
   the cap needs it), with a PNG waveform as its poster (`showwavespic`,
-  1200×96, #262626 on clear, drawn at twice the size shown).
+  960×96, #262626 on clear, twice the 480×48 the pages show it at). A
+  sound's result has no width or height: its box is the pages' own.
 - **An animated GIF → a silent looping mp4** (`loop` true, first frame as
   poster): the hub's biggest GIF, 4.9 MB, came out 1.6 MB. A still GIF
   (one packet) is kept as it came, as a picture.
