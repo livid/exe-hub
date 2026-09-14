@@ -246,18 +246,19 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .embeds .page:hover { text-decoration: underline; }
 .embeds .pagedl { font-size: 11px; margin-left: 6px; }
 /* a link card: the post's first link, unfurled by the hub at ingest */
-.card { display: flex; margin-top: 8px; max-width: 480px; border: 1px solid #262626; background: #fff;
-  text-decoration: none; color: #262626; box-shadow: 1px 1px 0 #262626; }
+.card { margin-top: 8px; max-width: 480px; border: 1px solid #262626; background: #fff; box-shadow: 1px 1px 0 #262626; }
+.card .cm { display: flex; text-decoration: none; color: #262626; }
 .card .ci { flex: none; width: 64px; border-right: 1px solid #262626; }
 .card .ci img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card .cb { min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 6px 9px; }
 .card .ct { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .cd, .card .ch { font-size: 11px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card:hover .ct { text-decoration: underline; }
-/* the card's page kept in the Internet Archive: a line under the card */
-.arch { display: block; width: max-content; max-width: 100%; margin-top: 4px; font-size: 11px; text-decoration: none;
+.card .cm:hover .ct { text-decoration: underline; }
+/* the card's page kept in the Internet Archive: the card's foot, a quieter
+   grey with no rule above it */
+.card .arch { display: block; padding: 3px 9px; background: #eee; font-size: 11px; text-decoration: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.arch:hover { text-decoration: underline; }
+.card .arch:hover { text-decoration: underline; }
 .foot { margin-top: 5px; font-size: 11px; }
 .foot a { text-decoration: none; }
 .foot a:hover { text-decoration: underline; }
@@ -1196,7 +1197,7 @@ localTimes(document);
   <div>
     <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}{{end}}</div>
     {{if .Text}}<div class="text">{{.HTML}}</div>{{end}}
-    {{if .Card}}<a class="card" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">Archived copy{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}{{end}}
+    {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">Archived copy{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
     {{if or .Images .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Page{{end}}">{{if .Filename}}{{.Filename}}{{else}}Page{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>download</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
     {{if and (not .ReplyTo) .Replies}}<div class="foot"><a href="/p/{{.ID}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a></div>{{end}}
   </div>

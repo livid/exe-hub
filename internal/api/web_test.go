@@ -601,9 +601,9 @@ func TestWebPicture(t *testing.T) {
 	}
 }
 
-// TestWebArchive: a card with an archived copy grows a line under it,
-// dated from the copy's timestamp and opening in a new tab; the JSON
-// read carries the copy too.
+// TestWebArchive: a card with an archived copy grows a strip at its
+// foot, inside the card, dated from the copy's timestamp and opening in
+// a new tab; the JSON read carries the copy too.
 func TestWebArchive(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -613,15 +613,15 @@ func TestWebArchive(t *testing.T) {
 	}
 	h := s.Handler()
 	if _, body := get(t, h, "/"); strings.Contains(body, `class="arch"`) {
-		t.Error("archive line before there is a copy")
+		t.Error("archive strip before there is a copy")
 	}
 	const copyURL = "https://web.archive.org/web/20180523210631/https://a.example/x"
 	if err := s.St.SetArchive(id, copyURL); err != nil {
 		t.Fatal(err)
 	}
 	_, body := get(t, h, "/")
-	if want := `<span class="ch">a.example</span></span></a><a class="arch" href="` + copyURL + `" target="_blank" rel="noopener nofollow">Archived copy · 2018-05-23</a>`; !strings.Contains(body, want) {
-		t.Errorf("archive line missing:\n%s", body[strings.Index(body, `<a class="card"`):][:500])
+	if want := `<span class="ch">a.example</span></span></a><a class="arch" href="` + copyURL + `" target="_blank" rel="noopener nofollow">Archived copy · 2018-05-23</a></div>`; !strings.Contains(body, want) {
+		t.Errorf("archive strip missing:\n%s", body[strings.Index(body, `<div class="card">`):][:500])
 	}
 	if _, js := get(t, h, "/v1/post/"+id); !strings.Contains(js, `"archive":"`+copyURL+`"`) {
 		t.Errorf("JSON card without the copy: %s", js)

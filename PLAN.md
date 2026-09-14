@@ -781,9 +781,11 @@ idea; Livid said do it.
 ## Archived copies — a card's page kept in the Wayback Machine (built)
 
 Links rot, and a hub is where people keep the interesting ones. Every
-card also gets a copy in the Internet Archive, and a line under the
-card, "Archived copy · 2018-05-23", opens it in a new tab. Asked by
-Livid 2026-09-13.
+card also gets a copy in the Internet Archive, and the card's foot,
+"Archived copy · 2018-05-23", opens it in a new tab. Asked by Livid
+2026-09-13. The foot is a strip inside the card on a quieter grey
+(#eee) with no rule above it; the card is a box holding two links, the
+page and the copy, since a link cannot sit inside another.
 
 - **Found, else saved.** Once a card lands, the archiver asks the
   Wayback CDX index for the newest capture of the link that answered
@@ -801,7 +803,7 @@ Livid 2026-09-13.
 - **Beside the card, never signed.** `cards` gains `archive` (the
   copy's URL), `archive_tries` and `archive_ts`; `FeedPost.card.archive`
   carries it, and landing it emits `post.card`, so live views redraw the
-  card with its line. Like the card, it is every hub's own derivation.
+  card with its foot. Like the card, it is every hub's own derivation.
 - **Polite and bounded.** One goroutine, a pause between calls to
   archive.org, and ten quiet minutes after a 429. The index answers 503
   about half the time (measured 2026-09-13) and a retry a little later
