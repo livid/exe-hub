@@ -803,10 +803,14 @@ Livid 2026-09-13.
   carries it, and landing it emits `post.card`, so live views redraw the
   card with its line. Like the card, it is every hub's own derivation.
 - **Polite and bounded.** One goroutine, a pause between calls to
-  archive.org, and ten quiet minutes after a 429. A post gets at most
-  three rounds (the lookup, then a save and its polls), an hour apart:
-  one when its card lands, the rest from an hourly sweep, which also
-  gives the cards from before this feature their copies.
+  archive.org, and ten quiet minutes after a 429. The index answers 503
+  about half the time (measured 2026-09-13) and a retry a little later
+  usually works, so a failed lookup is tried again inside the round,
+  and when it stays down the round saves anyway: the save's job names
+  its copy without the index. A post gets at most three rounds (the
+  lookup, then a save and its polls), an hour apart: one when its card
+  lands, the rest from an hourly sweep, which also gives the cards from
+  before this feature their copies.
 
 ## Open questions
 

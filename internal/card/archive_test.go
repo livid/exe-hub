@@ -23,6 +23,8 @@ type fakeArchive struct {
 	saves    []string          // links asked to be saved
 	polls    int
 	busy     bool // answer 429 to everything
+	down     int  // the index answers 503 this many times
+	lookups  int
 }
 
 func (f *fakeArchive) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +36,12 @@ func (f *fakeArchive) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.URL.Path == "/cdx/search/cdx":
+		f.lookups++
+		if f.down > 0 {
+			f.down--
+			http.Error(w, "busy backend", http.StatusServiceUnavailable)
+			return
+		}
 		q := r.URL.Query()
 		if q.Get("filter") != "statuscode:200" || q.Get("limit") != "-1" || q.Get("output") != "json" {
 			http.Error(w, "bad query", 400)
@@ -144,9 +152,11 @@ func (c *fakeCards) SetArchive(post, archive string) error {
 
 func (c *fakeCards) CardsToArchive(int, int64, int) ([]store.CardPost, error) { return nil, nil }
 
-// TestArchiver: a captured link lands its copy from the index alone; an
-// uncaptured one is saved, polled until the job finishes, and lands —
-// each announced as post.card so live views redraw the card.
+// TestArchiver: a captured link lands its copy from the index alone, a
+// 503 from the index retried inside the round; an uncaptured one is
+// saved, polled until the job finishes, and lands — each announced as
+// post.card so live views redraw the card. When the index stays down,
+// the round saves anyway.
 func TestArchiver(t *testing.T) {
 	f := &fakeArchive{captures: map[string]string{"https://a.example/old": "20180523210631"}, pending: 2}
 	cards := &fakeCards{links: map[string]string{"p-old": "https://a.example/old", "p-new": "https://b.example/new"},
@@ -156,12 +166,21 @@ func TestArchiver(t *testing.T) {
 	a := NewArchiver(cards, bus)
 	a.WB = testWayback(t, f)
 	a.Gap = 0
+	a.Retries = []time.Duration{5 * time.Millisecond}
 	a.Polls = []time.Duration{5 * time.Millisecond, 5 * time.Millisecond, 5 * time.Millisecond, 5 * time.Millisecond}
 	go a.Run()
 
+	f.mu.Lock()
+	f.down = 1 // the index's 503: the lookup is tried again, not the round given up
+	f.mu.Unlock()
 	a.Enqueue("p-old", "ann")
+	select {
+	case <-cards.landed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the found copy never landed")
+	}
 	a.Enqueue("p-new", "bob")
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 1; i++ {
 		select {
 		case <-cards.landed:
 		case <-time.After(5 * time.Second):
@@ -177,10 +196,13 @@ func TestArchiver(t *testing.T) {
 		t.Errorf("saved copy = %q", cards.copies["p-new"])
 	}
 	f.mu.Lock()
-	if len(f.saves) != 1 || f.polls != 3 {
-		t.Errorf("saves %v, polls %d: want one save and three polls", f.saves, f.polls)
+	if len(f.saves) != 1 || f.polls != 3 || f.lookups != 3 {
+		t.Errorf("saves %v, polls %d, lookups %d: want one save, three polls, three lookups", f.saves, f.polls, f.lookups)
 	}
 	f.mu.Unlock()
+	if cards.tries["p-old"] != 1 || cards.tries["p-new"] != 1 {
+		t.Errorf("rounds %v, want one each", cards.tries)
+	}
 	seen := map[string]bool{}
 	for len(seen) < 2 {
 		select {
@@ -191,5 +213,28 @@ func TestArchiver(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatalf("post.card events: %v", seen)
 		}
+	}
+}
+
+func TestArchiverIndexDown(t *testing.T) {
+	f := &fakeArchive{captures: map[string]string{}, down: 100}
+	cards := &fakeCards{links: map[string]string{"p": "https://b.example/new"},
+		tries: map[string]int{}, copies: map[string]string{}, landed: make(chan string, 1)}
+	a := NewArchiver(cards, nil)
+	a.WB = testWayback(t, f)
+	a.Gap = 0
+	a.Retries = []time.Duration{time.Millisecond, time.Millisecond}
+	a.Polls = []time.Duration{time.Millisecond}
+	go a.Run()
+	a.Enqueue("p", "ann")
+	select {
+	case <-cards.landed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no copy while the index was down")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lookups != 3 || len(f.saves) != 1 {
+		t.Errorf("lookups %d, saves %v: want three lookups, then one save", f.lookups, f.saves)
 	}
 }

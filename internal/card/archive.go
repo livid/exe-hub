@@ -195,30 +195,36 @@ const (
 
 // Archiver gives cards their archived copies on one goroutine, pausing
 // between calls to archive.org and going quiet after a 429. A round that
-// saves returns to the queue for each poll, so a slow save never holds
-// up the next card.
+// has to wait — a lookup the index failed, a save still queued — goes
+// back to the queue until its next step is due, so it never holds up
+// the next card.
 type Archiver struct {
-	St    ArchiveStore
-	Bus   *events.Broadcaster
-	WB    *Wayback
-	Gap   time.Duration   // the least pause between two calls to archive.org
-	Quiet time.Duration   // how long a 429 silences the archiver
-	Polls []time.Duration // when a save job is asked about, each after the last
+	St      ArchiveStore
+	Bus     *events.Broadcaster
+	WB      *Wayback
+	Gap     time.Duration   // the least pause between two calls to archive.org
+	Quiet   time.Duration   // how long a 429 silences the archiver
+	Retries []time.Duration // when a failed lookup is tried again; past the last, save anyway
+	Polls   []time.Duration // when a save job is asked about, each after the last
 
 	queue      chan archiveJob
-	busy       map[string]bool // posts with a save in flight; Run's alone
+	busy       map[string]bool // posts with a round in flight; Run's alone
 	last, calm time.Time       // the last call, and the end of a quiet
 }
 
+// archiveJob is one round's next step: begin (no link yet), look up
+// (no job yet) or poll the save job.
 type archiveJob struct {
 	post, author string
-	link, job    string // set once a save is in flight
-	poll         int
+	link, job    string
+	step         int // lookups failed, or polls made
 }
 
 func NewArchiver(st ArchiveStore, bus *events.Broadcaster) *Archiver {
 	return &Archiver{St: st, Bus: bus, WB: NewWayback(),
 		Gap: 5 * time.Second, Quiet: 10 * time.Minute,
+		// the index answers 503 often, and a retry a little later often works
+		Retries: []time.Duration{20 * time.Second, time.Minute, 3 * time.Minute},
 		Polls: []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute,
 			8 * time.Minute, 15 * time.Minute, 30 * time.Minute},
 		queue: make(chan archiveJob, 256), busy: map[string]bool{}}
@@ -236,9 +242,12 @@ func (a *Archiver) Enqueue(post, author string) {
 
 func (a *Archiver) Run() {
 	for j := range a.queue {
-		if j.job == "" {
+		switch {
+		case j.link == "":
 			a.begin(j)
-		} else {
+		case j.job == "":
+			a.lookup(j)
+		default:
 			a.poll(j)
 		}
 	}
@@ -272,26 +281,36 @@ func (a *Archiver) begin(j archiveJob) {
 	if link == "" {
 		return
 	}
+	a.busy[j.post] = true
+	j.link = link
+	a.lookup(j)
+}
+
+func (a *Archiver) lookup(j archiveJob) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	a.wait()
-	found, err := a.WB.Latest(ctx, link)
+	found, err := a.WB.Latest(ctx, j.link)
 	if a.failed(j.post, "lookup", err) {
-		return
-	}
-	if found != "" {
+		if j.step < len(a.Retries) {
+			j.step++
+			a.later(j, a.Retries[j.step-1])
+			return
+		}
+		// the index stays down: a save's job names its copy without it
+	} else if found != "" {
 		a.land(j, found)
 		return
 	}
 	a.wait()
-	job, err := a.WB.Save(ctx, link)
+	job, err := a.WB.Save(ctx, j.link)
 	if a.failed(j.post, "save", err) {
+		delete(a.busy, j.post)
 		return
 	}
-	log.Printf("archive %s: saving %s (%s)", j.post, link, job)
-	a.busy[j.post] = true
-	j.link, j.job = link, job
-	a.later(j)
+	log.Printf("archive %s: saving %s (%s)", j.post, j.link, job)
+	j.job, j.step = job, 0
+	a.later(j, a.Polls[0])
 }
 
 func (a *Archiver) poll(j archiveJob) {
@@ -306,21 +325,20 @@ func (a *Archiver) poll(j archiveJob) {
 	}
 	a.failed(j.post, "save status", err) // the line or a 429: ask again
 	if got != "" {
-		delete(a.busy, j.post)
 		a.land(j, got)
 		return
 	}
-	if j.poll++; j.poll >= len(a.Polls) {
+	if j.step++; j.step >= len(a.Polls) {
 		log.Printf("archive %s: save %s still pending, next round in an hour", j.post, j.job)
 		delete(a.busy, j.post)
 		return
 	}
-	a.later(j)
+	a.later(j, a.Polls[j.step])
 }
 
-// later brings a save back to the queue when its next poll is due.
-func (a *Archiver) later(j archiveJob) {
-	time.AfterFunc(a.Polls[j.poll], func() { a.queue <- j })
+// later brings a round back to the queue when its next step is due.
+func (a *Archiver) later(j archiveJob, after time.Duration) {
+	time.AfterFunc(after, func() { a.queue <- j })
 }
 
 // wait keeps the pause between calls, and a quiet after a 429.
@@ -346,8 +364,10 @@ func (a *Archiver) failed(post, what string, err error) bool {
 	return true
 }
 
-// land stores the copy and tells live views to redraw the card.
+// land stores the copy, ends the round and tells live views to redraw
+// the card.
 func (a *Archiver) land(j archiveJob, archive string) {
+	delete(a.busy, j.post)
 	if err := a.St.SetArchive(j.post, archive); err != nil {
 		log.Printf("archive %s: store: %v", j.post, err)
 		return
