@@ -668,6 +668,8 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(post.Images) > 0 {
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID
+	} else if len(post.Pictures) > 0 {
+		d.Image = webBase(r) + "/v1/embed/" + post.Pictures[0].CID
 	} else if v := append(post.Videos, post.Sounds...); len(v) > 0 && v[0].Poster != "" {
 		d.Image = webBase(r) + "/v1/embed/" + v[0].Poster // a video's frame, or a sound's waveform
 	}

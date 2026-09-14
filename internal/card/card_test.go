@@ -2,6 +2,7 @@ package card
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,89 @@ func TestFirst(t *testing.T) {
 		if got := First(c.text); got != c.want {
 			t.Errorf("First(%q) = %q, want %q", c.text, got, c.want)
 		}
+	}
+}
+
+// TestIPFSLinks: a gateway path or subdomain holding a CIDv0 or CIDv1 is
+// an IPFS link, in order, once each, at most four; anything else is
+// not, and First skips them for the card.
+func TestIPFSLinks(t *testing.T) {
+	const v0 = "QmQCqET4hLUqyMPQRVZ9X2VmaN44PC7iHovmdxG4WoLQJZ"
+	const v1 = "bafybeiatkuft2dk5jwyrati4vmqsks4hiiqukhfxazv3yfyb5scimclnki"
+	for _, c := range []struct {
+		link, cid string
+	}{
+		{"https://ipfs.filebase.io/ipfs/" + v0, v0},
+		{"https://ipfs.io/ipfs/" + v1 + "/shot.png?x=1#f", v1},
+		{"https://" + v1 + ".ipfs.dweb.link/", v1},
+		{"https://" + v1 + ".IPFS.dweb.link/pic.jpg", v1},
+		{"https://k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8.ipfs.dweb.link", "k51qzi5uqu5dlvj2baxnqndepeb86cbk3ng7n3i46uzyxzyqj2xjonzllnv0v8"},
+		{"https://ipfs.io/ipfs/zdj7WWeQ43G6JJvLWQWZpyHuAMq6uYWRjkBXFad11vE2LHhQ7", "zdj7WWeQ43G6JJvLWQWZpyHuAMq6uYWRjkBXFad11vE2LHhQ7"},
+		{"https://ipfs.io/ipfs/Qmshort", ""},
+		{"https://ipfs.io/ipfs/", ""},
+		{"https://ipfs.io/ipns/" + v0, ""},
+		{"https://example.com/" + v0, ""},
+		{"https://example.com/blog/ipfs/" + v0, ""},
+		{"https://ipfs.io/" + v0, ""},
+		{"https://a.example/x", ""},
+	} {
+		if got := IPFSCID(c.link); got != c.cid {
+			t.Errorf("IPFSCID(%q) = %q, want %q", c.link, got, c.cid)
+		}
+	}
+	text := "Screenshots:\n\nhttps://ipfs.filebase.io/ipfs/" + v0 + "\n\nhttps://ipfs.io/ipfs/" + v1 + ".\nagain https://ipfs.filebase.io/ipfs/" + v0 +
+		" and the page https://xadammr.au/blog/x"
+	got := IPFSLinks(text)
+	want := []string{"https://ipfs.filebase.io/ipfs/" + v0, "https://ipfs.io/ipfs/" + v1}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("IPFSLinks = %q, want %q", got, want)
+	}
+	if got := First(text); got != "https://xadammr.au/blog/x" {
+		t.Errorf("First = %q: the card takes the first link that is not an IPFS one", got)
+	}
+	if got := First("https://ipfs.io/ipfs/" + v0); got != "" {
+		t.Errorf("First of an IPFS link alone = %q, want none", got)
+	}
+	many := ""
+	for i := 0; i < 6; i++ {
+		many += " https://ipfs.io/ipfs/" + v1[:len(v1)-1] + string(rune('a'+i))
+	}
+	if got := IPFSLinks(many); len(got) != MaxPictures {
+		t.Errorf("IPFSLinks of six = %d, want the cap %d", len(got), MaxPictures)
+	}
+}
+
+// TestFetchImage: what a gateway serves is kept only when it sniffs as
+// a picture, whatever it says; a page or an unfetchable link is not.
+func TestFetchImage(t *testing.T) {
+	png := "\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 64)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/ipfs/pic":
+			w.Header().Set("Content-Type", "application/octet-stream") // gateways guess; the bytes decide
+			io.WriteString(w, png)
+		case "/ipfs/dir":
+			w.Header().Set("Content-Type", "text/html")
+			io.WriteString(w, "<html><title>Index of /ipfs/dir</title></html>")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	f := NewFetcher()
+	f.AllowPrivate = true
+	data, mime, err := f.FetchImage(context.Background(), srv.URL+"/ipfs/pic")
+	if err != nil || mime != "image/png" || string(data) != png {
+		t.Fatalf("FetchImage = %d bytes, %q, %v", len(data), mime, err)
+	}
+	if _, _, err := f.FetchImage(context.Background(), srv.URL+"/ipfs/dir"); !errors.Is(err, ErrNotPicture) {
+		t.Errorf("a directory listing: %v, want ErrNotPicture (final)", err)
+	}
+	if _, _, err := f.FetchImage(context.Background(), srv.URL+"/ipfs/gone"); err == nil || errors.Is(err, ErrNotPicture) {
+		t.Errorf("a 404: %v, want a plain error (tried again)", err)
+	}
+	if _, _, err := f.FetchImage(context.Background(), "ipfs://x"); err == nil {
+		t.Error("a non-http link was fetched")
 	}
 }
 

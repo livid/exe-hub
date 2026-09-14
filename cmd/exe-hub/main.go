@@ -100,24 +100,27 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Live events: every committed post.create/post.delete/profile.set —
 	// direct or replicated — fans out to /v1/events subscribers.
 	bus := events.New()
-	// Link cards: a bare-link post gets its first link unfurled off the
-	// ingest path (the OnMessage hook sees direct and replicated posts
-	// both); the backfill gives the posts from before this feature their
-	// cards once. Each card's page also gets a copy in the Internet
-	// Archive, found or saved; the sweep retries and covers older cards.
+	// Link cards and linked pictures: a bare-link post gets its first
+	// link unfurled, and any post its IPFS links fetched as pictures, off
+	// the ingest path (the OnMessage hook sees direct and replicated posts
+	// both); the backfill gives the posts from before each feature their
+	// cards and pictures once, and the sweep retries the pictures a
+	// gateway did not serve. Each card's page also gets a copy in the
+	// Internet Archive, found or saved; its sweep retries and covers
+	// older cards.
 	cards := card.NewWorker(st, ipfsc, bus)
 	cards.Archive = card.NewArchiver(st, bus)
 	go cards.Archive.Run()
 	go cards.Archive.Sweep()
 	go cards.Run()
 	go cards.Backfill()
+	go cards.Sweep()
 	st.OnMessage = func(e *envelope.Envelope, op any, id string) {
 		switch o := op.(type) {
 		case *envelope.PostCreate:
 			bus.Emit(events.Event{Type: "post.create", ID: id, ReplyTo: o.ReplyTo, Author: e.ProfileID()})
-			if len(o.Embeds) == 0 { // a card is for a bare link; a post already showing something needs none
-				cards.Enqueue(id, e.ProfileID(), o.Text)
-			}
+			// a card is for a bare link; a post already showing something needs none
+			cards.Enqueue(id, e.ProfileID(), o.Text, len(o.Embeds) == 0)
 		case *envelope.PostDelete:
 			bus.Emit(events.Event{Type: "post.delete", ID: o.Post, Author: e.ProfileID()})
 		case *envelope.ProfileSet:

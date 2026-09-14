@@ -10,8 +10,9 @@ import "sync"
 // it; ID is the post id it concerns (for post.delete, the deleted post,
 // not the delete message's own id; for profile.set, the message itself —
 // Author names the profile that changed). post.card is the one type with
-// no envelope behind it: the post's link card landed (cards are derived,
-// not signed), so live pages refetch and the card slides in.
+// no envelope behind it: something the hub derived for the post landed —
+// its link card, the card's archived copy, or a linked picture (none of
+// them signed) — so live pages refetch the post and draw it in.
 type Event struct {
 	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set" | "post.card"
 	ID      string `json:"id"`                 // post id

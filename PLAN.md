@@ -265,7 +265,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   size, sniffs the real MIME (doesn't trust the declaration), adds + pins
   via kubo RPC (`/api/v0/add`), returns the CID. No arbitrary external
   CIDs in v1 (fetching untrusted CIDs hangs and size-bombs; if ever
-  allowed, hard timeout + size-capped reader before pinning).
+  allowed, hard timeout + size-capped reader before pinning). A picture a
+  post links on IPFS is fetched over HTTPS from the gateway the link
+  names, like a card's picture, never through kubo (see Linked pictures).
 - The add response is read to its end before the CID is trusted: kubo
   pins the root only after it has written the file's JSON object, and a
   client that hangs up on that object cancels the request and loses the
@@ -823,7 +825,8 @@ idea; Livid said do it.
 - **One fetch, off the ingest path.** A single worker goroutine takes
   bare-link posts from a bounded queue (`internal/card`): the first URL
   in the text — matched by the linkifier's own regexp, moved to
-  `card.URL` so the two can never disagree — is fetched with a 1MB cap
+  `card.URL` so the two can never disagree; an IPFS link skipped, see
+  Linked pictures — is fetched with a 1MB cap
   and hard timeouts, OpenGraph read with Twitter and `<title>`/
   `description` fallbacks; the picture (8MB cap, sniffed like an upload,
   so SVG never passes) goes through the kubo add path and is refcounted
@@ -973,3 +976,50 @@ ffmpeg) does not, and draws what it mirrors all the same.
   from; a one-hop topology makes that sufficient).
 - Hub-to-hub trust exchange beyond replication (the reserved use of the
   hub identity): signed peer recommendations, cross-hub ban hints.
+
+## Linked pictures — IPFS links that are pictures (built)
+
+A post that links a picture on IPFS — a gateway address holding a CID,
+as Filebase, ipfs.io or dweb.link hand them out — shows the picture
+under its text, the way an attached one shows. Asked by Livid
+2026-09-14, after nc posted two Filebase screenshots as bare links.
+
+- **Detected by the CID.** An IPFS link is a URL (the linkifier's own
+  match) whose path begins `/ipfs/<cid>` or whose host is
+  `<cid>.ipfs.<gateway>`, the CID in a shape gateways serve: CIDv0 (`Qm`
+  and 44 base58 characters) or CIDv1 in base32 (`b…`), base36 (`k…`) or
+  base58 (`z…`). `card.IPFSCID` decides; up to four per post (the embed
+  cap), each once, in text order. The card takes the first link that is
+  not one of these: a gateway serves a file, not a page with a title.
+- **Tested by the hub, once for everyone.** A gateway may not answer
+  (the CID is fetched from wherever it lives), so the hub tries before
+  anyone sees a broken picture: the worker fetches the link through the
+  guarded fetcher like a card's picture — dial guard, 8 MB cap, the
+  bytes sniffed, so a directory listing, an HTML page or an SVG stays a
+  link — and adds what is a picture to kubo under the hub's own CID,
+  refcounted in `pins` like an embed. Never through kubo itself:
+  fetching an untrusted CID from the network hangs and size-bombs
+  (Embeds & IPFS). Readers then get the hub's copy from
+  `/v1/embed/{cid}`, as every picture, and keep it after the gateway
+  forgets the file.
+- **A few rounds, then a link.** A failed try is counted in `pictures`
+  (post, url, idx, cid, mime, status, tries, ts); the hourly sweep tries
+  an unanswered link again while it has fewer than three tries and its
+  last was an hour ago, and after that the link is left a link. A link
+  that answered with something other than a picture — an HTML artifact,
+  a directory listing, a file past the cap — is final at once: what a
+  CID names never changes. A repost gets fresh tries. The backfill at
+  start covers the posts from before this feature (text mentioning
+  ipfs, never tried).
+- **Derived, never signed** — like cards: outside the envelope, every
+  hub's own derivation, replicated posts included; kept through
+  `Rebuild` (orphans dropped, refs restored), released with the post.
+  Posts with embeds get their linked pictures too: the link is the
+  author's content, not decoration.
+- **Served and drawn like attached pictures.** `FeedPost.pictures`
+  carries `[{url, cid, mime}]`; the public pages draw them in the post's
+  embeds block after the attached ones (the viewer window named by the
+  file the link ends in, else Picture), the Hub app in its embeds row;
+  the thread page's preview image falls back to the first one. The text
+  keeps the link, as it keeps a card's. Landing one emits `post.card`,
+  the event for anything the hub derived.

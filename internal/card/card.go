@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -39,9 +40,67 @@ const urlLatin = `\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{24F}`
 var URL = regexp.MustCompile(`https?://[\w#$%&+,\-./:;=?@\[\]~` + urlLatin + `]*[\w#$%&+\-/;=@` + urlLatin + `]`)
 
 // First is the link a post's card is derived from: the first URL in its
-// text, exactly as the linkifier would wrap it.
+// text, exactly as the linkifier would wrap it — skipping IPFS links,
+// which are the linked pictures' business (a gateway serves a file, not
+// a page with a title).
 func First(text string) string {
-	return URL.FindString(text)
+	for _, u := range URL.FindAllString(text, -1) {
+		if IPFSCID(u) == "" {
+			return u
+		}
+	}
+	return ""
+}
+
+// ---- IPFS links: the pictures a post links to (PLAN.md, Linked pictures) ----
+
+// MaxPictures is how many linked pictures a post gets, the embed cap.
+const MaxPictures = 4
+
+// cidRE matches a CID in the shapes gateways serve: CIDv0 (Qm and 44
+// base58btc characters) and CIDv1 in base32 (b…, what subdomain
+// gateways use), base36 (k…) or base58btc (z…). A raw multihash or an
+// inline identity CID is too short to be a picture and is not matched.
+var cidRE = regexp.MustCompile(`^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,}|k[a-z0-9]{50,}|z[1-9A-HJ-NP-Za-km-z]{48,})$`)
+
+// IPFSCID is the CID an IPFS link names, or "" for any other link: a URL
+// whose path begins /ipfs/<cid> (a path gateway such as ipfs.io or
+// ipfs.filebase.io) or whose host is <cid>.ipfs.<gateway> (a subdomain
+// gateway such as dweb.link). What follows the CID — a path inside a
+// directory, a query, a fragment — is the gateway's to resolve.
+func IPFSCID(link string) string {
+	pu, err := url.Parse(link)
+	if err != nil {
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(pu.Path, "/ipfs/"); ok {
+		c, _, _ := strings.Cut(rest, "/")
+		if cidRE.MatchString(c) {
+			return c
+		}
+		return ""
+	}
+	if c, rest, ok := strings.Cut(strings.ToLower(pu.Hostname()), "."); ok &&
+		strings.HasPrefix(rest, "ipfs.") && cidRE.MatchString(c) {
+		return c
+	}
+	return ""
+}
+
+// IPFSLinks lists the IPFS links in a post's text: in order, each once,
+// at most MaxPictures of them, each exactly as the linkifier wraps it.
+func IPFSLinks(text string) []string {
+	var out []string
+	for _, u := range URL.FindAllString(text, -1) {
+		if IPFSCID(u) == "" || slices.Contains(out, u) {
+			continue
+		}
+		out = append(out, u)
+		if len(out) == MaxPictures {
+			break
+		}
+	}
+	return out
 }
 
 // Caps, PLAN.md: the page read stops at 1MB (OpenGraph lives in <head>),
@@ -130,7 +189,7 @@ func (f *Fetcher) get(ctx context.Context, u string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "exe-hub/1 (link cards)")
+	req.Header.Set("User-Agent", "exe-hub/1 (link cards, linked pictures)")
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -180,10 +239,19 @@ func (f *Fetcher) Fetch(ctx context.Context, link string) (*Meta, error) {
 	return m, nil
 }
 
-// FetchImage reads the card's picture, capped at the embed size, and
-// sniffs the real type — only what sniffs as an image is accepted (SVG
-// never does, which keeps scriptable content out of /v1/embed).
+// ErrNotPicture is a link that answered with something other than a
+// picture, or with one past the cap: what it names will never be one.
+var ErrNotPicture = errors.New("not a picture")
+
+// FetchImage reads a picture — a card's, or one a post links to on IPFS
+// — capped at the embed size, and sniffs the real type: only what
+// sniffs as an image is accepted (SVG never does, which keeps
+// scriptable content out of /v1/embed). The answer that is not a
+// picture is ErrNotPicture; any other error is the line or the server.
 func (f *Fetcher) FetchImage(ctx context.Context, u string) (data []byte, mime string, err error) {
+	if pu, err := url.Parse(u); err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Hostname() == "" {
+		return nil, "", fmt.Errorf("not a fetchable link: %q", u)
+	}
 	resp, err := f.get(ctx, u)
 	if err != nil {
 		return nil, "", err
@@ -194,14 +262,14 @@ func (f *Fetcher) FetchImage(ctx context.Context, u string) (data []byte, mime s
 		return nil, "", err
 	}
 	if len(data) > MaxImage {
-		return nil, "", fmt.Errorf("picture past the %dMB cap", MaxImage>>20)
+		return nil, "", fmt.Errorf("%w: past the %dMB cap", ErrNotPicture, MaxImage>>20)
 	}
 	mime = http.DetectContentType(data)
 	if i := strings.Index(mime, ";"); i > 0 {
 		mime = mime[:i]
 	}
 	if !strings.HasPrefix(mime, "image/") {
-		return nil, "", fmt.Errorf("not a picture: %s", mime)
+		return nil, "", fmt.Errorf("%w: %s", ErrNotPicture, mime)
 	}
 	return data, mime, nil
 }

@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -158,6 +160,22 @@ CREATE TABLE IF NOT EXISTS cards (
   image  TEXT NOT NULL DEFAULT '',     -- pinned CID, refcounted like an embed
   status TEXT NOT NULL,                -- 'ok' | 'failed'
   ts     INTEGER NOT NULL
+);
+
+-- Linked pictures (see PLAN.md): the pictures a post's IPFS links name,
+-- fetched by the hub and kept under its own CID. Derived like cards, so
+-- outside the envelope and not rebuilt from the log; a failed row
+-- counts its tries, since a gateway may not answer the first time.
+CREATE TABLE IF NOT EXISTS pictures (
+  post   TEXT NOT NULL,                -- the post whose text links it
+  url    TEXT NOT NULL,                -- the IPFS link as posted
+  idx    INTEGER NOT NULL,             -- its place among the post's IPFS links
+  cid    TEXT NOT NULL DEFAULT '',     -- the hub's copy, refcounted like an embed
+  mime   TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,                -- 'ok' | 'failed'
+  tries  INTEGER NOT NULL DEFAULT 0,
+  ts     INTEGER NOT NULL,
+  PRIMARY KEY (post, url)
 );`)
 	if err != nil {
 		return err
@@ -400,6 +418,29 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM cards WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
+		// and its linked pictures, each copy's pin released
+		rows, err = tx.Query(`SELECT cid FROM pictures WHERE post=? AND cid<>''`, v.Post)
+		if err != nil {
+			return nil, err
+		}
+		cids = cids[:0]
+		for rows.Next() {
+			var c string
+			if err := rows.Scan(&c); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			cids = append(cids, c)
+		}
+		rows.Close()
+		for _, c := range cids {
+			if unpin, err = dropRef(tx, c, unpin); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM pictures WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
 		_, err = tx.Exec(`DELETE FROM posts WHERE id=?`, v.Post)
 		return unpin, err
 	case *envelope.BanSet:
@@ -538,6 +579,13 @@ func (s *Store) Rebuild() error {
 	if _, err := tx.Exec(`UPDATE pins SET refs = refs + (SELECT COUNT(*) FROM cards WHERE cards.image = pins.cid AND cards.status='ok')`); err != nil {
 		return err
 	}
+	// Linked pictures likewise.
+	if _, err := tx.Exec(`DELETE FROM pictures WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE pins SET refs = refs + (SELECT COUNT(*) FROM pictures WHERE pictures.cid = pins.cid AND pictures.status='ok')`); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -553,8 +601,9 @@ type FeedPost struct {
 	TS         int64            `json:"ts"`
 	Received   int64            `json:"received"`
 	Embeds     []envelope.Embed `json:"embeds,omitempty"`
-	Card       *Card            `json:"card,omitempty"`  // the first link, unfurled (see PLAN.md, Link cards)
-	PageCIDs   []string         `json:"pages,omitempty"` // the embeds that open as pages (see PLAN.md, Pages)
+	Card       *Card            `json:"card,omitempty"`     // the first link, unfurled (see PLAN.md, Link cards)
+	Pictures   []Picture        `json:"pictures,omitempty"` // the pictures its IPFS links name (see PLAN.md, Linked pictures)
+	PageCIDs   []string         `json:"pages,omitempty"`    // the embeds that open as pages (see PLAN.md, Pages)
 	Replies    int              `json:"replies"`
 	Depth      int              `json:"depth,omitempty"` // set by Thread: steps below the root, 1 = a direct reply
 }
@@ -569,6 +618,28 @@ type Card struct {
 	// the page's copy in the Wayback Machine, https://web.archive.org/web/<timestamp>/<link>
 	Archive string `json:"archive,omitempty"`
 }
+
+// Picture is one linked picture as the feed serves it: the IPFS link as
+// posted, and the hub's copy of what it served.
+type Picture struct {
+	URL  string `json:"url"`
+	CID  string `json:"cid"` // pinned CID, served by /v1/embed
+	MIME string `json:"mime"`
+}
+
+// Name is what a viewer titles the picture: the file its link ends in,
+// when the link names one (a gateway path can end in the CID alone),
+// else "Picture".
+func (p Picture) Name() string {
+	if m := pictureFile.FindStringSubmatch(p.URL); m != nil {
+		if name, err := url.PathUnescape(m[1]); err == nil {
+			return name
+		}
+	}
+	return "Picture"
+}
+
+var pictureFile = regexp.MustCompile(`(?i)/([^/?#]+\.[a-z0-9]{2,5})(?:[?#]|$)`)
 
 // ArchiveDate is the archived copy's capture day as YYYY-MM-DD, read
 // from the Wayback URL's timestamp; "" when there is no copy.
@@ -618,6 +689,9 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 			return nil, err
 		}
 		out[i].Embeds = embeds
+		if out[i].Pictures, err = s.postPictures(out[i].ID); err != nil {
+			return nil, err
+		}
 		if s.PageAuthor == nil {
 			continue
 		}
@@ -727,6 +801,135 @@ func (s *Store) PostsWithoutCards(limit int) ([]CardPost, error) {
 		LEFT JOIN cards c ON c.post = p.id
 		WHERE c.post IS NULL AND NOT EXISTS (SELECT 1 FROM embeds e WHERE e.post = p.id)
 		ORDER BY p.received DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ---- linked pictures (see PLAN.md, Linked pictures) ----
+
+func (s *Store) postPictures(post string) ([]Picture, error) {
+	rows, err := s.db.Query(`SELECT url, cid, mime FROM pictures WHERE post=? AND status='ok' ORDER BY idx`, post)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Picture
+	for rows.Next() {
+		var p Picture
+		if err := rows.Scan(&p.URL, &p.CID, &p.MIME); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// PictureTry is what became of one of a post's IPFS links so far.
+type PictureTry struct {
+	OK    bool
+	Tries int
+}
+
+// PictureTries lists the post's IPFS links already tried, by link.
+func (s *Store) PictureTries(post string) (map[string]PictureTry, error) {
+	rows, err := s.db.Query(`SELECT url, status, tries FROM pictures WHERE post=?`, post)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]PictureTry{}
+	for rows.Next() {
+		var u, status string
+		var t PictureTry
+		if err := rows.Scan(&u, &status, &t.Tries); err != nil {
+			return nil, err
+		}
+		t.OK = status == "ok"
+		out[u] = t
+	}
+	return out, rows.Err()
+}
+
+// SetPicture records a try at a post's IPFS link, with the tries it now
+// stands at (the worker sets the cap for a link that will never be a
+// picture, so the sweep leaves it). A picture that landed is pinned in
+// the same transaction (refs start at 1, like a card's picture).
+// Replacing a copy releases the old one: the caller unpins the returned
+// CIDs, like Ingest's.
+func (s *Store) SetPicture(post string, idx int, url, cid string, size int64, mime string, tries int, ok bool) (unpin []string, err error) {
+	status := "ok"
+	if !ok {
+		status, cid, mime = "failed", "", ""
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var old string
+	if err := tx.QueryRow(`SELECT cid FROM pictures WHERE post=? AND url=?`, post, url).Scan(&old); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if old != "" && old != cid {
+		if unpin, err = dropRef(tx, old, unpin); err != nil {
+			return nil, err
+		}
+	}
+	if cid != "" && cid != old {
+		if _, err := tx.Exec(`INSERT INTO pins (cid, size, mime, refs, is_avatar, created) VALUES (?,?,?,1,0,?)
+			ON CONFLICT(cid) DO UPDATE SET refs=refs+1`, cid, size, mime, time.Now().UnixMilli()); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO pictures (post, url, idx, cid, mime, status, tries, ts) VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT(post, url) DO UPDATE SET idx=excluded.idx, cid=excluded.cid, mime=excluded.mime,
+		status=excluded.status, tries=excluded.tries, ts=excluded.ts`,
+		post, url, idx, cid, mime, status, tries, time.Now().UnixMilli()); err != nil {
+		return nil, err
+	}
+	return unpin, tx.Commit()
+}
+
+// PostsWithoutPictures lists the posts that may link pictures — their
+// text mentions ipfs — and were never tried for any, newest first: the
+// backfill's worklist, which the worker narrows to real IPFS links.
+func (s *Store) PostsWithoutPictures(limit int) ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, p.text FROM posts p
+		WHERE p.text LIKE '%ipfs%' AND NOT EXISTS (SELECT 1 FROM pictures x WHERE x.post = p.id)
+		ORDER BY p.received DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// PicturesToRetry lists the posts with a linked picture that failed,
+// has tries left and was last tried before (unix ms) — the sweep's
+// worklist, newest post first.
+func (s *Store) PicturesToRetry(maxTries int, before int64, limit int) ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, p.text FROM posts p
+		WHERE EXISTS (SELECT 1 FROM pictures x WHERE x.post = p.id AND x.status = 'failed' AND x.tries < ? AND x.ts < ?)
+		ORDER BY p.received DESC LIMIT ?`, maxTries, before, limit)
 	if err != nil {
 		return nil, err
 	}
