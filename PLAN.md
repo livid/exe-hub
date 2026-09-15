@@ -642,6 +642,14 @@ hub that carries the post.
   localStorage, nothing secret, and asks that wallet again silently on
   the next visit; a head script classes `<html>` (`js`, `wallet`)
   before layout so the window has its final shape and never jumps.
+  On a phone (a coarse pointer) with no Solana wallet there is no Post
+  window at all (2026-09-14): the script classes `<html>` `solana` the
+  moment a wallet announces itself (or `window.solana` is there), and
+  under a coarse pointer the window shows only with `solana` or
+  `wallet` — a wallet that signed in before keeps its window until the
+  page learns that wallet is gone. A desktop browser without a wallet
+  keeps the window and its "No Solana wallet in this browser" line,
+  where an extension is a click away.
   A post refreshes the live feed at
   once; a reply reloads the thread at the new reply. Text and names are
   checked in bytes against the envelope caps before a popup. Not built:

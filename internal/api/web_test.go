@@ -934,7 +934,9 @@ func TestWebCompose(t *testing.T) {
 		`class="btn profile-btn">Profile…</button>`, `<span class="grow who-wrap"><a class="me-av" aria-label="Your page" hidden><img alt=""></a><span class="who"><b class="name">`, `role="dialog" aria-modal="true" aria-label="Profile"`,
 		`<button type="button" class="btn left p-edit">Edit</button>`, `class="btn p-choose" hidden>Choose Picture…</button>`,
 		`accept="image/png,image/jpeg,image/gif"`, `"/v1/avatar"`, `"exe-hub:v1\nupload\n"`,
-		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`} {
+		`"solana:signMessage"`, `wallet-standard:app-ready`, `"/v1/gate?author="`, `From a Solana wallet:`,
+		// a phone without a wallet gets no Post window: hidden under a coarse pointer unless a wallet is there or signed in before
+		"@media (pointer: coarse) {\n  .js .composer { display: none; }\n  .js.solana .composer, .js.wallet .composer { display: block; }\n}", `root.classList.add("solana")`} {
 		if !strings.Contains(home, want) {
 			t.Errorf("home page lacks %q", want)
 		}

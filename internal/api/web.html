@@ -153,6 +153,16 @@ a { color: #333399; }
 .compose [hidden] { display: none !important; }
 .compose .in, .wallet .compose .out { display: none; }
 .wallet .compose .in { display: block; }
+/* a phone (a coarse pointer) without a Solana wallet gets no Post
+   window at all: nothing could be done in it, and no extension is a
+   click away as it is on a desktop. The script classes <html> solana
+   the moment a wallet announces itself (or window.solana is there);
+   wallet, from the head script, keeps the window of a wallet that
+   signed in before until the page learns that wallet is gone. */
+@media (pointer: coarse) {
+  .js .composer { display: none; }
+  .js.solana .composer, .js.wallet .composer { display: block; }
+}
 .compose .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .compose .grow { flex: 1 1 12em; min-width: 0; font-size: 11px; color: #333; }
 .compose .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -824,6 +834,7 @@ localTimes(document);
   let onWallet = () => {};
   const registry = { register(...ws) {
     for (const w of ws) if (w && w.features && w.features["standard:connect"] && w.features["solana:signMessage"] && !wallets.includes(w)) wallets.push(w);
+    if (wallets.length) root.classList.add("solana");
     onWallet();
     return () => {};
   } };
@@ -834,6 +845,7 @@ localTimes(document);
     return p && typeof p.connect === "function" && typeof p.signMessage === "function"
       ? { name: p.isPhantom ? "Phantom" : "Solana wallet", legacy: p } : null;
   };
+  if (legacy()) root.classList.add("solana");
   // wallets announce themselves as the page starts; give them a moment
   const found = new Promise(res => setTimeout(() => res(), 300)).then(() => wallets.length ? wallets : [legacy()].filter(Boolean));
 
@@ -1210,7 +1222,8 @@ localTimes(document);
   // ---- start: no wallet, a wallet signed in before, or signed out ----
   const saved = recall();
   found.then(ws => {
-    if (!ws.length) {
+    if (ws.length) root.classList.add("solana");
+    else {
       note.textContent = "No Solana wallet in this browser.";
       signin.disabled = true;
       onWallet = () => { note.textContent = noteText; signin.disabled = false; };
