@@ -820,6 +820,18 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 		return nil, err
 	}
 	for i := range out {
+		// a root's count is the whole conversation, not its first level:
+		// the direct count from feedCols is replaced by the tree's
+		if out[i].ReplyTo == "" && out[i].Replies > 0 {
+			err := s.db.QueryRow(`WITH RECURSIVE tree(tid) AS (
+				SELECT id FROM posts WHERE reply_to = ?
+				UNION ALL
+				SELECT p.id FROM posts p JOIN tree t ON p.reply_to = t.tid
+			) SELECT COUNT(*) FROM tree`, out[i].ID).Scan(&out[i].Replies)
+			if err != nil {
+				return nil, err
+			}
+		}
 		// a stale pointer (its post gone mid-write) simply stays absent
 		if lastIDs[i] != "" {
 			var r ReplyRef

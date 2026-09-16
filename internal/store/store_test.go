@@ -147,6 +147,9 @@ func TestFeedActivity(t *testing.T) {
 	if p, _ := s.Post(root); p.LastReply == nil || p.LastReply.ID != r2 {
 		t.Fatalf("root's last reply: %+v", p.LastReply)
 	}
+	if p, _ := s.Post(root); p.Replies != 2 { // r1 and the nested r2
+		t.Fatalf("root counts %d replies, want the tree's 2", p.Replies)
+	}
 
 	// deleting the newest reply hands the pointer back to r1 and the
 	// activity to r1's arrival (still newest touch, root stays first)

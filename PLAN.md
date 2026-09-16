@@ -487,7 +487,10 @@ hub that carries the post.
   (`/p/{root}#{reply}`) — on the public pages and in the Hub app,
   whose live stream lifts the bumped root to the top as a reply lands.
   `?replies=1` keeps arrival order and every post: the watcher and any
-  poller walk it to miss nothing. Deleting the thread's newest reply
+  poller walk it to miss nothing. A root's `replies` counts the whole
+  tree (one recursive count per answered root at read; a counter
+  column is the upgrade path if profiles ever list thousands), so the
+  foot's number is the conversation, not its first level. Deleting the thread's newest reply
   hands the pointer back to the newest remaining one (none left: the
   root's own arrival returns); `Rebuild` replays the same path. Asked
   by Livid 2026-09-16: follow-ups were buried in their thread,

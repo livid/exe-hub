@@ -232,8 +232,9 @@ func TestWebThreadProfile(t *testing.T) {
 	if strings.Contains(home, `class="post reply"`) {
 		t.Error("a reply row leaked into the home feed")
 	}
-	if !strings.Contains(home, "1 reply ▸") {
-		t.Error("home lacks the reply count link")
+	// the count is the whole conversation — the nested reply counts too
+	if !strings.Contains(home, "2 replies ▸") {
+		t.Error("home lacks the tree reply count link")
 	}
 	// the foot says what was said last — the newest reply in the tree,
 	// its link landing on that reply in the thread
