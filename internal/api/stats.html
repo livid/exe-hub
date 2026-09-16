@@ -94,7 +94,7 @@
 <div class="window main sw">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">Stats · {{$.Host}}</span><span class="stripe"></span></div>
   <div class="frame">
-    <div class="strip ranges">{{range .Ranges}}{{if .On}}<span class="btn tab on">{{.Label}}</span>{{else}}<a class="btn tab" href="{{.URL}}">{{.Label}}</a>{{end}}{{end}}<span class="online">{{.Online}} online</span></div>
+    <div class="strip ranges">{{range .Ranges}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}<span class="online">{{.Online}} online</span></div>
     {{if .Filters}}<div class="strip chips">Only:{{range .Filters}} <span class="chip">{{.Label}} <b>{{.Value}}</b><a href="{{.URL}}" title="Lift this filter">×</a></span>{{end}}</div>{{end}}
     <div class="tiles">{{range .Tiles}}<div class="tile"><div class="tl">{{.Label}}</div><div class="tv">{{.Value}}</div><div class="td">{{.Delta}}</div></div>{{end}}</div>
     <div class="chart">
@@ -123,7 +123,7 @@
 <div class="window sw" id="{{.Anchor}}">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Title}}</span><span class="stripe"></span></div>
   <div class="frame">
-    <div class="strip">{{range .Views}}{{if .On}}<span class="btn tab on">{{.Label}}</span>{{else}}<a class="btn tab" href="{{.URL}}#{{$l.Anchor}}">{{.Label}}</a>{{end}}{{end}}</div>
+    <div class="strip">{{range .Views}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}#{{$l.Anchor}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</div>
     <div class="rows">{{range .Rows}}<div class="row"><span class="lab"><span class="bar" style="width: {{.Pct}}%"></span><a href="{{.URL}}#{{$l.Anchor}}"{{if .Title}} title="{{.Title}}"{{end}}>{{.Label}}{{if .Tag}}<span class="tag">{{.Tag}}</span>{{end}}</a></span><span class="n">{{.N}}</span></div>{{else}}<div class="none">{{.Empty}}</div>{{end}}</div>
     <div class="statusbar"><span>{{.Count}}</span><span>{{if .More}}{{.More}} more in the JSON{{end}}</span></div>
   </div>
@@ -140,13 +140,29 @@
 // load the page and land on the window they belong to.
 (() => {
   const here = () => location.pathname + location.search;
+  // each window's frame is swapped part by part — the strip, the rows,
+  // the status line — and only a part that changed, so a strip whose
+  // held button the click already set is left as it is: no rebuild, no
+  // flash (Livid saw one, 2026-09-16)
   const swap = html => {
     const fresh = new DOMParser().parseFromString(html, "text/html");
     const have = document.querySelectorAll(".sw > .frame"), next = fresh.querySelectorAll(".sw > .frame");
     if (have.length !== next.length) return false;
-    have.forEach((f, i) => { if (!f.isEqualNode(next[i])) f.replaceWith(next[i]); });
+    have.forEach((f, i) => {
+      const a = [...f.children], b = [...next[i].children];
+      if (a.length !== b.length) { f.replaceWith(next[i]); return; }
+      a.forEach((c, j) => { if (!c.isEqualNode(b[j])) c.replaceWith(b[j]); });
+    });
     document.title = fresh.title || document.title;
     return true;
+  };
+  // a clicked view or range is held down at once, as the answer will show it
+  const hold = a => {
+    if (!a.classList.contains("tab")) return;
+    for (const t of a.parentElement.querySelectorAll(".tab")) {
+      t.classList.toggle("on", t === a);
+      if (t === a) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+    }
   };
   const load = async url => {
     const r = await fetch(url, { cache: "no-store", headers: { "X-Hub-Live": "1" } });
@@ -167,6 +183,8 @@
     const u = new URL(a.href);
     if (u.origin !== location.origin || u.pathname !== "/stats") return;
     e.preventDefault();
+    if (a.classList.contains("on")) return; // already here
+    hold(a);
     const url = u.pathname + u.search;
     load(url).then(() => history.pushState(null, "", url)).catch(() => { location.href = a.href; });
   });

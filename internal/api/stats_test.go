@@ -118,7 +118,7 @@ func TestStatsPage(t *testing.T) {
 		t.Fatalf("GET /stats = %d", code)
 	}
 	for _, want := range []string{
-		`<span class="btn tab on">7 days</span>`,
+		`<a class="btn tab on" href="/stats?range=7d" aria-current="page">7 days</a>`, // the current range, held down, still a link
 		`href="/stats?range=30d"`,
 		`<div class="tl">Visitors</div><div class="tv">3</div>`,
 		`<div class="tl">Page views</div><div class="tv">4</div>`,
@@ -151,7 +151,7 @@ func TestStatsPage(t *testing.T) {
 	for _, want := range []string{
 		`<div class="tl">Visitors</div><div class="tv">1</div>`,
 		`<span class="chip">Country <b>Japan</b><a href="/stats?dev=browsers&amp;range=7d"`,
-		`<span class="btn tab on">Browser</span>`,
+		`<a class="btn tab on" href="/stats?country=JP&amp;dev=browsers&amp;range=7d#w-dev" aria-current="page">Browser</a>`,
 		`>Chrome</a>`,
 	} {
 		if !strings.Contains(body, want) {
