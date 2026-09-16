@@ -246,6 +246,11 @@ a { color: #333399; }
 .post.reply:has(+ .post.qrun) { border-bottom-color: #eee; }
 .av { width: 32px; height: 32px; border: 1px solid #262626; display: block; background: #ddd; box-sizing: border-box; }
 .av img { width: 30px; height: 30px; display: block; image-rendering: pixelated; }
+/* a reply wears a small avatar, as the Hub app draws its rows; the
+   post heading a thread keeps the full size */
+.post.reply { grid-template-columns: 16px minmax(0, 1fr); }
+.post.reply .av { width: 16px; height: 16px; }
+.post.reply .av img { width: 14px; height: 14px; }
 .meta { color: #666; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta b { color: #262626; font-size: 12px; }
 .meta a { text-decoration: none; }
