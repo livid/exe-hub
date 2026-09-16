@@ -80,7 +80,11 @@ func TestStatsCounting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if sum.Pageviews != 5 {
-		t.Errorf("page views = %d, want 5 (four pages and the skill)", sum.Pageviews)
+		t.Errorf("page views = %d, want 5 (four pages and the skill; the crawler apart)", sum.Pageviews)
+	}
+	bots, _ := s.St.StatsTop(store.StatsFilter{To: time.Now().UnixMilli() + 1000}, "crawler")
+	if len(bots) != 1 || bots[0].Key != "Googlebot" || bots[0].N != 1 {
+		t.Errorf("crawlers %v, want Googlebot 1", bots)
 	}
 	if sum.Visitors != 2 || sum.Sessions != 2 {
 		t.Errorf("visitors %d sessions %d, want 2 and 2 (the browser, and curl)", sum.Visitors, sum.Sessions)
@@ -109,6 +113,7 @@ func TestStatsPage(t *testing.T) {
 		{TS: now - 30_000, VID: "aaaa", SID: "s1", Path: "/p/" + id, Kind: "thread", Ref: "Google", Channel: "search", Country: "JP", Device: "desktop", Browser: "Chrome", OS: "Windows", Lang: "ja"},
 		{TS: now - 20_000, VID: "bbbb", SID: "s2", Entry: true, Path: "/u/" + pub2id(pub), Kind: "profile", Channel: "direct", Country: "CN", Device: "mobile", Browser: "Safari", OS: "iOS", Lang: "zh-CN"},
 		{TS: now - 26*3600_000, VID: "cccc", SID: "s3", Entry: true, Path: "/", Kind: "home", Channel: "direct", Country: "US", Device: "desktop"},
+		{TS: now - 10_000, VID: "gggg", SID: "g1", Entry: true, Path: "/p/" + id, Kind: "thread", Channel: "direct", Country: "US", Device: "bot", Browser: "Googlebot", Bot: true},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -135,6 +140,10 @@ func TestStatsPage(t *testing.T) {
 		`<path class="f" style="fill: #4b0082"`,       // bbbb's disc: 0xbb % 20 = 7, Indigo
 		`<path class="f" style="fill: #c8a2c8"`,       // aaaa's: 0xaa % 20 = 10, Lilac
 		`headers: { "X-Hub-Live": "1" }`,
+		`<div class="window sw" id="w-bt">`,             // the Bots window
+		`href="/stats?bot=Googlebot&amp;range=7d#w-bt"`, // a crawler's row holds the view to it
+		`Page views · left out of every other number`,
+		`<a href="/stats?bot=all&amp;range=7d#w-bt">Only crawlers</a>`,
 		`<div class="window sw" id="w-dev">`,            // a window is an anchor
 		`href="/stats?dev=browsers&amp;range=7d#w-dev"`, // a view link lands on its window without script
 		`history.pushState(null, "", url)`,              // with script the view is fetched in place
@@ -160,6 +169,23 @@ func TestStatsPage(t *testing.T) {
 	}
 	if strings.Contains(body, ">Safari</a>") {
 		t.Error("a filtered view shows the other country's browser")
+	}
+	// held to one crawler: its numbers, its chip, and the Bots window still lists it
+	code, body = get(t, h, "/stats?range=7d&bot=Googlebot")
+	if code != 200 {
+		t.Fatalf("bot view = %d", code)
+	}
+	for _, want := range []string{
+		`<div class="tl">Page views</div><div class="tv">1</div>`,
+		`<span class="chip">Bot <b>Googlebot</b>`,
+		`>bot</a>`, // the Devices list: device "bot"
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("bot view lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `Only crawlers`) {
+		t.Error("the Only crawlers link on a view already held to a crawler")
 	}
 	// yesterday's span holds the old hit alone
 	_, body = get(t, h, "/stats?range=yesterday")
@@ -192,11 +218,14 @@ func TestStatsPage(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
 		t.Fatal(err)
 	}
-	if rep.Range != "7d" || rep.Zone != "UTC" || rep.Summary["pageviews"] != 4 || len(rep.Series) != 7 || len(rep.Lists) != 13 || rep.Live.Online != 2 {
+	if rep.Range != "7d" || rep.Zone != "UTC" || rep.Summary["pageviews"] != 4 || len(rep.Series) != 7 || len(rep.Lists) != 15 || rep.Live.Online != 2 {
 		t.Errorf("json %+v", rep)
 	}
 	if rep.Lists["countries"][0]["key"] != "JP" && rep.Lists["countries"][0]["key"] != "CN" {
 		t.Errorf("countries %v", rep.Lists["countries"])
+	}
+	if c := rep.Lists["crawlers"]; len(c) != 1 || c[0]["key"] != "Googlebot" {
+		t.Errorf("crawlers %v", c)
 	}
 	// no collector: no page, no JSON, no link
 	s.Stats = nil

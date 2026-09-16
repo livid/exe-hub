@@ -25,6 +25,10 @@ func TestStats(t *testing.T) {
 		{TS: base + 10_000, VID: "b", SID: "s3", Entry: true, Path: "/p/1", Kind: "thread", Channel: "direct", Country: "CN", Device: "mobile", Browser: "Safari", OS: "iOS", Lang: "zh-CN", UTMCampaign: "sept"},
 		// an old one, outside the span
 		{TS: base - 3_600_000, VID: "z", SID: "s0", Entry: true, Path: "/", Kind: "home", Channel: "direct", Country: "US", Device: "desktop"},
+		// crawlers: out of every human number, in the crawlers' lists
+		{TS: base + 20_000, VID: "g1", SID: "g1", Entry: true, Path: "/", Kind: "home", Channel: "direct", Country: "US", Device: "bot", Browser: "Googlebot", Bot: true},
+		{TS: base + 21_000, VID: "g1", SID: "g1", Path: "/p/1", Kind: "thread", Channel: "direct", Country: "US", Device: "bot", Browser: "Googlebot", Bot: true},
+		{TS: base + 22_000, VID: "g2", SID: "g2", Entry: true, Path: "/p/1", Kind: "thread", Channel: "direct", Country: "IE", Device: "bot", Browser: "GPTBot", Bot: true},
 	}
 	if err := s.StatsAdd(hits); err != nil {
 		t.Fatal(err)
@@ -72,8 +76,26 @@ func TestStats(t *testing.T) {
 	if m := top("country", f); m["DE"] != 1 || m["CN"] != 1 || m["US"] != 0 {
 		t.Errorf("countries %v", m)
 	}
-	if m := top("device", f); m["desktop"] != 1 || m["mobile"] != 1 {
+	if m := top("device", f); m["desktop"] != 1 || m["mobile"] != 1 || m["bot"] != 0 {
 		t.Errorf("devices %v", m)
+	}
+	if m := top("crawler", f); m["Googlebot"] != 2 || m["GPTBot"] != 1 {
+		t.Errorf("crawlers %v", m)
+	}
+	if m := top("botpath", f); m["/p/1"] != 2 || m["/"] != 1 {
+		t.Errorf("crawled pages %v", m)
+	}
+	bf := f
+	bf.Bot = "Googlebot"
+	if sum, _ := s.StatsSummary(bf); sum.Pageviews != 2 || sum.Sessions != 1 {
+		t.Errorf("one crawler's summary %+v", sum)
+	}
+	if m := top("path", bf); m["/p/1"] != 1 || m["/"] != 1 {
+		t.Errorf("one crawler's pages %v", m)
+	}
+	bf.Bot = "all"
+	if sum, _ := s.StatsSummary(bf); sum.Pageviews != 3 {
+		t.Errorf("all crawlers' summary %+v", sum)
 	}
 	if m := top("lang", f); m["de"] != 1 || m["zh-CN"] != 1 {
 		t.Errorf("languages %v", m)
@@ -113,6 +135,9 @@ func TestStats(t *testing.T) {
 	if n, _ := s.StatsOnline(base + 30*60_000); n != 1 {
 		t.Errorf("online %d", n)
 	}
+	if n, _ := s.StatsOnline(base); n != 2 {
+		t.Errorf("online with the crawlers about: %d, want the 2 people", n)
+	}
 	open, err := s.StatsOpenSessions(base + 30*60_000)
 	if err != nil || len(open) != 1 || open[0].SID != "s2" {
 		t.Errorf("open %v %v", open, err)
@@ -142,5 +167,8 @@ func TestStats(t *testing.T) {
 	}
 	if sum, _ := s.StatsSummary(f); sum.Pageviews != 4 {
 		t.Errorf("hits lost in Rebuild: %+v", sum)
+	}
+	if open, _ := s.StatsOpenSessions(base); len(open) != 4 {
+		t.Errorf("open sessions %d, want 4 (a, b and the two crawlers)", len(open))
 	}
 }

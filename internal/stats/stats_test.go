@@ -24,9 +24,13 @@ func TestClassify(t *testing.T) {
 		{"Mozilla/5.0 (Linux; Android 13; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/24.0 Chrome/117.0.0.0 Safari/537.36", "tablet", "Samsung Internet", "Android", false},
 		{"Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0", "desktop", "Firefox", "Linux", false},
 		{"Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", "desktop", "Chrome", "ChromeOS", false},
-		{"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "", "", "", true},
-		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0.0.0 Safari/537.36", "", "", "", true},
-		{"facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "", "", "", true},
+		{"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "bot", "Googlebot", "", true},
+		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0.0.0 Safari/537.36", "bot", "HeadlessChrome", "", true},
+		{"facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", "bot", "Facebook", "", true},
+		{"Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)", "bot", "GPTBot", "", true},
+		{"Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)", "bot", "Semrush", "", true},
+		{"Mozilla/5.0 (compatible; ExampleCrawler/3.0)", "bot", "ExampleCrawler", "", true},
+		{"SomeSpider", "bot", "SomeSpider", "", true},
 		{"curl/8.5.0", "agent", "curl", "", false},
 		{"Go-http-client/2.0", "agent", "Go", "", false},
 		{"python-requests/2.32.3", "agent", "Python", "", false},
@@ -74,7 +78,7 @@ func TestWanted(t *testing.T) {
 		for i := 0; i+1 < len(hdr); i += 2 {
 			r.Header.Set(hdr[i], hdr[i+1])
 		}
-		return Wanted(r)
+		return Wanted(r, "home")
 	}
 	if !mk("GET", "Sec-Fetch-Dest", "document", "Accept", "text/html") {
 		t.Error("a navigation is wanted")
@@ -97,13 +101,16 @@ func TestWanted(t *testing.T) {
 	if mk("HEAD", "Sec-Fetch-Dest", "document") || mk("POST", "Sec-Fetch-Dest", "document") {
 		t.Error("only GET")
 	}
+	if !mk("GET", "User-Agent", "Googlebot/2.1", "Accept", "*/*") {
+		t.Error("a crawler's GET counts, whatever it accepts")
+	}
 	r := httptest.NewRequest("GET", "http://hub.example/skill.md", nil)
 	r.Header.Set("Accept", "*/*")
-	if !WantedRead(r) {
+	if !Wanted(r, "skill") {
 		t.Error("a curl of skill.md is a read")
 	}
 	r.Header.Set("X-Hub-Live", "1")
-	if WantedRead(r) {
+	if Wanted(r, "skill") {
 		t.Error("a refetch is not a read")
 	}
 }
@@ -190,7 +197,7 @@ func TestCollector(t *testing.T) {
 		t.Errorf("a new session has its own source: %q/%q", h3.Ref, h3.Channel)
 	}
 
-	// through Record: a browser lands, a crawler does not
+	// through Record: a browser lands as a person, a crawler as a bot
 	r := httptest.NewRequest("GET", "http://hub.example/p/abc?utm_source=newsletter&utm_campaign=sept", nil)
 	r.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0) Chrome/128.0 Safari/537.36")
 	r.Header.Set("CF-IPCountry", "de")
@@ -199,10 +206,14 @@ func TestCollector(t *testing.T) {
 	g := httptest.NewRequest("GET", "http://hub.example/", nil)
 	g.Header.Set("User-Agent", "Googlebot/2.1")
 	c.Record(g, "home")
-	if len(c.ch) != 1 {
-		t.Fatalf("queued %d, want 1", len(c.ch))
+	if len(c.ch) != 2 {
+		t.Fatalf("queued %d, want 2", len(c.ch))
 	}
 	h := c.assign(<-c.ch)
+	gb := c.assign(<-c.ch)
+	if !gb.Bot || gb.Device != "bot" || gb.Browser != "Googlebot" {
+		t.Errorf("the crawler's hit: %+v", gb)
+	}
 	if h.Country != "DE" || h.Lang != "de-DE" || h.Device != "desktop" || h.Browser != "Chrome" || h.OS != "Windows" {
 		t.Errorf("hit: %+v", h)
 	}
@@ -212,12 +223,12 @@ func TestCollector(t *testing.T) {
 	if h.Path != "/p/abc" {
 		t.Errorf("the path without its query: %q", h.Path)
 	}
-	if err := st.StatsAdd([]store.Hit{h1, h2, h3, h}); err != nil {
+	if err := st.StatsAdd([]store.Hit{h1, h2, h3, h, gb}); err != nil {
 		t.Fatal(err)
 	}
 	n, err := st.StatsOnline(0)
 	if err != nil || n != 2 {
-		t.Errorf("online = %d, %v", n, err)
+		t.Errorf("online = %d, %v (the crawler is no one online)", n, err)
 	}
 	// a restart resumes the open sessions
 	c2, err := New(st, time.UTC)

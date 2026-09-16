@@ -161,13 +161,10 @@ func newID() string {
 func (c *Collector) Record(r *http.Request, kind string) {
 	ua := r.UserAgent()
 	device, browser, os, bot := Classify(ua)
-	if bot {
-		return
-	}
 	now := time.Now()
 	h := store.Hit{
 		TS: now.UnixMilli(), Path: clip(r.URL.Path, 256), Kind: kind,
-		Device: device, Browser: browser, OS: os,
+		Device: device, Browser: browser, OS: os, Bot: bot,
 		Country: country(r.Header.Get("CF-IPCountry")),
 		Region:  clip(r.Header.Get("CF-Region"), 64),
 		City:    clip(r.Header.Get("CF-IPCity"), 64),
@@ -219,14 +216,16 @@ func (c *Collector) Online() int {
 	return n
 }
 
-// Wanted says whether a request is a person opening a page: a GET that a
-// browser made as a navigation (Sec-Fetch-Dest: document), not the
-// pages' own refetches (the live feed and the stats page fetch
-// themselves with X-Hub-Live) and not a prefetch or a preview. A client
-// that says nothing of Sec-Fetch — an older browser, a tool — is taken
-// at its Accept: a page is wanted when HTML was asked for; curl's */*
-// is not.
-func Wanted(r *http.Request) bool {
+// Wanted says whether a served page counts: a GET that is not one of
+// the pages' own refetches (the live feed and the stats page fetch
+// themselves with X-Hub-Live) nor a prefetch or a preview; then the
+// skill guide counts every read, whatever the client accepts, since an
+// agent reads it with curl or fetch; a crawler's GET counts as a crawl,
+// whatever it accepts; and a page counts for a person when a browser
+// made a navigation of it (Sec-Fetch-Dest: document) — a client that
+// says nothing of Sec-Fetch, an older browser or a tool, is taken at
+// its Accept: HTML asked for is a page view, curl's */* is not.
+func Wanted(r *http.Request, kind string) bool {
 	if r.Method != http.MethodGet || r.Header.Get("X-Hub-Live") != "" {
 		return false
 	}
@@ -234,17 +233,16 @@ func Wanted(r *http.Request) bool {
 	if strings.Contains(purpose, "prefetch") || strings.Contains(purpose, "prerender") || strings.Contains(purpose, "preview") {
 		return false
 	}
+	if kind == "skill" {
+		return true
+	}
+	if _, _, _, bot := Classify(r.UserAgent()); bot {
+		return true
+	}
 	if d := r.Header.Get("Sec-Fetch-Dest"); d != "" {
 		return d == "document"
 	}
 	return strings.Contains(r.Header.Get("Accept"), "text/html")
-}
-
-// WantedRead is Wanted for a document meant for tools, the skill guide:
-// every GET that is not a refetch counts, whatever it accepts, since an
-// agent reads it with curl or fetch.
-func WantedRead(r *http.Request) bool {
-	return r.Method == http.MethodGet && r.Header.Get("X-Hub-Live") == ""
 }
 
 // ClientIP is the visitor's address as far as the hub can tell: what

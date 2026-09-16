@@ -124,7 +124,8 @@ the standard library, nothing else.
 `/stats` is the hub's own analytics — visitors, page views, sessions,
 bounce rate and session time against the span before, a chart, who is
 here now, and sources, pages, locations and devices as ranked lists, each
-row a filter, every view a URL. Page views are counted on the server as
+row a filter, every view a URL. Crawlers are counted apart, in a Bots
+window of their own, and out of every human number. Page views are counted on the server as
 a page is served: no script, no cookie, nothing to block. A visitor is
 the day's salted hash of address and browser, which rotates daily and is
 never stored as anything else; countries come from Cloudflare's headers

@@ -129,7 +129,7 @@
   <div class="frame">
     <div class="strip">{{range .Views}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}#{{$l.Anchor}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</div>
     <div class="rows">{{range .Rows}}<div class="row"><span class="lab"><span class="bar" style="width: {{.Pct}}%"></span><a href="{{.URL}}#{{$l.Anchor}}"{{if .Title}} title="{{.Title}}"{{end}}>{{.Label}}{{if .Tag}}<span class="tag">{{.Tag}}</span>{{end}}</a></span><span class="n">{{.N}}</span></div>{{else}}<div class="none">{{.Empty}}</div>{{end}}</div>
-    <div class="statusbar"><span>{{.Count}}</span><span>{{if .More}}{{.More}} more in the JSON{{end}}</span></div>
+    <div class="statusbar"><span>{{.Count}}{{if .Bots}} · left out of every other number{{end}}</span><span>{{if .More}}{{.More}} more in the JSON{{if .OnlyBots}} · {{end}}{{end}}{{if .OnlyBots}}<a href="{{.OnlyBots}}">Only crawlers</a>{{end}}</span></div>
   </div>
 </div>{{end}}
 </div>

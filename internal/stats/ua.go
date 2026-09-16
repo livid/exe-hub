@@ -1,14 +1,18 @@
 package stats
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // Classify reads a user agent into what the stats keep of it: the
-// device (desktop, mobile, tablet, or agent for a tool), the browser
-// and the operating system — names, never the string itself — and
-// whether it is a crawler, whose visits are not counted at all. Tools
-// are kept apart from crawlers: an agent reading skill.md with curl or
-// fetch is a reader this hub wants to count; a search engine's crawler,
-// a link unfurler or a headless test browser is not.
+// device (desktop, mobile, tablet, agent for a tool, or bot), the
+// browser and the operating system — names, never the string itself —
+// and whether it is a crawler. A crawler's hits are kept apart from
+// people's: counted under device "bot" with the crawler's name for a
+// browser (BotName), left out of every human number and shown in the
+// Bots window. Tools are not crawlers: an agent reading skill.md with
+// curl or fetch is a reader this hub wants to count as one.
 func Classify(ua string) (device, browser, os string, bot bool) {
 	l := strings.ToLower(ua)
 	if l == "" {
@@ -16,7 +20,7 @@ func Classify(ua string) (device, browser, os string, bot bool) {
 	}
 	for _, b := range bots {
 		if strings.Contains(l, b) {
-			return "", "", "", true
+			return "bot", BotName(ua), "", true
 		}
 	}
 	for _, t := range tools {
@@ -134,4 +138,43 @@ var tools = []struct{ mark, name string }{
 	{"okhttp", "OkHttp"}, {"java/", "Java"}, {"libwww-perl", "Perl"}, {"httpie", "HTTPie"}, {"powershell", "PowerShell"},
 	{"ruby", "Ruby"}, {"php", "PHP"}, {"postman", "Postman"}, {"insomnia", "Insomnia"}, {"guzzle", "PHP"},
 	{"libcurl", "curl"}, {"dart", "Dart"}, {"reqwest", "Rust"}, {"hyper/", "Rust"},
+}
+
+// BotName names a crawler from its user agent: the well-known ones by
+// name, else the token that says bot, crawler or spider (SemrushBot,
+// MJ12bot), else the first product token. Never the string itself.
+func BotName(ua string) string {
+	l := strings.ToLower(ua)
+	for _, b := range botNames {
+		if strings.Contains(l, b.mark) {
+			return b.name
+		}
+	}
+	if m := botToken.FindString(ua); m != "" {
+		return clip(m, 48)
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(ua), "/")
+	first, _, _ = strings.Cut(first, " ")
+	if first == "" {
+		return "Bot"
+	}
+	return clip(first, 48)
+}
+
+var botToken = regexp.MustCompile(`(?i)[A-Za-z0-9_.-]*(?:bot|crawler|spider)[A-Za-z0-9_.-]*`)
+
+var botNames = []struct{ mark, name string }{
+	{"googlebot", "Googlebot"}, {"google-inspectiontool", "Googlebot"}, {"storebot-google", "Googlebot"}, {"adsbot-google", "AdsBot"},
+	{"bingbot", "Bingbot"}, {"bingpreview", "Bingbot"}, {"msnbot", "Bingbot"}, {"duckduckbot", "DuckDuckBot"}, {"duckassistbot", "DuckDuckBot"},
+	{"yandexbot", "Yandex"}, {"yandex", "Yandex"}, {"baiduspider", "Baidu"}, {"sogou", "Sogou"}, {"360spider", "360"},
+	{"applebot", "Applebot"}, {"amazonbot", "Amazonbot"}, {"petalbot", "PetalBot"}, {"bytespider", "Bytespider"}, {"tiktokspider", "Bytespider"},
+	{"gptbot", "GPTBot"}, {"oai-searchbot", "OAI-SearchBot"}, {"chatgpt", "ChatGPT"}, {"claudebot", "ClaudeBot"}, {"anthropic", "ClaudeBot"},
+	{"perplexitybot", "PerplexityBot"}, {"ccbot", "CCBot"}, {"meta-externalagent", "Meta"}, {"facebookexternalhit", "Facebook"},
+	{"facebookbot", "Facebook"}, {"twitterbot", "X"}, {"linkedinbot", "LinkedIn"}, {"slackbot", "Slack"}, {"slack-imgproxy", "Slack"},
+	{"telegrambot", "Telegram"}, {"discordbot", "Discord"}, {"whatsapp", "WhatsApp"}, {"pinterestbot", "Pinterest"}, {"redditbot", "Reddit"},
+	{"mastodon", "Mastodon"}, {"bluesky", "Bluesky"}, {"archive.org_bot", "Internet Archive"}, {"ia_archiver", "Internet Archive"},
+	{"semrushbot", "Semrush"}, {"ahrefsbot", "Ahrefs"}, {"mj12bot", "Majestic"}, {"dotbot", "Moz"}, {"dataforseobot", "DataForSEO"},
+	{"uptimerobot", "UptimeRobot"}, {"pingdom", "Pingdom"}, {"headlesschrome", "HeadlessChrome"}, {"lighthouse", "Lighthouse"},
+	{"playwright", "Playwright"}, {"puppeteer", "Puppeteer"}, {"scrapy", "Scrapy"}, {"wappalyzer", "Wappalyzer"}, {"embedly", "Embedly"},
+	{"google-read-aloud", "Google Read Aloud"}, {"feedfetcher", "Feedfetcher"}, {"phantomjs", "PhantomJS"},
 }

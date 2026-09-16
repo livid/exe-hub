@@ -49,7 +49,15 @@ CREATE TABLE IF NOT EXISTS hits_salt (
   day  TEXT PRIMARY KEY,
   salt BLOB NOT NULL
 );`)
-	return err
+	if err != nil {
+		return err
+	}
+	// a crawler's hit: kept apart from people's (browser holds the
+	// crawler's name, device is "bot"); older tables gain the column
+	if _, err := s.db.Exec(`ALTER TABLE hits ADD COLUMN bot INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	return nil
 }
 
 // Hit is one page view.
@@ -64,6 +72,7 @@ type Hit struct {
 	Lang                  string
 	UTMSource, UTMMedium  string
 	UTMCampaign           string
+	Bot                   bool // a crawler: Browser is its name, Device "bot"
 }
 
 // StatsAdd writes a batch of hits in one transaction.
@@ -74,18 +83,21 @@ func (s *Store) StatsAdd(hits []Hit) error {
 	}
 	defer tx.Rollback()
 	stmt, err := tx.Prepare(`INSERT INTO hits (ts, vid, sid, entry, path, kind, ref, chan, country, region, city,
-		device, browser, os, lang, utm_source, utm_medium, utm_campaign) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+		device, browser, os, lang, utm_source, utm_medium, utm_campaign, bot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, h := range hits {
-		entry := 0
+		entry, bot := 0, 0
 		if h.Entry {
 			entry = 1
 		}
+		if h.Bot {
+			bot = 1
+		}
 		if _, err := stmt.Exec(h.TS, h.VID, h.SID, entry, h.Path, h.Kind, h.Ref, h.Channel, h.Country, h.Region, h.City,
-			h.Device, h.Browser, h.OS, h.Lang, h.UTMSource, h.UTMMedium, h.UTMCampaign); err != nil {
+			h.Device, h.Browser, h.OS, h.Lang, h.UTMSource, h.UTMMedium, h.UTMCampaign, bot); err != nil {
 			return err
 		}
 	}
@@ -152,25 +164,37 @@ func (s *Store) StatsOpenSessions(since int64) ([]OpenSession, error) {
 	return out, rows.Err()
 }
 
-// StatsOnline is how many visitors had a hit since the given time.
+// StatsOnline is how many people had a hit since the given time.
 func (s *Store) StatsOnline(since int64) (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(DISTINCT vid) FROM hits WHERE ts >= ?`, since).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(DISTINCT vid) FROM hits WHERE ts >= ? AND bot = 0`, since).Scan(&n)
 	return n, err
 }
 
 // StatsFilter selects the hits a report is over: a time span, and any
 // of the dimensions held to one value (a click on a row of the page).
+// Bot chooses whose hits: "" people's (the default: crawlers are out of
+// every human number), "all" every crawler's, a name that crawler's.
 type StatsFilter struct {
 	From, To                        int64 // ms, [From, To)
 	Country, Region, City, Lang     string
 	Path, Source, Channel, Campaign string
 	Device, Browser, OS             string
+	Bot                             string
 }
 
 func (f StatsFilter) where() (string, []any) {
 	w := []string{"ts >= ?", "ts < ?"}
 	args := []any{f.From, f.To}
+	switch f.Bot {
+	case "":
+		w = append(w, "bot = 0")
+	case "all":
+		w = append(w, "bot = 1")
+	default:
+		w = append(w, "bot = 1", "browser = ?")
+		args = append(args, f.Bot)
+	}
 	for _, c := range []struct{ col, v string }{
 		{"country", f.Country}, {"region", f.Region}, {"city", f.City}, {"lang", f.Lang},
 		{"path", f.Path}, {"ref", f.Source}, {"chan", f.Channel}, {"utm_campaign", f.Campaign},
@@ -273,11 +297,19 @@ const statsTopMax = 500
 
 // StatsTop ranks one dimension over the span. Sources, channels and
 // campaigns count sessions (by their first page); entry and exit pages
-// count sessions too; every other dimension counts visitors.
+// count sessions too; crawlers and the pages they crawl count hits;
+// every other dimension counts visitors.
 func (s *Store) StatsTop(f StatsFilter, dim string) ([]StatsRow, error) {
+	if (dim == "crawler" || dim == "botpath") && f.Bot == "" {
+		f.Bot = "all" // the crawlers' lists are always over crawlers
+	}
 	w, args := f.where()
 	var q string
 	switch dim {
+	case "crawler":
+		q = `SELECT browser, COUNT(*) FROM hits WHERE ` + w + ` GROUP BY browser`
+	case "botpath":
+		q = `SELECT path, COUNT(*) FROM hits WHERE ` + w + ` GROUP BY path`
 	case "source":
 		q = `SELECT ref, COUNT(*) FROM hits WHERE entry = 1 AND ` + w + ` GROUP BY ref`
 	case "channel":
@@ -316,9 +348,9 @@ type LiveHit struct {
 	Country, Device string
 }
 
-// StatsRecent is the latest n hits, newest first.
+// StatsRecent is the latest n hits by people, newest first.
 func (s *Store) StatsRecent(n int) ([]LiveHit, error) {
-	rows, err := s.db.Query(`SELECT ts, vid, path, kind, country, device FROM hits ORDER BY ts DESC, id DESC LIMIT ?`, n)
+	rows, err := s.db.Query(`SELECT ts, vid, path, kind, country, device FROM hits WHERE bot = 0 ORDER BY ts DESC, id DESC LIMIT ?`, n)
 	if err != nil {
 		return nil, err
 	}

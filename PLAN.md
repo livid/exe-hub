@@ -1053,10 +1053,11 @@ the page works without JavaScript (a small script keeps it current).
   agent reading it with curl or fetch is the reader it exists for. Not
   counted: the pages' own refetches (the live feed and the stats page
   fetch themselves with `X-Hub-Live: 1`), prefetches and previews
-  (`Sec-Purpose`), crawlers, unfurlers, monitors and headless browsers
-  (by user agent: `bot`, `crawl`, `spider`, `facebookexternalhit`,
-  `HeadlessChrome`, Playwright and the like), HEAD, the JSON API, embeds,
-  and `/stats` itself. Handlers are wrapped (`api.counted`): the hit is
+  (`Sec-Purpose`), HEAD, the JSON API, embeds, and `/stats` itself.
+  Crawlers, unfurlers, monitors and headless browsers (by user agent:
+  `bot`, `crawl`, `spider`, `facebookexternalhit`, `HeadlessChrome`,
+  Playwright and the like) are counted apart (see Bots below), never
+  among people. Handlers are wrapped (`api.counted`): the hit is
   queued after the response, never on its path, and a burst past the
   queue drops hits rather than delaying anyone.
 - **Nothing that names a person is kept.** The visitor id is the day's
@@ -1110,15 +1111,28 @@ the page works without JavaScript (a small script keeps it current).
   name — no flags: Windows has no flag emoji — Regions, Cities,
   Languages), Devices (Device, Browser, OS). Twelve rows each, the bar a
   share of the top row, the rest counted on the status line ("14 more
-  in the JSON"). Live: how many visitors had a page in the last five
+  in the JSON"); and Bots (Crawlers, Pages — hits), see below. Live: how many visitors had a page in the last five
   minutes, and the latest ten page views — each visitor a colour and an
   animal for the day (Cobalt Parrot), never an id, with a 12px pixel-art
   disc of that colour before the name (Livid's idea, 2026-09-16; the
   JSON carries it as `colour`).
+- **Bots** (asked by Livid 2026-09-16). A crawler's GET of a page counts
+  whatever it accepts, as a hit of its own kind: `bot = 1`, device
+  `bot`, the crawler's name for a browser (`stats.BotName`: Googlebot,
+  Bingbot, GPTBot, ClaudeBot, PerplexityBot, Facebook, X, Internet
+  Archive, Semrush…; an unknown one by the token that says bot, crawler
+  or spider, else its first product). Every human number leaves them
+  out (`bot = 0` is the default filter; the online count and the Live
+  list are people only). The Bots window ranks Crawlers and the Pages
+  they crawl by hits over the span; a crawler's row holds the whole
+  view to it (`?bot=Googlebot`: its pages, its hours on the chart, its
+  countries), the status line's "Only crawlers" to all of them
+  (`?bot=all`), the chip lifts it. `crawlers` and `botpages` are in the
+  JSON's lists.
 - **Every state is a URL.** `?range=`, each window's view (`src=`,
-  `pg=`, `loc=`, `dev=`) and the filters — a click on any row holds the
+  `pg=`, `loc=`, `dev=`, `bt=`) and the filters — a click on any row holds the
   view to it (`country=`, `page=`, `source=`, `channel=`, `campaign=`,
-  `device=`, `browser=`, `os=`, `lang=`, `region=`, `city=`), stacked,
+  `device=`, `browser=`, `os=`, `lang=`, `region=`, `city=`, `bot=`), stacked,
   each shown as a chip whose × lifts it — so a view can be shared as a
   link and the page needs no script to work. The script it does carry
   refetches the same URL every 20 s while shown (marked `X-Hub-Live`)

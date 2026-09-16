@@ -38,16 +38,7 @@ func (s *Server) counted(kind string, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w}
 		h(sw, r)
-		if sw.code != http.StatusOK {
-			return
-		}
-		if kind == "skill" {
-			if stats.WantedRead(r) {
-				s.Stats.Record(r, kind)
-			}
-			return
-		}
-		if stats.Wanted(r) {
+		if sw.code == http.StatusOK && stats.Wanted(r, kind) {
 			s.Stats.Record(r, kind)
 		}
 	}
@@ -181,7 +172,7 @@ func statsSpanOf(key string, now time.Time, loc *time.Location) statsSpan {
 var statsFilters = []struct{ param, label string }{
 	{"country", "Country"}, {"region", "Region"}, {"city", "City"}, {"lang", "Language"},
 	{"page", "Page"}, {"source", "Source"}, {"channel", "Channel"}, {"campaign", "Campaign"},
-	{"device", "Device"}, {"browser", "Browser"}, {"os", "OS"},
+	{"device", "Device"}, {"browser", "Browser"}, {"os", "OS"}, {"bot", "Bot"},
 }
 
 func statsFilterOf(q url.Values) store.StatsFilter {
@@ -195,7 +186,7 @@ func statsFilterOf(q url.Values) store.StatsFilter {
 	return store.StatsFilter{
 		Country: get("country"), Region: get("region"), City: get("city"), Lang: get("lang"),
 		Path: get("page"), Source: get("source"), Channel: get("channel"), Campaign: get("campaign"),
-		Device: get("device"), Browser: get("browser"), OS: get("os"),
+		Device: get("device"), Browser: get("browser"), OS: get("os"), Bot: get("bot"),
 	}
 }
 
@@ -223,6 +214,8 @@ func statsValue(f store.StatsFilter, param string) string {
 		return f.Browser
 	case "os":
 		return f.OS
+	case "bot":
+		return f.Bot
 	}
 	return ""
 }
@@ -278,6 +271,7 @@ var statsLists = map[string]struct{ dim, count string }{
 	"pages": {"path", "Visitors"}, "entry": {"entry", "Sessions"}, "exit": {"exit", "Sessions"},
 	"countries": {"country", "Visitors"}, "regions": {"region", "Visitors"}, "cities": {"city", "Visitors"}, "languages": {"lang", "Visitors"},
 	"devices": {"device", "Visitors"}, "browsers": {"browser", "Visitors"}, "oses": {"os", "Visitors"},
+	"crawlers": {"crawler", "Page views"}, "botpages": {"botpath", "Page views"},
 }
 
 // statsRecentN is how many latest page views the Live list shows.
@@ -440,13 +434,15 @@ type statsTile struct {
 // (the small buttons along its strip), the rows with bar widths, and
 // what the count is.
 type statsList struct {
-	Title  string
-	Anchor string // the window's id: what a link lands on without script
-	Views  []statsView
-	Rows   []statsRowView
-	Count  string // "Visitors" | "Sessions"
-	More   int    // rows past those shown
-	Empty  string
+	Title    string
+	Anchor   string // the window's id: what a link lands on without script
+	Views    []statsView
+	Rows     []statsRowView
+	Count    string // "Visitors" | "Sessions" | "Page views"
+	More     int    // rows past those shown
+	Empty    string
+	Bots     bool   // the Bots window
+	OnlyBots string // the Bots window, unfiltered: the link that holds the whole view to crawlers
 }
 
 type statsView struct {
@@ -511,6 +507,7 @@ var statsListViews = []struct {
 	{"pg", "Pages", []struct{ key, label string }{{"pages", "Top"}, {"entry", "Entry"}, {"exit", "Exit"}}},
 	{"loc", "Locations", []struct{ key, label string }{{"countries", "Countries"}, {"regions", "Regions"}, {"cities", "Cities"}, {"languages", "Languages"}}},
 	{"dev", "Devices", []struct{ key, label string }{{"devices", "Device"}, {"browsers", "Browser"}, {"oses", "OS"}}},
+	{"bt", "Bots", []struct{ key, label string }{{"crawlers", "Crawlers"}, {"botpages", "Pages"}}},
 }
 
 // statsQuery is the page's URL state: the range, each window's view and
@@ -520,7 +517,7 @@ type statsQuery struct{ v url.Values }
 
 func statsQueryOf(q url.Values) statsQuery {
 	keep := url.Values{}
-	for _, k := range []string{"range", "src", "pg", "loc", "dev"} {
+	for _, k := range []string{"range", "src", "pg", "loc", "dev", "bt"} {
 		if v := q.Get(k); v != "" {
 			keep.Set(k, v)
 		}
@@ -550,6 +547,20 @@ func (q statsQuery) with(k, v string) string {
 }
 
 func (q statsQuery) String() string { return q.with("", "") }
+
+// withBot is with, over the crawlers' hits: a click in the Bots window
+// holds the view to bots (all of them, unless one is held already).
+func (q statsQuery) withBot(k, v string) string {
+	if q.v.Get("bot") != "" {
+		return q.with(k, v)
+	}
+	c := statsQuery{url.Values{}}
+	for key, vals := range q.v {
+		c.v[key] = vals
+	}
+	c.v.Set("bot", "all")
+	return c.with(k, v)
+}
 
 // handleStatsPage renders the window.
 func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
@@ -594,6 +605,9 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 			if d.param == "country" {
 				label = stats.CountryName(v)
 			}
+			if d.param == "bot" && v == "all" {
+				label = "all crawlers"
+			}
 			p.Filters = append(p.Filters, statsChip{Label: d.label, Value: label, URL: sq.with(d.param, "")})
 		}
 	}
@@ -625,6 +639,15 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 			}
 			if view == "regions" || view == "cities" {
 				l.Empty = "Not known: the proxy in front sends no region or city."
+			}
+			if view == "crawlers" || view == "botpages" {
+				l.Empty = "No crawler yet."
+			}
+		}
+		if lv.param == "bt" {
+			l.Bots = true
+			if f.Bot == "" {
+				l.OnlyBots = sq.with("bot", "all") + "#w-bt"
 			}
 		}
 		p.Lists = append(p.Lists, l)
@@ -869,6 +892,12 @@ func (s *Server) statsRowView(view string, row store.StatsRow, top int, sq stats
 		param = "browser"
 	case "oses":
 		param = "os"
+	case "crawlers":
+		v.URL = sq.with("bot", row.Key) // that crawler alone, wherever the view was
+	case "botpages":
+		v.Title = row.Key
+		v.Label = s.statsPathLabel(row.Key)
+		v.URL = sq.withBot("page", row.Key)
 	}
 	if v.URL == "" && param != "" {
 		v.URL = sq.with(param, row.Key)

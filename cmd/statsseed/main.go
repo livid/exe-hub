@@ -142,6 +142,24 @@ func main() {
 			}
 		}
 	}
+	// crawlers: a steady trickle over every page, most of it Googlebot
+	bots := []wv{{"Googlebot", 45}, {"Bingbot", 15}, {"GPTBot", 12}, {"ClaudeBot", 8}, {"PetalBot", 6}, {"Bytespider", 5}, {"Facebook", 4}, {"Internet Archive", 3}, {"Semrush", 2}}
+	for d := *days - 1; d >= 0; d-- {
+		day := time.Date(now.Year(), now.Month(), now.Day()-d, 0, 0, 0, 0, loc)
+		for v := 0; v < 40+r.Intn(30); v++ {
+			t := day.Add(time.Duration(r.Float64() * 24 * float64(time.Hour)))
+			if t.After(now) {
+				continue
+			}
+			name := pick(r, bots)
+			c := "US"
+			if name == "PetalBot" || name == "Bytespider" {
+				c = "SG"
+			}
+			hits = append(hits, store.Hit{TS: t.UnixMilli(), VID: id(), SID: id(), Entry: true, Path: paths[r.Intn(len(paths))], Kind: "thread",
+				Channel: "direct", Country: c, Device: "bot", Browser: name, Bot: true})
+		}
+	}
 	// a few people here right now
 	for i := 0; i < 5; i++ {
 		t := now.Add(-time.Duration(r.Intn(280)) * time.Second)
