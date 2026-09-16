@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS pictures (
 			return err
 		}
 	}
-	return nil
+	return s.initStats()
 }
 
 // Ingest applies one verified message atomically: seq check, semantic

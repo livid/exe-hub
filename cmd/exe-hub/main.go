@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // stats.timezone on a host without zoneinfo
 
 	"exehub/internal/api"
 	"exehub/internal/card"
@@ -29,6 +30,7 @@ import (
 	"exehub/internal/media"
 	"exehub/internal/push"
 	"exehub/internal/replicate"
+	"exehub/internal/stats"
 	"exehub/internal/store"
 )
 
@@ -151,6 +153,27 @@ func serve(cfgPath, stateDir, pidPath string) error {
 			go srv.RunMedia()
 			log.Printf("media: converting with %s (%s), inputs to %d MB", conv.Encoder(), conv.FFmpeg, m.MaxMB)
 		}
+	}
+	// Stats: the pages' own analytics (PLAN.md, Stats) — page views
+	// counted as they are served, kept for the retention, /stats to read.
+	if cfg.StatsOn() {
+		coll, err := stats.New(st, cfg.Stats.Location)
+		if err != nil {
+			return err
+		}
+		go coll.Run()
+		srv.Stats = coll
+		go func() {
+			for {
+				if n, err := st.StatsSweep(time.Now().AddDate(0, 0, -cfg.Stats.Retention)); err != nil {
+					log.Printf("stats sweep: %v", err)
+				} else if n > 0 {
+					log.Printf("stats: dropped %d page views older than %d days", n, cfg.Stats.Retention)
+				}
+				time.Sleep(24 * time.Hour)
+			}
+		}()
+		log.Printf("stats: counting page views, days in %s, kept %d days", cfg.Stats.Location, cfg.Stats.Retention)
 	}
 	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler()}
 

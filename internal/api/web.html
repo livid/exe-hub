@@ -319,7 +319,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .profile p { margin: 4px 0 0; overflow-wrap: anywhere; }
 .alert { padding: 16px 14px; }
 </style>
-</head>
+{{if eq .Page "stats"}}{{template "statscss"}}{{end}}</head>
 <body>
 {{if eq .Page "home"}}
 <div class="desk">
@@ -407,6 +407,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     <div class="pager">{{template "pager" .}}</div>
   </div>
 </div>
+{{else if eq .Page "stats"}}
+{{template "stats" .}}
 {{else}}
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
@@ -691,7 +693,7 @@ localTimes(document);
   const refresh = () => {
     if (busy || document.hidden) { wanted = true; return; }
     busy = true; wanted = false;
-    fetch("/", { cache: "no-store" })
+    fetch("/", { cache: "no-store", headers: { "X-Hub-Live": "1" } }) // not a page view (PLAN.md, Stats)
       .then(r => r.ok ? r.text() : Promise.reject(r.status)).then(swap)
       .catch(() => {})
       .finally(() => { busy = false; if (wanted) poke(); });
@@ -1245,7 +1247,7 @@ localTimes(document);
 
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}{{.Members}} members · {{.Count}} posts{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}{{.Members}} members · {{.Count}} posts{{if .StatsOn}} · <a href="/stats" title="Who reads this hub">{{.Online}} online</a>{{end}}{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get"><input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}

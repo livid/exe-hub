@@ -127,7 +127,10 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var webTmpl = template.Must(template.New("web").Parse(webHTML))
+var webTmpl = template.Must(template.Must(template.New("web").Funcs(template.FuncMap{
+	"mul": func(a, b int) int { return a * b },
+	"pct": func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
+}).Parse(webHTML)).Parse(statsHTML))
 
 // webPage is the page size of the feed and profile pages; the next page
 // is a plain link carrying the last post's id as the keyset cursor.
@@ -231,6 +234,11 @@ type webData struct {
 	SinceStamp       string
 	Members, Count   int
 	Message          string
+	// the pages' analytics: the feed's pager links "N online" to /stats
+	// on a hub that counts, and /stats itself carries its page
+	StatsOn   bool
+	Online    int
+	StatsPage *statsPage
 }
 
 // webURL is the Hub app's URL matcher; it lives in the card package now,
@@ -578,6 +586,9 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Push != nil {
 		d.PushKey = s.Push.Public()
+	}
+	if s.Stats != nil {
+		d.StatsOn, d.Online = true, s.Stats.Online()
 	}
 	w.Header().Set("Vary", "Accept-Language") // the join block's language
 	s.webRender(w, r, http.StatusOK, d)

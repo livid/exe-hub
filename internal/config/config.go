@@ -59,6 +59,23 @@ type Config struct {
 	// Media). Absent leaves it off. Read at start only: a reload does not
 	// change it.
 	Media *Media `json:"media,omitempty"`
+	// Stats is the pages' own analytics (PLAN.md, Stats): on unless
+	// enabled is false. Read at start only, like Media.
+	Stats *Stats `json:"stats,omitempty"`
+}
+
+// Stats configures the public pages' analytics.
+type Stats struct {
+	Enabled   *bool  `json:"enabled,omitempty"`        // nil = on
+	Timezone  string `json:"timezone,omitempty"`       // an IANA zone the days are counted in; default the hub's local zone
+	Retention int    `json:"retention_days,omitempty"` // how long a page view is kept; default 400
+
+	Location *time.Location `json:"-"`
+}
+
+// StatsOn says whether page views are counted and /stats served.
+func (c *Config) StatsOn() bool {
+	return c.Stats == nil || c.Stats.Enabled == nil || *c.Stats.Enabled
 }
 
 type Media struct {
@@ -119,6 +136,18 @@ func Load(path string) (*Config, error) {
 		}
 		if m.MaxAudio <= 0 {
 			m.MaxAudio = 600
+		}
+	}
+	if c.Stats == nil {
+		c.Stats = &Stats{}
+	}
+	if c.Stats.Retention <= 0 {
+		c.Stats.Retention = 400
+	}
+	c.Stats.Location = time.Local
+	if c.Stats.Timezone != "" {
+		if c.Stats.Location, err = time.LoadLocation(c.Stats.Timezone); err != nil {
+			return nil, fmt.Errorf("stats.timezone: %w", err)
 		}
 	}
 	switch c.Gate.Mode {

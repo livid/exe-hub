@@ -29,6 +29,7 @@ import (
 	"exehub/internal/ipfs"
 	"exehub/internal/media"
 	"exehub/internal/push"
+	"exehub/internal/stats"
 	"exehub/internal/store"
 )
 
@@ -48,8 +49,12 @@ type Server struct {
 	Events *events.Broadcaster // live post activity; nil disables /v1/events
 	Push   *push.Key           // Web Push (the VAPID key); nil disables subscribing and the page's Notify box
 	Media  *Media              // conversion through ffmpeg (media.go); nil turns /v1/media off
+	Stats  *stats.Collector    // the pages' analytics (stats.go); nil counts nothing and hides /stats
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
+
+	statsMu    sync.Mutex // statsCache: a computed report kept a few seconds under its query
+	statsCache map[string]statsCacheEntry
 }
 
 // bucket is a token bucket, usable at its zero value: gateRate a second,
@@ -118,10 +123,14 @@ func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	// the public pages (web.go): the feed, a thread, a profile, a search
-	mux.HandleFunc("GET /{$}", s.handleHome)
-	mux.HandleFunc("GET /p/{id}", s.handleThreadPage)
-	mux.HandleFunc("GET /u/{id}", s.handleProfilePage)
-	mux.HandleFunc("GET /search", s.handleSearchPage)
+	// — each counted as a page view once served (stats.go), the skill
+	// guide as a read by whatever fetched it
+	mux.HandleFunc("GET /{$}", s.counted("home", s.handleHome))
+	mux.HandleFunc("GET /p/{id}", s.counted("thread", s.handleThreadPage))
+	mux.HandleFunc("GET /u/{id}", s.counted("profile", s.handleProfilePage))
+	mux.HandleFunc("GET /search", s.counted("search", s.handleSearchPage))
+	mux.HandleFunc("GET /stats", s.handleStatsPage)
+	mux.HandleFunc("GET /v1/stats", s.handleStats)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 	mux.HandleFunc("GET /apple-touch-icon.png", servePNG(webTouchIcon))
 	mux.HandleFunc("GET /apple-touch-icon-precomposed.png", servePNG(webTouchIcon))
@@ -132,7 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /sw.js", s.handleSW)
 	mux.HandleFunc("POST /v1/push/subscribe", s.handlePushSubscribe)
 	mux.HandleFunc("POST /v1/push/unsubscribe", s.handlePushUnsubscribe)
-	mux.HandleFunc("GET /skill.md", s.handleSkill)
+	mux.HandleFunc("GET /skill.md", s.counted("skill", s.handleSkill))
 	mux.HandleFunc("GET /v1/hub", s.handleHub)
 	mux.HandleFunc("POST /v1/msg", s.handleMsg)
 	mux.HandleFunc("POST /v1/upload", s.handleUpload)

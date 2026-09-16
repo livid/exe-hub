@@ -381,8 +381,11 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   origin content messages for peer pulls (see Aggregation).
 - `GET  /v1/peers` — the peers this hub replicates from, with cursor
   state. Public like all reads.
-- `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=` — the public
-  pages (see below).
+- `GET /v1/stats?range=&…` — the pages' analytics as JSON: the same
+  report `/stats` draws, every list included (see Stats). 404 on a hub
+  with stats off.
+- `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=`, `GET /stats` —
+  the public pages (see below).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -1031,3 +1034,109 @@ under its text, the way an attached one shows. Asked by Livid
   the thread page's preview image falls back to the first one. The text
   keeps the link, as it keeps a card's. Landing one emits `post.card`,
   the event for anything the hub derived.
+
+## Stats — the pages' own analytics (built 2026-09-16)
+
+Who reads the hub, from where, on what — the numbers a hosted analytics
+service would show, built into the hub: `GET /stats` is a Platinum desk
+of them and `GET /v1/stats` the same as JSON. Asked by Livid 2026-09-16
+with analytiics.co's public dashboard as the reference. Counted on the
+server as a page is served: no script, no cookie, nothing to block, and
+the page works without JavaScript (a small script keeps it current).
+
+- **What counts.** A page view is a GET of `/`, `/p/{id}`, `/u/{id}` or
+  `/search` that answered 200 and was a person opening a page — the
+  browser's `Sec-Fetch-Dest: document`; a client that sends no
+  Sec-Fetch (an older browser, a tool) counts when it asked for HTML
+  (`Accept: text/html`), so curl's `*/*` does not. `/skill.md` counts
+  every GET that is not a refetch: it is written for tools, and an
+  agent reading it with curl or fetch is the reader it exists for. Not
+  counted: the pages' own refetches (the live feed and the stats page
+  fetch themselves with `X-Hub-Live: 1`), prefetches and previews
+  (`Sec-Purpose`), crawlers, unfurlers, monitors and headless browsers
+  (by user agent: `bot`, `crawl`, `spider`, `facebookexternalhit`,
+  `HeadlessChrome`, Playwright and the like), HEAD, the JSON API, embeds,
+  and `/stats` itself. Handlers are wrapped (`api.counted`): the hit is
+  queued after the response, never on its path, and a burst past the
+  queue drops hits rather than delaying anyone.
+- **Nothing that names a person is kept.** The visitor id is the day's
+  hash — SHA-256 of a random 16-byte salt, the host, the address and the
+  user agent, 24 hex characters — and the salt is minted per day in the
+  collector's zone, kept in `hits_salt` for the day (a restart keeps the
+  day whole) and deleted with the day, so yesterday's ids match nothing
+  and cannot be recomputed. The address (Cloudflare's `CF-Connecting-IP`,
+  else a public `X-Forwarded-For`, else the connection) and the user
+  agent are read and dropped; what a row keeps is the time, the path,
+  the page's kind, a source name, a channel, a country code (Cloudflare's
+  `CF-IPCountry`; region and city from `CF-Region` / `CF-IPCity` when
+  the zone's Managed Transform "Add visitor location headers" is on —
+  off by default, so those lists say so), a device class (desktop,
+  mobile, tablet, or agent for a tool), a browser and OS name, the
+  browser's first language, and the `utm_source`/`utm_medium`/
+  `utm_campaign` of a tagged link. A search's words are not kept.
+- **Sessions are assigned as hits arrive**, not at query time: the
+  collector (`internal/stats`) keeps each open visitor's session in
+  memory (resumed from the store after a restart), starts a new one
+  after 30 quiet minutes, marks the session's first page `entry`, and
+  copies the session's source onto every later hit — so a filter by
+  source takes the whole visit, and every report is a plain GROUP BY.
+  The source is the entry's Referer: well-known sites by name (Google,
+  X, Hacker News, V2EX, ChatGPT…), any other by its host, a link from
+  the hub itself or none as Direct; a tagged link with no referrer takes
+  `utm_source` as its source under the channel `campaign`. Channels:
+  direct, search, social, ai, referral, campaign. Because ids rotate
+  daily, a visitor is a visitor-day: a person over seven days is seven
+  visitors, and a session that crosses midnight is two.
+- **The numbers.** Visitors (distinct ids), page views, sessions, bounce
+  rate (one-page sessions), session time (first page to last, mean over
+  sessions; a one-page session is 0) — each tile with its change against
+  the span before of the same length, today against the same hours
+  yesterday. Ranges: Today, Yesterday, 24 hours, 7 days (the default),
+  30 days, 3 months, 6 and 12 months; days begin in `stats.timezone`
+  (default the hub's local zone; `time/tzdata` is compiled in). The
+  chart is page views and visitors per hour, day or month — hours for a
+  day, days to three months, months beyond — drawn by the server: the
+  lines an SVG stretched over the plot with non-scaling 2px strokes, the
+  grid the top borders of four boxes, the labels HTML, so nothing blurs
+  at a fractional scale; the bucket still filling hangs off the end in
+  grey. Lists, two abreast when there is room: Sources (Sources,
+  Channels, Campaigns — sessions), Pages (Top by visitors; Entry and
+  Exit by sessions; a thread named by its author and first words, a
+  profile by its name), Locations (Countries with the code beside the
+  name — no flags: Windows has no flag emoji — Regions, Cities,
+  Languages), Devices (Device, Browser, OS). Twelve rows each, the bar a
+  share of the top row, the rest counted on the status line ("14 more
+  in the JSON"). Live: how many visitors had a page in the last five
+  minutes, and the latest ten page views — each visitor a colour and an
+  animal for the day (Cobalt Parrot), never an id.
+- **Every state is a URL.** `?range=`, each window's view (`src=`,
+  `pg=`, `loc=`, `dev=`) and the filters — a click on any row holds the
+  view to it (`country=`, `page=`, `source=`, `channel=`, `campaign=`,
+  `device=`, `browser=`, `os=`, `lang=`, `region=`, `city=`), stacked,
+  each shown as a chip whose × lifts it — so a view can be shared as a
+  link and the page needs no script to work. The script it does carry
+  refetches the same URL every 20 s while shown (marked `X-Hub-Live`)
+  and swaps each window's frame when it changed. `/v1/stats` takes the
+  same query and returns `{range, from, to, zone, step, filters,
+  summary, previous, series, lists, live}`, every list at once (the
+  page computes only the four it shows). A computed report is cached
+  ten seconds under its query. The feed's pager says "N online", a link
+  to `/stats`, on a hub that counts.
+- **Config**: `"stats": {"enabled": true, "timezone": "America/Los_Angeles",
+  "retention_days": 400}` — on by default; off hides `/stats` and the
+  link and counts nothing; read at start like `media`. A daily sweep
+  drops hits past the retention. The table (`hits`, plus `hits_salt`)
+  is the hub's own record like `pins` and `cards`: not derived from the
+  log, left alone by `Rebuild`, not replicated.
+- **Behind exe's proxy** the hub sees Cloudflare's headers as cloudflared
+  sent them (the reverse proxy copies them through; its own
+  `X-Forwarded-For` names cloudflared, which is why `CF-Connecting-IP`
+  is read first). The host hub on the Tailscale address gets no country
+  header, so its locations stay unknown. Public like every read: the
+  numbers reveal nothing about anyone.
+- `cmd/statsseed` fills a scratch hub's database with a week of made-up
+  page views for screenshots of the page; never run it against a real
+  hub. Tests: `internal/stats` (the classifier, sources, what counts,
+  ids and sessions), `internal/store` (the queries), `internal/api`
+  (counting through the handlers, the page, the JSON, the spans).
+
