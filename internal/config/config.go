@@ -68,7 +68,7 @@ type Config struct {
 type Stats struct {
 	Enabled   *bool  `json:"enabled,omitempty"`        // nil = on
 	Timezone  string `json:"timezone,omitempty"`       // an IANA zone the days are counted in; default the hub's local zone
-	Retention int    `json:"retention_days,omitempty"` // how long a page view is kept; default 400
+	Retention int    `json:"retention_days,omitempty"` // how long a page view is kept; absent or 0 = forever
 
 	Location *time.Location `json:"-"`
 }
@@ -141,8 +141,8 @@ func Load(path string) (*Config, error) {
 	if c.Stats == nil {
 		c.Stats = &Stats{}
 	}
-	if c.Stats.Retention <= 0 {
-		c.Stats.Retention = 400
+	if c.Stats.Retention < 0 {
+		c.Stats.Retention = 0 // forever
 	}
 	c.Stats.Location = time.Local
 	if c.Stats.Timezone != "" {

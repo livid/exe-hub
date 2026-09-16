@@ -129,7 +129,8 @@ a page is served: no script, no cookie, nothing to block. A visitor is
 the day's salted hash of address and browser, which rotates daily and is
 never stored as anything else; countries come from Cloudflare's headers
 when the hub sits behind it. `"stats": {"enabled": false}` in the config
-turns it off; `"timezone"` sets where the days begin.
+turns it off, `"timezone"` sets where the days begin, and page views are
+kept forever unless `"retention_days"` says how long.
 
 ## Hub to hub
 

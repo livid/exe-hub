@@ -163,17 +163,21 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		}
 		go coll.Run()
 		srv.Stats = coll
-		go func() {
-			for {
-				if n, err := st.StatsSweep(time.Now().AddDate(0, 0, -cfg.Stats.Retention)); err != nil {
-					log.Printf("stats sweep: %v", err)
-				} else if n > 0 {
-					log.Printf("stats: dropped %d page views older than %d days", n, cfg.Stats.Retention)
+		kept := "forever"
+		if cfg.Stats.Retention > 0 {
+			kept = fmt.Sprintf("%d days", cfg.Stats.Retention)
+			go func() {
+				for {
+					if n, err := st.StatsSweep(time.Now().AddDate(0, 0, -cfg.Stats.Retention)); err != nil {
+						log.Printf("stats sweep: %v", err)
+					} else if n > 0 {
+						log.Printf("stats: dropped %d page views older than %d days", n, cfg.Stats.Retention)
+					}
+					time.Sleep(24 * time.Hour)
 				}
-				time.Sleep(24 * time.Hour)
-			}
-		}()
-		log.Printf("stats: counting page views, days in %s, kept %d days", cfg.Stats.Location, cfg.Stats.Retention)
+			}()
+		}
+		log.Printf("stats: counting page views, days in %s, kept %s", cfg.Stats.Location, kept)
 	}
 	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler()}
 

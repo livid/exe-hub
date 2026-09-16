@@ -1123,9 +1123,11 @@ the page works without JavaScript (a small script keeps it current).
   ten seconds under its query. The feed's pager says "N online", a link
   to `/stats`, on a hub that counts.
 - **Config**: `"stats": {"enabled": true, "timezone": "America/Los_Angeles",
-  "retention_days": 400}` — on by default; off hides `/stats` and the
-  link and counts nothing; read at start like `media`. A daily sweep
-  drops hits past the retention. The table (`hits`, plus `hits_salt`)
+  "retention_days": 0}` — on by default; off hides `/stats` and the
+  link and counts nothing; read at start like `media`. Page views are
+  kept forever unless `retention_days` is set, when a daily sweep
+  drops the older ones (Livid's call, 2026-09-16: a row is a few dozen
+  bytes and the history is the point). The table (`hits`, plus `hits_salt`)
   is the hub's own record like `pins` and `cards`: not derived from the
   log, left alone by `Rebuild`, not replicated.
 - **Behind exe's proxy** the hub sees Cloudflare's headers as cloudflared
