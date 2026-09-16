@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"exehub/internal/config"
 	"exehub/internal/envelope"
@@ -1038,7 +1039,9 @@ func TestWebPreview(t *testing.T) {
 		`<meta property="og:image:height" content="630">`,
 		`<meta property="og:image:alt" content="Livid on hub.example: Hello exe 功能一览 · a post with words">`,
 		`<meta name="twitter:card" content="summary_large_image">`,
-		`<meta name="twitter:title" content="Livid on hub.example">`,
+		`<title>Hello — Livid</title>`,
+		`<meta property="og:title" content="Hello — Livid">`,
+		`<meta name="twitter:title" content="Hello — Livid">`,
 		`<meta name="twitter:image" content="http://hub.example/v1/preview/post/` + id + `.png">`,
 		`<meta property="article:published_time" content="` + webStamp(posts[0].TS) + `">`,
 		`<meta property="article:author" content="http://hub.example/u/` + author + `">`,
@@ -1097,9 +1100,41 @@ func TestWebPreview(t *testing.T) {
 		`<meta property="og:image:width" content="800">`,
 		`<meta property="og:image:alt" content="a cat">`,
 		`<meta property="og:description" content="A picture. By Livid on hub.example.">`,
+		`<title>Livid on hub.example</title>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("picture post lacks %s", want)
 		}
+	}
+}
+
+// TestOpening: the thread title's sentence — the first line with
+// words, a heading's marks dropped, cut at a sentence end that ends a
+// word (a dotted name is not one), trimmed near 70 characters at a
+// word boundary, a closing full stop dropped; and excerpt never cuts a
+// character in two.
+func TestOpening(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"Idea: every hub account gets a home page. Open a profile and beside it sits Home.", "Idea: every hub account gets a home page"},
+		{"# Hello\n\nexe 功能一览 · more words", "Hello"},
+		{"\n\n  \nSecond line first! Then this.", "Second line first!"},
+		{"A profile.set field naming the page's CID? Yes, at hub.v2core.com.", "A profile.set field naming the page's CID?"},
+		{"today at hub.v2core.com we shipped it", "today at hub.v2core.com we shipped it"},
+		{"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen", "one two three four five six seven eight nine ten eleven twelve…"},
+		{"exe 功能一览。今天新增了价格提醒", "exe 功能一览"},
+		{"Hmm... and then", "Hmm"},
+		{"", ""},
+		{"   ", ""},
+	} {
+		if got := opening(c.in); got != c.want {
+			t.Errorf("opening(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	zh := strings.Repeat("字", 300)
+	if got := excerpt(zh, 200); !utf8.ValidString(got) || utf8.RuneCountInString(got) != 201 {
+		t.Errorf("excerpt cut a character: %d runes, valid %v", utf8.RuneCountInString(got), utf8.ValidString(got))
+	}
+	if got := excerpt("one two three", 8); got != "one two…" {
+		t.Errorf("excerpt at a word: %q", got)
 	}
 }

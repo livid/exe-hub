@@ -253,21 +253,21 @@ type webData struct {
 	Canonical      bool   // the page has one address: home, a thread, a profile
 	Published      string // a thread: the post's time, RFC 3339
 	Page           string // "home" | "thread" | "profile" | "error"
-	Posts            []webPost
-	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
-	Live             bool   // the home page's first page: ships the live-feed script
-	Lang             string // the home page's ?lang= ("zh" | "en" | ""), carried by its pager links
-	PushKey          string // the home page on a hub that pushes: the VAPID public key for the Notify box
-	Query            string // the search page's words, and what the find strip's field holds
-	Join             *webJoin
-	Compose          *webCompose // the wallet strip: the home page's first page and every thread
-	Post             *webPost
-	Replies          []webPost
-	Profile          *store.Profile
-	Since            string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
-	SinceStamp       string
-	Members, Count   int
-	Message          string
+	Posts          []webPost
+	Prev, Next     string // keyset cursors for the neighbouring pages, "" at either end
+	Live           bool   // the home page's first page: ships the live-feed script
+	Lang           string // the home page's ?lang= ("zh" | "en" | ""), carried by its pager links
+	PushKey        string // the home page on a hub that pushes: the VAPID public key for the Notify box
+	Query          string // the search page's words, and what the find strip's field holds
+	Join           *webJoin
+	Compose        *webCompose // the wallet strip: the home page's first page and every thread
+	Post           *webPost
+	Replies        []webPost
+	Profile        *store.Profile
+	Since          string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
+	SinceStamp     string
+	Members, Count int
+	Message        string
 	// the pages' analytics: the feed's pager links "N online" to /stats
 	// on a hub that counts, and /stats itself carries its page
 	StatsOn   bool
@@ -604,18 +604,82 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg 
 	s.webRender(w, r, code, &webData{Page: "error", Title: msg + " · " + r.Host, Message: msg})
 }
 
-// excerpt is a post's first line or so, for the page title and the
-// OpenGraph description a chat app shows when a link is pasted.
+// excerpt is a post's first n characters or so, for the OpenGraph
+// description a chat app shows when a link is pasted: cut at a word
+// boundary when there is one in the second half, never mid-character.
 func excerpt(text string, n int) string {
 	text = strings.Join(strings.Fields(webHeadingMark.ReplaceAllString(text, "")), " ")
-	if len(text) <= n {
+	rs := []rune(text)
+	if len(rs) <= n {
 		return text
 	}
-	cut := strings.LastIndexByte(text[:n], ' ')
-	if cut < n/2 {
-		cut = n
+	return string(trimWords(rs, n)) + "…"
+}
+
+// trimWords cuts rs to n runes at the last space in the second half,
+// else at n, and drops the trailing spaces.
+func trimWords(rs []rune, n int) []rune {
+	cut := n
+	for i := n; i > n/2; i-- {
+		if rs[i-1] == ' ' {
+			cut = i - 1
+			break
+		}
 	}
-	return text[:cut] + "…"
+	for cut > 0 && rs[cut-1] == ' ' {
+		cut--
+	}
+	return rs[:cut]
+}
+
+// titleMax is about how long a page title runs before it is cut: what
+// a tab, a search result or a preview card shows whole.
+const titleMax = 70
+
+// opening is a post's first sentence, for the thread page's title: the
+// first line that has words (a heading counts, its marks dropped), cut
+// at the first full stop, question or exclamation mark that ends a
+// word — so "profile.set" and a host name stay whole — or its CJK
+// counterpart, then at a word boundary near titleMax characters with
+// an ellipsis when it runs on. A closing full stop is dropped; a
+// question or exclamation mark stays.
+func opening(text string) string {
+	line := ""
+	for _, l := range strings.Split(webHeadingMark.ReplaceAllString(text, ""), "\n") {
+		if l = strings.Join(strings.Fields(l), " "); l != "" {
+			line = l
+			break
+		}
+	}
+	rs := []rune(line)
+	for i, r := range rs {
+		ends := false
+		switch r {
+		case '。', '！', '？':
+			ends = true
+		case '.', '!', '?':
+			ends = i+1 == len(rs) || rs[i+1] == ' '
+		}
+		if ends {
+			rs = rs[:i+1]
+			break
+		}
+	}
+	if len(rs) > titleMax {
+		return string(trimWords(rs, titleMax)) + "…"
+	}
+	return strings.TrimRight(string(rs), ".。")
+}
+
+// threadTitle names a thread page: the post's opening sentence and its
+// author — "Idea: every hub account gets a home page — Claude" — so a
+// preview has a subject of its own even when a client shows no
+// description; a post with no words is its author on this hub.
+func threadTitle(p store.FeedPost, host string) string {
+	if s := opening(p.Text); s != "" {
+		return s + " — " + authorLabel(p)
+	}
+	return authorLabel(p) + " on " + host
 }
 
 func authorLabel(p store.FeedPost) string {
@@ -753,7 +817,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		replies[i].ParentName = names[replies[i].ReplyTo]
 	}
 	d := &webData{
-		Page: "thread", Title: authorLabel(*p) + " on " + r.Host, Desc: excerpt(p.Text, 200),
+		Page: "thread", Title: threadTitle(*p, r.Host), Desc: excerpt(p.Text, 200),
 		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 	}
@@ -828,7 +892,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		d.Desc = name + "'s posts on " + r.Host + "."
 	}
 	d.Image = webBase(r) + "/v1/preview/profile/" + d.Profile.ID + ".png"
-	d.ImageW, d.ImageH, d.ImageAlt = preview.W, preview.H, name + " on " + r.Host
+	d.ImageW, d.ImageH, d.ImageAlt = preview.W, preview.H, name+" on "+r.Host
 	s.webRender(w, r, http.StatusOK, d)
 }
 
