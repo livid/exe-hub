@@ -440,12 +440,13 @@ type statsTile struct {
 // (the small buttons along its strip), the rows with bar widths, and
 // what the count is.
 type statsList struct {
-	Title string
-	Views []statsView
-	Rows  []statsRowView
-	Count string // "Visitors" | "Sessions"
-	More  int    // rows past those shown
-	Empty string
+	Title  string
+	Anchor string // the window's id: what a link lands on without script
+	Views  []statsView
+	Rows   []statsRowView
+	Count  string // "Visitors" | "Sessions"
+	More   int    // rows past those shown
+	Empty  string
 }
 
 type statsView struct {
@@ -474,7 +475,6 @@ type statsPage struct {
 	JSON     string // the same view as JSON
 	Online   int
 	Recent   []statsLiveRow
-	Self     string // this view's own URL, what the page refetches
 }
 
 type statsChip struct {
@@ -582,7 +582,7 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The stats could not be read.")
 		return
 	}
-	p := &statsPage{Report: rep, Online: rep.Live.Online, Recent: rep.Live.Recent, Zone: rep.Zone, Self: sq.String(),
+	p := &statsPage{Report: rep, Online: rep.Live.Online, Recent: rep.Live.Recent, Zone: rep.Zone,
 		ZoneAbbr: now.In(s.Stats.Location()).Format("MST")}
 	p.JSON = strings.Replace(sq.String(), "/stats", "/v1/stats", 1)
 	for _, rg := range statsRanges {
@@ -600,7 +600,7 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 	p.Tiles = statsTiles(rep.Summary, rep.Previous)
 	p.Chart = statsChartOf(rep.Series, sp)
 	for _, lv := range statsListViews {
-		l := statsList{Title: lv.title}
+		l := statsList{Title: lv.title, Anchor: "w-" + lv.param}
 		for _, o := range lv.views {
 			l.Views = append(l.Views, statsView{Key: o.key, Label: o.label, URL: sq.with(lv.param, o.key), On: o.key == views[lv.param]})
 		}

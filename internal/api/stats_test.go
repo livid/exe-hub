@@ -126,15 +126,18 @@ func TestStatsPage(t *testing.T) {
 		`<div class="tl">Bounce rate</div><div class="tv">67%</div>`,
 		`<polyline class="pv"`,
 		`Google`, `Direct`,
-		`Ann: A heading the words of the post`,  // a thread by its words
-		`Profile: Ann`,                          // a profile by its name
-		`Japan<span class="tag">JP</span>`,      // a country by name, its code beside it
-		`href="/stats?country=CN&amp;range=7d"`, // a row is a filter
-		`href="/v1/stats?range=7d"`,             // the same view as JSON
-		`2 online`,                              // aaaa and bbbb in the last 5 minutes
-		`<path class="f" style="fill: #4b0082"`, // bbbb's disc: 0xbb % 20 = 7, Indigo
-		`<path class="f" style="fill: #c8a2c8"`, // aaaa's: 0xaa % 20 = 10, Lilac
+		`Ann: A heading the words of the post`,        // a thread by its words
+		`Profile: Ann`,                                // a profile by its name
+		`Japan<span class="tag">JP</span>`,            // a country by name, its code beside it
+		`href="/stats?country=CN&amp;range=7d#w-loc"`, // a row is a filter
+		`href="/v1/stats?range=7d"`,                   // the same view as JSON
+		`2 online`,                                    // aaaa and bbbb in the last 5 minutes
+		`<path class="f" style="fill: #4b0082"`,       // bbbb's disc: 0xbb % 20 = 7, Indigo
+		`<path class="f" style="fill: #c8a2c8"`,       // aaaa's: 0xaa % 20 = 10, Lilac
 		`headers: { "X-Hub-Live": "1" }`,
+		`<div class="window sw" id="w-dev">`,            // a window is an anchor
+		`href="/stats?dev=browsers&amp;range=7d#w-dev"`, // a view link lands on its window without script
+		`history.pushState(null, "", url)`,              // with script the view is fetched in place
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stats page lacks %q", want)

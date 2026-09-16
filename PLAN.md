@@ -1118,7 +1118,12 @@ the page works without JavaScript (a small script keeps it current).
   each shown as a chip whose × lifts it — so a view can be shared as a
   link and the page needs no script to work. The script it does carry
   refetches the same URL every 20 s while shown (marked `X-Hub-Live`)
-  and swaps each window's frame when it changed. `/v1/stats` takes the
+  and swaps each window's frame when it changed; a click on a range, a
+  view or a row fetches that view the same way and pushes its URL, so
+  the reader's scroll is kept and Back works (a plain link reloaded the
+  page at the top — Livid, 2026-09-16). Without script the links load
+  the page and land on the window they belong to (`#w-src`, `#w-pg`,
+  `#w-loc`, `#w-dev`). `/v1/stats` takes the
   same query and returns `{range, from, to, zone, step, filters,
   summary, previous, series, lists, live}`, every list at once (the
   page computes only the four it shows). A computed report is cached
