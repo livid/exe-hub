@@ -17,6 +17,7 @@ import (
 
 	"exehub/internal/card"
 	"exehub/internal/envelope"
+	"exehub/internal/preview"
 	"exehub/internal/store"
 )
 
@@ -241,8 +242,17 @@ type webCompose struct {
 type webData struct {
 	Base, Host, Path string
 	Title, Desc      string
-	Image            string // OpenGraph picture, when the page has one
-	Page             string // "home" | "thread" | "profile" | "error"
+	// the link preview (see PLAN.md, Public pages — Link previews): the
+	// OpenGraph picture, its size when known, what it shows, and the
+	// Twitter card kind — "summary_large_image" for a 1.91:1 picture,
+	// "summary" for a small square one
+	Image          string
+	ImageW, ImageH int
+	ImageAlt       string
+	CardKind       string
+	Canonical      bool   // the page has one address: home, a thread, a profile
+	Published      string // a thread: the post's time, RFC 3339
+	Page           string // "home" | "thread" | "profile" | "error"
 	Posts            []webPost
 	Prev, Next       string // keyset cursors for the neighbouring pages, "" at either end
 	Live             bool   // the home page's first page: ships the live-feed script
@@ -572,6 +582,15 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	if d.Title == "" {
 		d.Title = r.Host
 	}
+	if d.Image == "" && d.Page != "error" {
+		d.Image, d.ImageW, d.ImageH, d.ImageAlt = d.Base+"/apple-touch-icon.png", 180, 180, r.Host
+	}
+	if d.CardKind == "" && d.Image != "" {
+		d.CardKind = "summary"
+		if d.ImageW == preview.W && d.ImageH == preview.H {
+			d.CardKind = "summary_large_image"
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
@@ -635,8 +654,8 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	members, count, _ := s.St.Counts()
 	d := &webData{
-		Page: "home", Desc: webDesc,
-		Image: webBase(r) + "/apple-touch-icon.png",
+		Page: "home", Desc: webDesc, Canonical: true,
+		Image: webBase(r) + "/v1/preview/home.png", ImageW: preview.W, ImageH: preview.H, ImageAlt: r.Host + ", " + webDesc,
 		Posts: s.webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r), Lang: lang,
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
@@ -676,7 +695,7 @@ func normQuery(q string) string {
 // strip and a hint. Static, and noindex: a search is the past.
 func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	q := normQuery(r.URL.Query().Get("q"))
-	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q, Image: webBase(r) + "/apple-touch-icon.png"}
+	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q}
 	if q == "" {
 		s.webRender(w, r, http.StatusOK, d)
 		return
@@ -736,13 +755,28 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 	d := &webData{
 		Page: "thread", Title: authorLabel(*p) + " on " + r.Host, Desc: excerpt(p.Text, 200),
 		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
+		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 	}
-	if len(post.Images) > 0 {
+	if d.Desc == "" {
+		d.Desc = previewNoWords(*p) + " By " + authorLabel(*p) + " on " + r.Host + "."
+	}
+	// the picture: the post's first one, else a card drawn from its words
+	d.ImageAlt = authorLabel(*p) + " on " + r.Host + ": " + excerpt(p.Text, 120)
+	switch v := append(post.Videos, post.Sounds...); {
+	case len(post.Images) > 0:
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID
-	} else if len(post.Pictures) > 0 {
+		d.ImageW, d.ImageH = post.Images[0].Width, post.Images[0].Height
+		if alt := post.Images[0].Alt; alt != "" {
+			d.ImageAlt = alt
+		}
+	case len(post.Pictures) > 0:
 		d.Image = webBase(r) + "/v1/embed/" + post.Pictures[0].CID
-	} else if v := append(post.Videos, post.Sounds...); len(v) > 0 && v[0].Poster != "" {
+	case len(v) > 0 && v[0].Poster != "":
 		d.Image = webBase(r) + "/v1/embed/" + v[0].Poster // a video's frame, or a sound's waveform
+		d.ImageW, d.ImageH = v[0].Width, v[0].Height
+	default:
+		d.Image = webBase(r) + "/v1/preview/post/" + p.ID + ".png"
+		d.ImageW, d.ImageH = preview.W, preview.H
 	}
 	s.webRender(w, r, http.StatusOK, d)
 }
@@ -789,10 +823,12 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	}
 	name := profileName(d.Profile)
 	d.Title = name + " on " + r.Host
-	d.Image = webBase(r) + "/apple-touch-icon.png"
-	if d.Profile.Avatar != "" {
-		d.Image = webBase(r) + "/v1/embed/" + d.Profile.Avatar
+	d.Canonical = true
+	if d.Desc == "" {
+		d.Desc = name + "'s posts on " + r.Host + "."
 	}
+	d.Image = webBase(r) + "/v1/preview/profile/" + d.Profile.ID + ".png"
+	d.ImageW, d.ImageH, d.ImageAlt = preview.W, preview.H, name + " on " + r.Host
 	s.webRender(w, r, http.StatusOK, d)
 }
 

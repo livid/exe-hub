@@ -465,8 +465,8 @@ on the home page's first page only, the live feed (below) and the
 Notify bell (see Notifications). Without script the link opens the
 picture and the first page is what it was, a static page. Every post gets a
 link anyone can open, and a pasted link unfurls: the pages carry
-OpenGraph title, description (an excerpt) and image (the first picture,
-or the avatar). Post ids are content hashes, so one link resolves on any
+OpenGraph title, description (an excerpt) and a picture (see Link
+previews below). Post ids are content hashes, so one link resolves on any
 hub that carries the post.
 
 - **A reader, and a signed client when a wallet signs in.** Every write
@@ -692,8 +692,32 @@ hub that carries the post.
   control.
 - Icons: `/favicon.ico` (32 + 16) and `/apple-touch-icon.png` (180, the
   icon at 5x on the desktop's lavender), drawn from the Hub app's 32px
-  pixel art and embedded in the binary; the home and profile pages use
-  the touch icon as their OpenGraph picture when they have no other.
+  pixel art and embedded in the binary; the search and error pages use
+  the touch icon as their OpenGraph picture (`twitter:card` summary).
+- **Link previews (built 2026-09-16).** A pasted link to a page shows
+  a card everywhere a card is shown. The head carries the full set:
+  `og:site_name` (the host), `og:type` (article for a thread, profile
+  for a profile, website else), `og:url` and a canonical link (home,
+  thread, profile), `og:description` — for a post that is all pictures
+  "A picture. By name on host." rather than nothing — `og:image` with
+  its width, height and alt, the `twitter:card` kind with its title,
+  description, image and alt, a thread's `article:published_time` and
+  `article:author` (the author's `/u/` page), a profile's
+  `profile:username`. The picture is the post's first picture, poster
+  or waveform when it has one (size from the embed when declared), else
+  drawn on request: `/v1/preview/post/{id}.png`, `/v1/preview/profile/{id}.png`
+  and `/v1/preview/home.png` (`internal/preview`, `internal/api/preview.go`)
+  are 1200×630 PNGs of one Platinum window — the page's own chrome at
+  2x so its lines stay crisp at the half a card is shown at — holding
+  the avatar, the name, the date (UTC), the words wrapped to six lines
+  with an ellipsis, and the reply count on the status bar; a profile
+  carries its bio and post count, the home page the hub icon, its host
+  and its counts. Type is Go Sans with Droid Sans Fallback for CJK
+  (`internal/preview/FONTS.md`); an emoji, which neither has, is left
+  out. Drawn per request (about 20 ms), cached ten minutes with an ETag;
+  a cache in memory is the upgrade path if crawlers ever make it show.
+  Asked by Livid 2026-09-16 with an opengraph.xyz report: a text post
+  previewed with no picture and no Twitter card.
 - **Installable.** The pages link `/manifest.webmanifest`, rendered per
   request because a hub's name is its host (a hub has no display name;
   every hub is someone's own): name and short_name the host, the home

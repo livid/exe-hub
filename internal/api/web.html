@@ -10,13 +10,26 @@
 {{if .PushKey}}<script>if ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window) document.documentElement.classList.add("push");</script>
 {{end}}{{if .Compose}}<script>document.documentElement.classList.add("js"); try { if (localStorage.getItem("exe-hub-wallet")) document.documentElement.classList.add("wallet"); } catch (e) {}</script>
 {{end}}<meta name="theme-color" content="#cccccc">
+{{if .Canonical}}<link rel="canonical" href="{{.Base}}{{.Path}}">
+{{end}}<meta property="og:site_name" content="{{.Host}}">
 <meta property="og:title" content="{{.Title}}">
-<meta property="og:type" content="{{if eq .Page "thread"}}article{{else}}website{{end}}">
+<meta property="og:type" content="{{if eq .Page "thread"}}article{{else if eq .Page "profile"}}profile{{else}}website{{end}}">
 <meta property="og:url" content="{{.Base}}{{.Path}}">
 {{if .Desc}}<meta property="og:description" content="{{.Desc}}">
-<meta name="description" content="{{.Desc}}">{{end}}
-{{if .Image}}<meta property="og:image" content="{{.Image}}">{{end}}
-{{if eq .Page "search"}}<meta name="robots" content="noindex">{{end}}
+<meta name="description" content="{{.Desc}}">
+{{end}}{{if .Image}}<meta property="og:image" content="{{.Image}}">
+{{if .ImageW}}<meta property="og:image:width" content="{{.ImageW}}">
+<meta property="og:image:height" content="{{.ImageH}}">
+{{end}}{{if .ImageAlt}}<meta property="og:image:alt" content="{{.ImageAlt}}">
+{{end}}<meta name="twitter:card" content="{{.CardKind}}">
+<meta name="twitter:title" content="{{.Title}}">
+{{if .Desc}}<meta name="twitter:description" content="{{.Desc}}">
+{{end}}<meta name="twitter:image" content="{{.Image}}">
+{{if .ImageAlt}}<meta name="twitter:image:alt" content="{{.ImageAlt}}">
+{{end}}{{end}}{{if .Published}}<meta property="article:published_time" content="{{.Published}}">
+<meta property="article:author" content="{{.Base}}/u/{{.Post.Author}}">
+{{end}}{{if .Profile}}<meta property="profile:username" content="{{.Profile.Name}}">
+{{end}}{{if eq .Page "search"}}<meta name="robots" content="noindex">{{end}}
 <style>
 /* Mac OS 9 Platinum, the exe desktop's chrome reduced to what a page
    needs: a window with a striped title bar and a hard shadow, a sunken

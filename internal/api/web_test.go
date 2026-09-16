@@ -841,7 +841,7 @@ func TestWebIcons(t *testing.T) {
 	}
 	_, body := get(t, h, "/")
 	if !strings.Contains(body, `<link rel="icon" href="/favicon.ico"`) || !strings.Contains(body, `<link rel="apple-touch-icon" href="/apple-touch-icon.png">`) ||
-		!strings.Contains(body, `<meta property="og:image" content="http://hub.example/apple-touch-icon.png">`) {
+		!strings.Contains(body, `<meta property="og:image" content="http://hub.example/v1/preview/home.png">`) {
 		t.Error("page lacks the icon links")
 	}
 }
@@ -1011,6 +1011,95 @@ func TestWebCompose(t *testing.T) {
 	for _, path := range []string{"/?before=" + ids[1], "/u/" + identity.Fingerprint(pub), "/search?q=post"} {
 		if _, body := get(t, h, path); strings.Contains(body, `id="compose"`) {
 			t.Errorf("%s carries the compose strip", path)
+		}
+	}
+}
+
+// TestWebPreview: every page carries a full link preview — site name,
+// canonical address, a 1200×630 picture drawn from the page with its
+// size and alt text, the Twitter card kind, a thread's time and author
+// — and the pictures themselves are PNGs of that size: a post's words,
+// a profile, the hub. A post with a picture keeps the picture.
+func TestWebPreview(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Livid", "bio": "Makes things."})
+	id := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "# Hello\n\nexe 功能一览 · a post with words"})
+	posts, _ := s.St.Feed("", 10, true)
+	author := posts[0].Author
+	_, body := get(t, h, "/p/"+id)
+	for _, want := range []string{
+		`<link rel="canonical" href="http://hub.example/p/` + id + `">`,
+		`<meta property="og:site_name" content="hub.example">`,
+		`<meta property="og:type" content="article">`,
+		`<meta property="og:image" content="http://hub.example/v1/preview/post/` + id + `.png">`,
+		`<meta property="og:image:width" content="1200">`,
+		`<meta property="og:image:height" content="630">`,
+		`<meta property="og:image:alt" content="Livid on hub.example: Hello exe 功能一览 · a post with words">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+		`<meta name="twitter:title" content="Livid on hub.example">`,
+		`<meta name="twitter:image" content="http://hub.example/v1/preview/post/` + id + `.png">`,
+		`<meta property="article:published_time" content="` + webStamp(posts[0].TS) + `">`,
+		`<meta property="article:author" content="http://hub.example/u/` + author + `">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("thread page lacks %s", want)
+		}
+	}
+	_, body = get(t, h, "/u/"+author)
+	for _, want := range []string{
+		`<link rel="canonical" href="http://hub.example/u/` + author + `">`,
+		`<meta property="og:type" content="profile">`,
+		`<meta property="og:image" content="http://hub.example/v1/preview/profile/` + author + `.png">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+		`<meta property="profile:username" content="Livid">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("profile page lacks %s", want)
+		}
+	}
+	_, body = get(t, h, "/")
+	if !strings.Contains(body, `<link rel="canonical" href="http://hub.example/">`) || !strings.Contains(body, `<meta name="twitter:card" content="summary_large_image">`) {
+		t.Error("home page lacks its preview")
+	}
+	// the search page keeps the small icon and says so
+	_, body = get(t, h, "/search?q=x")
+	if !strings.Contains(body, `<meta name="twitter:card" content="summary">`) || strings.Contains(body, `rel="canonical"`) {
+		t.Error("search page preview")
+	}
+	// the pictures
+	for _, path := range []string{"/v1/preview/post/" + id + ".png", "/v1/preview/post/" + id, "/v1/preview/profile/" + author + ".png", "/v1/preview/home.png"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example"+path, nil))
+		if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" || w.Header().Get("ETag") == "" {
+			t.Errorf("%s: %d %s", path, w.Code, w.Header().Get("Content-Type"))
+			continue
+		}
+		if cfg, err := png.DecodeConfig(w.Body); err != nil || cfg.Width != 1200 || cfg.Height != 630 {
+			t.Errorf("%s: %dx%d %v", path, cfg.Width, cfg.Height, err)
+		}
+	}
+	for _, path := range []string{"/v1/preview/post/" + strings.Repeat("0", 64) + ".png", "/v1/preview/profile/nobody.png"} {
+		if code, _ := get(t, h, path); code != 404 {
+			t.Errorf("%s: %d, want 404", path, code)
+		}
+	}
+	// a post with a picture keeps it, with the size the embed declares
+	cid := strings.Repeat("b", 59)
+	if err := s.St.AddPin(cid, 1000, "image/png", false); err != nil {
+		t.Fatal(err)
+	}
+	pic := ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "", "embeds": []map[string]any{{"cid": cid, "mime": "image/png", "width": 800, "height": 600, "alt": "a cat"}}})
+	_, body = get(t, h, "/p/"+pic)
+	for _, want := range []string{
+		`<meta property="og:image" content="http://hub.example/v1/embed/` + cid + `">`,
+		`<meta property="og:image:width" content="800">`,
+		`<meta property="og:image:alt" content="a cat">`,
+		`<meta property="og:description" content="A picture. By Livid on hub.example.">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("picture post lacks %s", want)
 		}
 	}
 }
