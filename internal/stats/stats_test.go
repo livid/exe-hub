@@ -233,6 +233,9 @@ func TestAlias(t *testing.T) {
 	if a := Alias("00ff"); a != "Amber Lynx" { // 0 → Amber, 255 % 40 = 15 → Lynx
 		t.Errorf("Alias = %q", a)
 	}
+	if c := Colour("00ff"); c != "#ff9900" {
+		t.Errorf("Colour = %q", c)
+	}
 	if a := Alias("zz"); a != "Visitor" {
 		t.Errorf("bad id: %q", a)
 	}

@@ -1108,7 +1108,9 @@ the page works without JavaScript (a small script keeps it current).
   share of the top row, the rest counted on the status line ("14 more
   in the JSON"). Live: how many visitors had a page in the last five
   minutes, and the latest ten page views — each visitor a colour and an
-  animal for the day (Cobalt Parrot), never an id.
+  animal for the day (Cobalt Parrot), never an id, with a 12px pixel-art
+  disc of that colour before the name (Livid's idea, 2026-09-16; the
+  JSON carries it as `colour`).
 - **Every state is a URL.** `?range=`, each window's view (`src=`,
   `pg=`, `loc=`, `dev=`) and the filters — a click on any row holds the
   view to it (`country=`, `page=`, `source=`, `channel=`, `campaign=`,

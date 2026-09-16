@@ -132,6 +132,8 @@ func TestStatsPage(t *testing.T) {
 		`href="/stats?country=CN&amp;range=7d"`, // a row is a filter
 		`href="/v1/stats?range=7d"`,             // the same view as JSON
 		`2 online`,                              // aaaa and bbbb in the last 5 minutes
+		`<path class="f" style="fill: #4b0082"`, // bbbb's disc: 0xbb % 20 = 7, Indigo
+		`<path class="f" style="fill: #c8a2c8"`, // aaaa's: 0xaa % 20 = 10, Lilac
 		`headers: { "X-Hub-Live": "1" }`,
 	} {
 		if !strings.Contains(body, want) {

@@ -64,7 +64,14 @@
 .rows .none { font-size: 11px; color: #777; padding: 3px 4px; }
 /* Live: the latest pages, newest first — who (a colour and an animal
    for the day), where from, which page, how long ago */
-.live .row .who { flex: none; width: 112px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live .row .who { flex: none; display: flex; align-items: center; gap: 5px; width: 130px; white-space: nowrap; overflow: hidden; }
+.live .row .who span { overflow: hidden; text-overflow: ellipsis; }
+/* the alias's colour as a disc before the name: 12px pixel art in the
+   desktop's icon idiom (black outline, white highlight), the fill the
+   colour the name says */
+.live .row .dot { flex: none; width: 12px; height: 12px; display: block; shape-rendering: crispEdges; }
+.live .row .dot .k { fill: #262626; } .live .row .dot .w { fill: #fff; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .live .row .dot { shape-rendering: geometricPrecision; } }
 .live .row .cc { flex: none; width: 24px; font: 10px Monaco, "Courier New", monospace; color: #555; }
 .live .row .pg { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .live .row .pg a { color: #262626; text-decoration: none; }
@@ -72,7 +79,7 @@
 .live .row .ago { flex: none; font-size: 11px; color: #555; white-space: nowrap; }
 /* a phone: narrower name and label columns, and every other axis label
    dropped so the words never overlap */
-@media (max-width: 480px) { .live .row .who { width: 88px; } .tile { flex-basis: 84px; min-width: 84px; } .chart { grid-template-columns: 34px 1fr; }
+@media (max-width: 480px) { .live .row .who { width: 104px; } .tile { flex-basis: 84px; min-width: 84px; } .chart { grid-template-columns: 34px 1fr; }
   .chart .xs span:nth-child(even) { display: none; } }
 </style>
 {{end}}
@@ -101,7 +108,7 @@
 <div class="window live sw">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">Live</span><span class="stripe"></span></div>
   <div class="frame">
-    <div class="rows">{{range .Recent}}<div class="row"><span class="who">{{.Alias}}</span><span class="cc">{{.Country}}</span><span class="pg"><a href="{{.Path}}" title="{{.Path}}">{{.Label}}</a></span><span class="ago">{{.Ago}}</span></div>{{else}}<div class="none">No one yet.</div>{{end}}</div>
+    <div class="rows">{{range .Recent}}<div class="row"><span class="who">{{template "disc" .Colour}}<span>{{.Alias}}</span></span><span class="cc">{{.Country}}</span><span class="pg"><a href="{{.Path}}" title="{{.Path}}">{{.Label}}</a></span><span class="ago">{{.Ago}}</span></div>{{else}}<div class="none">No one yet.</div>{{end}}</div>
     <div class="statusbar"><span>{{.Online}} online: a page in the last 5 minutes</span><span>latest {{len .Recent}}</span></div>
   </div>
 </div>
@@ -140,3 +147,4 @@
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 })();
 </script>{{end}}{{end}}
+{{define "disc"}}<svg class="dot" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path class="f" style="fill: {{.}}" d="M4 1h4v1h-4zM2 2h8v2h-8zM1 4h10v4h-10zM2 8h8v2h-8zM4 10h4v1h-4z"/><path class="w" d="M3 2h1v1h-1zM2 3h1v1h-1z"/><path class="k" d="M4 0h4v1h-4zM2 1h2v1h-2zM8 1h2v1h-2zM1 2h1v2h-1zM10 2h1v2h-1zM0 4h1v4h-1zM11 4h1v4h-1zM1 8h1v2h-1zM10 8h1v2h-1zM2 10h2v1h-2zM8 10h2v1h-2zM4 11h4v1h-4z"/></svg>{{end}}

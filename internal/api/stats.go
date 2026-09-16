@@ -245,6 +245,7 @@ type statsLive struct {
 
 type statsLiveRow struct {
 	Alias   string `json:"alias"`
+	Colour  string `json:"colour"` // the alias's colour, the disc before the name
 	Country string `json:"country,omitempty"`
 	Path    string `json:"path"`
 	Label   string `json:"label,omitempty"`
@@ -338,7 +339,7 @@ func (s *Server) statsBuild(sp statsSpan, f store.StatsFilter, lists []string, n
 	r.Live = statsLive{Online: online, Recent: []statsLiveRow{}}
 	for _, h := range recent {
 		r.Live.Recent = append(r.Live.Recent, statsLiveRow{
-			Alias: stats.Alias(h.VID), Country: h.Country, Path: h.Path, Device: h.Device,
+			Alias: stats.Alias(h.VID), Colour: stats.Colour(h.VID), Country: h.Country, Path: h.Path, Device: h.Device,
 			TS: time.UnixMilli(h.TS).In(loc).Format(time.RFC3339), Ago: statsAgo(now.Sub(time.UnixMilli(h.TS))),
 		})
 	}
