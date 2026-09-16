@@ -7,7 +7,14 @@
 .sdesk .window { max-width: none; margin: 0 0 22px; }
 .sgrid { display: grid; grid-template-columns: 1fr; gap: 0 24px; align-items: start; }
 .sgrid > .window { min-width: 0; } /* a long label never widens a window past its column */
-@media (min-width: 720px) { .sgrid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 720px) {
+  .sgrid { grid-template-columns: 1fr 1fr; }
+  /* CSS Grid Level 3: where the browser has grid-lanes (Safari 26.4;
+     the others behind flags), the windows pack into the two lanes
+     like masonry — Devices climbs up under the shorter column instead
+     of leaving a hole beside Locations. Elsewhere the plain grid. */
+  @supports (display: grid-lanes) { .sgrid { display: grid-lanes; } }
+}
 .strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px;
   border-bottom: 1px solid #262626; background: #ddd;
   box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }

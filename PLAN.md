@@ -1099,7 +1099,11 @@ the page works without JavaScript (a small script keeps it current).
   lines an SVG stretched over the plot with non-scaling 2px strokes, the
   grid the top borders of four boxes, the labels HTML, so nothing blurs
   at a fractional scale; the bucket still filling hangs off the end in
-  grey. Lists, two abreast when there is room: Sources (Sources,
+  grey. Lists, two abreast when there is room — packed into the two
+  lanes like masonry where the browser has CSS Grid Level 3's
+  `display: grid-lanes` (Safari 26.4; Chrome and Firefox behind flags;
+  Livid pointed at WebKit's masonry post 2026-09-16), the plain grid
+  elsewhere, each inside `@supports`: Sources (Sources,
   Channels, Campaigns — sessions), Pages (Top by visitors; Entry and
   Exit by sessions; a thread named by its author and first words, a
   profile by its name), Locations (Countries with the code beside the
