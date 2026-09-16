@@ -205,7 +205,7 @@ func TestWebThreadProfile(t *testing.T) {
 	}
 	// a reply to the reply shows on the root's page, indented under it, and
 	// names the reply it answers with an in-page link; the count is the tree
-	ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "deeper still", "reply_to": reply})
+	deep := ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "deeper still", "reply_to": reply})
 	code, body = get(t, h, "/p/"+root)
 	if code != 200 || !strings.Contains(body, "deeper still") || !strings.Contains(body, "2 replies<") ||
 		!strings.Contains(body, `style="--d:2"`) || !strings.Contains(body, `<a href="#`+reply+`">in reply to `) {
@@ -224,20 +224,23 @@ func TestWebThreadProfile(t *testing.T) {
 	if code, body := get(t, h, "/p/"+strings.Repeat("0", 64)); code != 404 || !strings.Contains(body, "No such post.") {
 		t.Errorf("unknown post: %d\n%s", code, body)
 	}
+	// the profile id is the author's fingerprint, as the feed reports it
+	posts, _ := s.St.Feed("", 10, true)
+	author := posts[0].Author
+
 	_, home := get(t, h, "/")
-	if strings.Contains(home, "the reply") {
-		t.Error("a reply leaked into the home feed")
+	if strings.Contains(home, `class="post reply"`) {
+		t.Error("a reply row leaked into the home feed")
 	}
 	if !strings.Contains(home, "1 reply ▸") {
 		t.Error("home lacks the reply count link")
 	}
-	if strings.Contains(home, "deeper still") {
-		t.Error("a nested reply leaked into the home feed")
+	// the foot says what was said last — the newest reply in the tree,
+	// its link landing on that reply in the thread
+	if !strings.Contains(home, `<a class="latest" href="/p/`+root+`#`+deep+`"><b>`+author+`</b> deeper still</a>`) {
+		t.Errorf("home foot lacks the thread's newest reply\n%s", home)
 	}
 
-	// the profile id is the author's fingerprint, as the feed reports it
-	posts, _ := s.St.Feed("", 10, true)
-	author := posts[0].Author
 	code, body = get(t, h, "/u/"+author)
 	if code != 200 || !strings.Contains(body, "root post") || !strings.Contains(body, "the reply") || !strings.Contains(body, "<h1>"+author+"</h1>") {
 		t.Errorf("profile page: %d\n%s", code, body)

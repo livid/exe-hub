@@ -291,9 +291,14 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .card .arch { display: block; padding: 4px 9px 3px; background: #eee; font-size: 11px; text-decoration: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .arch:hover { text-decoration: underline; }
-.foot { margin-top: 5px; font-size: 11px; }
+.foot { margin-top: 5px; font-size: 11px; display: flex; gap: 10px; align-items: baseline; min-width: 0; }
 .foot a { text-decoration: none; }
 .foot a:hover { text-decoration: underline; }
+/* the thread's newest reply on the foot line: who spoke last and the
+   first words, the link landing on that reply in the thread */
+.foot .count { white-space: nowrap; }
+.foot .latest { color: #666; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foot .latest b { color: #444; }
 .pad { padding: 12px 14px; }
 .pad p { margin: 0 0 8px; }
 .join ol { margin: 6px 0 0; padding-left: 20px; }
@@ -1302,7 +1307,7 @@ localTimes(document);
     {{if .Text}}<div class="text">{{.HTML}}</div>{{end}}
     {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">Archived copy{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
     {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}Sound{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Page{{end}}">{{if .Filename}}{{.Filename}}{{else}}Page{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>download</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
-    {{if and (not .ReplyTo) .Replies}}<div class="foot"><a href="/p/{{.ID}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a></div>{{end}}
+    {{if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a>{{with .Latest}}<a class="latest" href="/p/{{$.ID}}#{{.ID}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}</div>{{end}}
   </div>
 </div>
 {{end}}

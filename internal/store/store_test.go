@@ -113,6 +113,66 @@ func TestThreadNested(t *testing.T) {
 	}
 }
 
+// TestFeedActivity: a reply — however deep — bumps its thread's root
+// in the home feed and becomes the root's LastReply; deleting the
+// newest reply moves the pointer back; Rebuild recomputes both.
+func TestFeedActivity(t *testing.T) {
+	s := openTest(t)
+	alice, bob := newAuthor(t), newAuthor(t)
+	root := ingest(t, s, alice, "post.create", map[string]string{"text": "the root"})
+	r1 := ingest(t, s, bob, "post.create", map[string]string{"text": "level one", "reply_to": root})
+	later := ingest(t, s, alice, "post.create", map[string]string{"text": "a newer thread"})
+	r2 := ingest(t, s, bob, "post.create", map[string]string{"text": "level two", "reply_to": r1})
+
+	order := func(want ...string) {
+		t.Helper()
+		feed, err := s.Feed("", 10, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, p := range feed {
+			got = append(got, p.ID)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("feed %v, want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("feed %v, want %v", got, want)
+			}
+		}
+	}
+	order(root, later) // the nested r2 bumped root over the newer post
+	if p, _ := s.Post(root); p.LastReply == nil || p.LastReply.ID != r2 {
+		t.Fatalf("root's last reply: %+v", p.LastReply)
+	}
+
+	// deleting the newest reply hands the pointer back to r1 and the
+	// activity to r1's arrival (still newest touch, root stays first)
+	ingest(t, s, bob, "post.delete", map[string]string{"post": r2})
+	if p, _ := s.Post(root); p.LastReply == nil || p.LastReply.ID != r1 {
+		t.Fatalf("after delete, root's last reply: %+v", p.LastReply)
+	}
+	// and deleting the last one clears it, the root's own arrival
+	// becoming the activity again — the newer thread stands first now
+	ingest(t, s, bob, "post.delete", map[string]string{"post": r1})
+	if p, _ := s.Post(root); p.LastReply != nil {
+		t.Fatalf("after both deletes, root still points at %+v", p.LastReply)
+	}
+	order(later, root)
+
+	// a rebuild replays the same ops and lands on the same state
+	r3 := ingest(t, s, bob, "post.create", map[string]string{"text": "back", "reply_to": root})
+	if err := s.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	order(root, later)
+	if p, _ := s.Post(root); p.LastReply == nil || p.LastReply.ID != r3 {
+		t.Fatalf("after rebuild, root's last reply: %+v", p.LastReply)
+	}
+}
+
 func TestIngestFeedAndReplies(t *testing.T) {
 	s := openTest(t)
 	alice, bob := newAuthor(t), newAuthor(t)
@@ -122,7 +182,9 @@ func TestIngestFeedAndReplies(t *testing.T) {
 	p2 := ingest(t, s, bob, "post.create", map[string]string{"text": "second"})
 	r1 := ingest(t, s, bob, "post.create", map[string]string{"text": "re: first", "reply_to": p1})
 
-	// the home feed hides replies; replies=1 shows everything
+	// the home feed hides replies and follows activity: bob's reply
+	// bumped p1 over the newer p2, and p1 carries it as LastReply;
+	// replies=1 shows everything in arrival order, as pollers need
 	feed, err := s.Feed("", 50, false)
 	if err != nil {
 		t.Fatal(err)
@@ -130,27 +192,33 @@ func TestIngestFeedAndReplies(t *testing.T) {
 	if len(feed) != 2 {
 		t.Fatalf("feed len %d, want 2 (reply hidden)", len(feed))
 	}
-	if feed[0].ID != p2 || feed[1].ID != p1 {
+	if feed[0].ID != p1 || feed[1].ID != p2 {
 		t.Fatalf("feed order wrong: %v", []string{feed[0].ID, feed[1].ID})
 	}
-	if feed[1].AuthorName != "Alice" {
-		t.Fatalf("author name not joined: %q", feed[1].AuthorName)
+	if feed[0].AuthorName != "Alice" {
+		t.Fatalf("author name not joined: %q", feed[0].AuthorName)
 	}
-	if feed[1].Replies != 1 {
-		t.Fatalf("reply count %d, want 1", feed[1].Replies)
+	if feed[0].Replies != 1 {
+		t.Fatalf("reply count %d, want 1", feed[0].Replies)
+	}
+	if feed[0].LastReply == nil || feed[0].LastReply.ID != r1 || feed[0].LastReply.Text != "re: first" {
+		t.Fatalf("last reply wrong: %+v", feed[0].LastReply)
+	}
+	if feed[1].LastReply != nil {
+		t.Fatalf("unanswered post carries a last reply: %+v", feed[1].LastReply)
 	}
 	all, err := s.Feed("", 50, true)
 	if err != nil || len(all) != 3 || all[0].ID != r1 {
 		t.Fatalf("replies=1 feed: %v len %d", err, len(all))
 	}
 
-	// keyset pagination: page of 1, then the rest
+	// keyset pagination in activity order: p1 (bumped) first, then p2
 	page, err := s.Feed("", 1, false)
-	if err != nil || len(page) != 1 {
-		t.Fatalf("page1: %v len %d", err, len(page))
+	if err != nil || len(page) != 1 || page[0].ID != p1 {
+		t.Fatalf("page1: %v %+v", err, page)
 	}
 	page2, err := s.Feed(page[0].ID, 2, false)
-	if err != nil || len(page2) != 1 || page2[0].ID != p1 {
+	if err != nil || len(page2) != 1 || page2[0].ID != p2 {
 		t.Fatalf("page2 wrong: %v", page2)
 	}
 

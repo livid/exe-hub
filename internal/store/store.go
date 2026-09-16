@@ -85,12 +85,14 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 
 CREATE TABLE IF NOT EXISTS posts (
-  id       TEXT PRIMARY KEY,          -- the post.create message id
-  author   TEXT NOT NULL,             -- profile id
-  text     TEXT NOT NULL,
-  reply_to TEXT NOT NULL DEFAULT '',
-  ts       INTEGER NOT NULL,
-  received INTEGER NOT NULL
+  id         TEXT PRIMARY KEY,        -- the post.create message id
+  author     TEXT NOT NULL,           -- profile id
+  text       TEXT NOT NULL,
+  reply_to   TEXT NOT NULL DEFAULT '',
+  ts         INTEGER NOT NULL,
+  received   INTEGER NOT NULL,
+  activity   INTEGER NOT NULL DEFAULT 0, -- the thread's last touch (roots; see Feed)
+  last_reply TEXT NOT NULL DEFAULT ''    -- the newest reply in the tree (roots)
 );
 CREATE INDEX IF NOT EXISTS posts_author ON posts(author, received);
 CREATE INDEX IF NOT EXISTS posts_reply ON posts(reply_to, received);
@@ -211,12 +213,74 @@ CREATE TABLE IF NOT EXISTS pictures (
 		`ALTER TABLE pins ADD COLUMN height INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pins ADD COLUMN duration REAL NOT NULL DEFAULT 0`,
 		`ALTER TABLE pins ADD COLUMN loop INTEGER NOT NULL DEFAULT 0`,
+		// a thread's last touch and its newest reply, kept on the root
+		// (see Feed: a reply bumps its thread in the home feed)
+		`ALTER TABLE posts ADD COLUMN activity INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE posts ADD COLUMN last_reply TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
 		}
 	}
+	// a db from before the bump columns: activity 0 never occurs after
+	// them (every insert writes it), so its presence means backfill
+	var cold int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE activity = 0`).Scan(&cold); err != nil {
+		return err
+	}
+	if cold > 0 {
+		if err := s.backfillActivity(); err != nil {
+			return err
+		}
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS posts_activity ON posts(activity) WHERE reply_to = ''`); err != nil {
+		return err
+	}
 	return s.initStats()
+}
+
+// backfillActivity gives every post its own arrival as activity, then
+// replays the replies oldest-first so each thread's root ends carrying
+// its newest reply and that reply's arrival — what ingest maintains
+// from here on.
+func (s *Store) backfillActivity() error {
+	if _, err := s.db.Exec(`UPDATE posts SET activity = received`); err != nil {
+		return err
+	}
+	rows, err := s.db.Query(`SELECT id, reply_to FROM posts WHERE reply_to <> '' ORDER BY received, id`)
+	if err != nil {
+		return err
+	}
+	parent := map[string]string{}
+	var order []string
+	for rows.Next() {
+		var id, up string
+		if err := rows.Scan(&id, &up); err != nil {
+			rows.Close()
+			return err
+		}
+		parent[id] = up
+		order = append(order, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range order {
+		root := parent[id]
+		for i := 0; i < 40; i++ {
+			up, ok := parent[root]
+			if !ok || up == "" {
+				break
+			}
+			root = up
+		}
+		if _, err := s.db.Exec(`UPDATE posts SET activity = (SELECT received FROM posts WHERE id = ?), last_reply = ? WHERE id = ? AND reply_to = ''`,
+			id, id, root); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Ingest applies one verified message atomically: seq check, semantic
@@ -334,9 +398,36 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		}
 		return unpin, err
 	case *envelope.PostCreate:
-		if _, err = tx.Exec(`INSERT INTO posts (id, author, text, reply_to, ts, received) VALUES (?,?,?,?,?,?)`,
-			id, pid, v.Text, v.ReplyTo, e.TS, received); err != nil {
+		if _, err = tx.Exec(`INSERT INTO posts (id, author, text, reply_to, ts, received, activity) VALUES (?,?,?,?,?,?,?)`,
+			id, pid, v.Text, v.ReplyTo, e.TS, received, received); err != nil {
 			return nil, err
+		}
+		// a reply bumps its thread: walk to the root and make this the
+		// thread's last touch, so the home feed surfaces the thread
+		// instead of burying the follow-up (a parent this hub does not
+		// hold ends the walk, and nothing bumps)
+		if v.ReplyTo != "" {
+			root := v.ReplyTo
+			for i := 0; i < 40; i++ {
+				var up string
+				err := tx.QueryRow(`SELECT reply_to FROM posts WHERE id=?`, root).Scan(&up)
+				if err == sql.ErrNoRows {
+					root = ""
+					break
+				}
+				if err != nil {
+					return nil, err
+				}
+				if up == "" {
+					break
+				}
+				root = up
+			}
+			if root != "" {
+				if _, err := tx.Exec(`UPDATE posts SET activity=?, last_reply=? WHERE id=?`, received, id, root); err != nil {
+					return nil, err
+				}
+			}
 		}
 		for i, em := range v.Embeds {
 			// v1 is hub-mediated upload only: the CID must already be
@@ -441,7 +532,36 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM pictures WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
-		_, err = tx.Exec(`DELETE FROM posts WHERE id=?`, v.Post)
+		// the thread whose newest reply this was: after the delete its
+		// pointer moves back to the newest remaining reply in the tree
+		// (or clears, the root's own arrival becoming the activity
+		// again); the bump itself is left standing otherwise
+		var rootID string
+		if err := tx.QueryRow(`SELECT id FROM posts WHERE last_reply=?`, v.Post).Scan(&rootID); err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if _, err = tx.Exec(`DELETE FROM posts WHERE id=?`, v.Post); err != nil {
+			return nil, err
+		}
+		if rootID != "" {
+			var nid string
+			var nrecv int64
+			err := tx.QueryRow(`WITH RECURSIVE tree(id) AS (
+				SELECT id FROM posts WHERE reply_to = ?
+				UNION ALL
+				SELECT p.id FROM posts p JOIN tree t ON p.reply_to = t.id
+			) SELECT p.id, p.received FROM posts p JOIN tree t ON p.id = t.id ORDER BY p.received DESC, p.id DESC LIMIT 1`,
+				rootID).Scan(&nid, &nrecv)
+			switch {
+			case err == sql.ErrNoRows:
+				_, err = tx.Exec(`UPDATE posts SET last_reply='', activity=received WHERE id=?`, rootID)
+			case err == nil:
+				_, err = tx.Exec(`UPDATE posts SET last_reply=?, activity=? WHERE id=?`, nid, nrecv, rootID)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
 		return unpin, err
 	case *envelope.BanSet:
 		_, err = tx.Exec(`INSERT INTO bans (target, reason, by, ts) VALUES (?,?,?,?)
@@ -606,6 +726,19 @@ type FeedPost struct {
 	PageCIDs   []string         `json:"pages,omitempty"`    // the embeds that open as pages (see PLAN.md, Pages)
 	Replies    int              `json:"replies"`
 	Depth      int              `json:"depth,omitempty"` // set by Thread: steps below the root, 1 = a direct reply
+	// the thread's last touch and its newest reply (roots with replies;
+	// see Feed — a reply bumps its thread in the home feed)
+	Activity  int64     `json:"activity,omitempty"`
+	LastReply *ReplyRef `json:"last_reply,omitempty"`
+}
+
+// ReplyRef is the newest reply in a thread, as the root carries it.
+type ReplyRef struct {
+	ID         string `json:"id"`
+	Author     string `json:"author"`
+	AuthorName string `json:"author_name,omitempty"`
+	Text       string `json:"text"`
+	Received   int64  `json:"received"`
 }
 
 // Card is one post's link card as the feed serves it.
@@ -657,7 +790,7 @@ func (c Card) ArchiveDate() string {
 	return ts[:4] + "-" + ts[4:6] + "-" + ts[6:8]
 }
 
-const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received,
+const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received, p.activity, p.last_reply,
   (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id),
   IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,''), IFNULL(cd.archive,'')`
 
@@ -668,10 +801,12 @@ LEFT JOIN cards cd ON cd.post = p.id AND cd.status = 'ok' `
 
 func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 	out := []FeedPost{}
+	var lastIDs []string // the last_reply column, resolved to posts below
 	for rows.Next() {
 		var p FeedPost
 		var c Card
-		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Replies,
+		var lr string
+		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Activity, &lr, &p.Replies,
 			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image, &c.Archive); err != nil {
 			return nil, err
 		}
@@ -679,11 +814,25 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 			p.Card = &c
 		}
 		out = append(out, p)
+		lastIDs = append(lastIDs, lr)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	for i := range out {
+		// a stale pointer (its post gone mid-write) simply stays absent
+		if lastIDs[i] != "" {
+			var r ReplyRef
+			err := s.db.QueryRow(`SELECT p.id, p.author, IFNULL(pr.name,''), p.text, p.received
+				FROM posts p LEFT JOIN profiles pr ON pr.id = p.author WHERE p.id=?`, lastIDs[i]).
+				Scan(&r.ID, &r.Author, &r.AuthorName, &r.Text, &r.Received)
+			if err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
+			if err == nil {
+				out[i].LastReply = &r
+			}
+		}
 		embeds, err := s.postEmbeds(out[i].ID)
 		if err != nil {
 			return nil, err
@@ -1002,16 +1151,32 @@ func (s *Store) cursor(before string) (int64, string, error) {
 	return recv, before, err
 }
 
-// Feed is the aggregated timeline, newest first, keyset-paginated.
-// Replies are excluded unless withReplies — they belong to their thread,
-// not the home feed.
+// Feed is the aggregated timeline, keyset-paginated. Without replies —
+// the home feed — it follows activity: a reply bumps its thread's root,
+// so an answered thread stands where its newest reply happened instead
+// of burying it (the root carries that reply as LastReply). With
+// replies the order stays arrival, oldest cursor semantics unchanged —
+// pollers walk it to miss nothing.
 func (s *Store) Feed(before string, limit int, withReplies bool) ([]FeedPost, error) {
-	recv, bid, err := s.cursor(before)
+	if withReplies {
+		recv, bid, err := s.cursor(before)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := s.db.Query(feedQuery+`WHERE (p.received, p.id) < (?, ?) ORDER BY p.received DESC, p.id DESC LIMIT ?`,
+			recv, bid, limit)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		return s.scanFeed(rows)
+	}
+	act, bid, err := s.activityCursor(before)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(feedQuery+`WHERE (? OR p.reply_to = '') AND (p.received, p.id) < (?, ?) ORDER BY p.received DESC, p.id DESC LIMIT ?`,
-		withReplies, recv, bid, limit)
+	rows, err := s.db.Query(feedQuery+`WHERE p.reply_to = '' AND (p.activity, p.id) < (?, ?) ORDER BY p.activity DESC, p.id DESC LIMIT ?`,
+		act, bid, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1023,17 +1188,46 @@ func (s *Store) Feed(before string, limit int, withReplies bool) ([]FeedPost, er
 // after, oldest-first (the ones nearest to after come first) — the
 // public pages' Prev button. Callers reverse for display.
 func (s *Store) FeedNewer(after string, limit int, withReplies bool) ([]FeedPost, error) {
-	recv, aid, err := s.cursor(after)
+	if withReplies {
+		recv, aid, err := s.cursor(after)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := s.db.Query(feedQuery+`WHERE (p.received, p.id) > (?, ?) ORDER BY p.received, p.id LIMIT ?`,
+			recv, aid, limit)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		return s.scanFeed(rows)
+	}
+	act, aid, err := s.activityCursor(after)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(feedQuery+`WHERE (? OR p.reply_to = '') AND (p.received, p.id) > (?, ?) ORDER BY p.received, p.id LIMIT ?`,
-		withReplies, recv, aid, limit)
+	rows, err := s.db.Query(feedQuery+`WHERE p.reply_to = '' AND (p.activity, p.id) > (?, ?) ORDER BY p.activity, p.id LIMIT ?`,
+		act, aid, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	return s.scanFeed(rows)
+}
+
+// activityCursor is cursor for the activity-ordered home feed: the
+// page boundary is the cursor post's last touch, not its arrival. A
+// bump moves a post across pages; the first page is the live one, so
+// a cursor into the past only ever repeats a post, never loses one.
+func (s *Store) activityCursor(before string) (int64, string, error) {
+	if before == "" {
+		return 1 << 62, "￿", nil
+	}
+	var act int64
+	err := s.db.QueryRow(`SELECT activity FROM posts WHERE id=?`, before).Scan(&act)
+	if err == sql.ErrNoRows {
+		return 0, "", ErrNotFound
+	}
+	return act, before, err
 }
 
 func (s *Store) ProfileFeed(author, before string, limit int) ([]FeedPost, error) {

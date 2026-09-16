@@ -476,6 +476,22 @@ hub that carries the post.
   nothing on the server to log in to. They read through the same store queries as the JSON API
   (keyset `?before=` pagination, 30 per page; replies excluded from the
   feed and shown in their thread).
+- **The feed follows activity (built 2026-09-16).** A reply — however
+  deep — bumps its thread: ingest walks to the root and stamps it with
+  the reply's arrival (`activity`) and id (`last_reply`, both alter-
+  migrated and backfilled once), and the home feed orders and keyset-
+  paginates roots by `(activity, id)`, so an answered thread stands
+  where its newest reply happened instead of burying the follow-up.
+  The foot line says what was said last — "N replies ▸ **name** first
+  words…", the link landing on that reply in the thread
+  (`/p/{root}#{reply}`) — on the public pages and in the Hub app,
+  whose live stream lifts the bumped root to the top as a reply lands.
+  `?replies=1` keeps arrival order and every post: the watcher and any
+  poller walk it to miss nothing. Deleting the thread's newest reply
+  hands the pointer back to the newest remaining one (none left: the
+  root's own arrival returns); `Rebuild` replays the same path. Asked
+  by Livid 2026-09-16: follow-ups were buried in their thread,
+  invisible from the home feed.
 - **Profile replies quoted (built 2026-09-16).** On `/u/{id}` a reply
   is the foot of a small card: above it, in quieter grey, the post it
   answers — the author and a line of it (`webQuoted`, a 140-char

@@ -161,6 +161,17 @@ type webPost struct {
 	// the later ones carry QuoteRun and attach to the card above.
 	Quote    *webQuote
 	QuoteRun bool
+	// a root with replies: the thread's newest reply, on the foot line —
+	// the feed says what was said last instead of burying it
+	Latest *webLatest
+}
+
+// webLatest is the newest reply in a post's thread, as the foot shows
+// it: the name, a line of the text, and the anchor to land on it.
+type webLatest struct {
+	ID   string
+	Name string
+	Text string
 }
 
 // webQuote is the quoted parent above a reply on a profile page: the
@@ -359,6 +370,13 @@ func (s *Server) webPosts(posts []store.FeedPost) []webPost {
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
 		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS)}
+		if p.LastReply != nil && p.ReplyTo == "" {
+			name := p.LastReply.AuthorName
+			if name == "" {
+				name = p.LastReply.Author
+			}
+			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(p.LastReply.Text, 90)}
+		}
 		for _, e := range p.Embeds {
 			switch {
 			case strings.HasPrefix(e.MIME, "image/"):
