@@ -43,16 +43,20 @@
 .chart { display: grid; grid-template-columns: 40px 1fr; padding: 8px 12px 0; }
 /* the legend heads the plot, at its right: a 12×2 swatch before each name */
 .chart .legend { grid-column: 2; display: flex; justify-content: flex-end; gap: 12px; height: 18px; align-items: center; font-size: 11px; color: #555; }
-.chart .legend i { display: inline-block; width: 12px; height: 2px; margin-right: 5px; vertical-align: middle; background: #262626; }
-.chart .legend i.vi { background: #6666cc; } .chart .legend i.end { background: #aaa; }
+.chart .legend i { display: inline-block; width: 12px; height: 2px; margin-right: 5px; vertical-align: middle; background: #333399; }
+.chart .legend i.vi { background: #ff6600; } .chart .legend i.end { background: #bbb; }
 .chart .ys { position: relative; height: 160px; margin-right: 6px; font-size: 11px; color: #555; }
 .chart .ys span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
 .chart .plot { position: relative; height: 160px; border-left: 1px solid #262626; border-bottom: 1px solid #262626; }
 .chart .gl { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid #ddd; }
 .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
 .chart polyline { fill: none; stroke-width: 2px; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
-.chart .pv { stroke: #262626; } .chart .vi { stroke: #6666cc; }
-.chart .pv.end { stroke: #aaa; } .chart .vi.end { stroke: #ccccff; }
+/* page views in the desktop's highlight blue, visitors in OS 9's
+   "Essential" label orange — far apart in hue, so the two lines never
+   read as one (near-black and blue-violet did; Livid, 2026-09-16);
+   the bucket still filling in a tint of each */
+.chart .pv { stroke: #333399; } .chart .vi { stroke: #ff6600; }
+.chart .pv.end { stroke: #9999ff; } .chart .vi.end { stroke: #ffcc99; }
 .chart .xs { grid-column: 2; position: relative; height: 18px; margin-top: 3px; font-size: 11px; color: #555; }
 .chart .xs span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .chart .xs span.first { transform: none; } .chart .xs span.last { transform: translateX(-100%); }
