@@ -230,6 +230,16 @@ a { color: #333399; }
    answers (four steps at most, so a deep thread still fits a phone) */
 .post.reply { padding-left: calc(36px + min(var(--d, 1) - 1, 4) * 22px); }
 .post.reply.deep { border-left: 1px solid #ddd; }
+/* a profile page: a reply is the foot of a card whose head quotes the
+   post it answers, so the indent goes — the quote explains the grey.
+   A run of replies under one parent shares the head; the seam between
+   them softens so the card reads as one. */
+.post.qhead, .post.qrun { padding-left: 12px; }
+.quote { grid-column: 1 / -1; margin-bottom: 2px; color: #666; font-size: 12px; line-height: 1.45;
+  text-decoration: none; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.quote:hover { text-decoration: underline; }
+.quote b { color: #444; }
+.post.reply:has(+ .post.qrun) { border-bottom-color: #eee; }
 .av { width: 32px; height: 32px; border: 1px solid #262626; display: block; background: #ddd; box-sizing: border-box; }
 .av img { width: 30px; height: 30px; display: block; image-rendering: pixelated; }
 .meta { color: #666; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1284,10 +1294,11 @@ localTimes(document);
 
 {{define "bell"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM4 2h1v1h-1zM9 2h1v1h-1zM3 3h1v1h-1zM10 3h1v1h-1zM3 4h1v1h-1zM10 4h1v1h-1zM3 5h1v1h-1zM10 5h1v1h-1zM3 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM11 7h1v1h-1zM1 8h1v1h-1zM12 8h1v1h-1zM0 9h1v1h-1zM13 9h1v1h-1zM0 10h14v1h-14zM5 11h4v1h-4zM6 12h2v1h-2z"/><path class="s" d="M7 1h1v1h-1zM8 2h1v1h-1zM9 3h1v1h-1zM9 4h1v1h-1zM9 5h1v1h-1zM9 6h1v1h-1zM10 7h1v1h-1zM10 8h2v1h-2zM1 9h12v1h-12z"/><path class="f" d="M6 1h1v1h-1zM6 2h2v1h-2zM5 3h4v1h-4zM5 4h4v1h-4zM5 5h4v1h-4zM4 6h5v1h-5zM3 7h7v1h-7zM2 8h8v1h-8z"/><path class="w" d="M5 2h1v1h-1zM4 3h1v1h-1zM4 4h1v1h-1zM4 5h1v1h-1z"/></svg>{{end}}
 
-{{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}{{if gt .Depth 1}} deep{{end}}" id="{{.ID}}"{{if gt .Depth 1}} style="--d:{{.Depth}}"{{end}}>
+{{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}{{if gt .Depth 1}} deep{{end}}{{if .Quote}} qhead{{end}}{{if .QuoteRun}} qrun{{end}}" id="{{.ID}}"{{if gt .Depth 1}} style="--d:{{.Depth}}"{{end}}>
+  {{with .Quote}}<a class="quote" href="/p/{{.ID}}"><b>{{.Name}}</b>{{if .Text}} {{.Text}}{{end}}</a>{{end}}
   <a class="av" href="/u/{{.Author}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{end}}</a>
   <div>
-    <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}{{end}}</div>
+    <div class="meta"><a href="/u/{{.Author}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}}{{if not (or .Quote .QuoteRun)}} · <a href="/p/{{.ReplyTo}}">in reply to</a>{{end}}{{end}}{{end}}</div>
     {{if .Text}}<div class="text">{{.HTML}}</div>{{end}}
     {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">Archived copy{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
     {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}Sound{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Page{{end}}">{{if .Filename}}{{.Filename}}{{else}}Page{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>download</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}

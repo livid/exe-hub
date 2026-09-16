@@ -476,6 +476,15 @@ hub that carries the post.
   nothing on the server to log in to. They read through the same store queries as the JSON API
   (keyset `?before=` pagination, 30 per page; replies excluded from the
   feed and shown in their thread).
+- **Profile replies quoted (built 2026-09-16).** On `/u/{id}` a reply
+  is the foot of a small card: above it, in quieter grey, the post it
+  answers — the author and a line of it (`webQuoted`, a 140-char
+  excerpt), the quote opening that thread. A run of replies under one
+  parent shares one head (`.qrun` attaches to the card above and the
+  border between them softens), the reply indent goes — the quote
+  explains the grey — and the bare "in reply to" link stays only for a
+  parent this hub does not hold. Asked by Livid 2026-09-16: a naked
+  reply on the profile read as half a conversation, detached and weird.
 - **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
   URLs outside code spans become links, `` `code` `` becomes `<code>`,
   a line that is one to three `#`, a space and words is a heading

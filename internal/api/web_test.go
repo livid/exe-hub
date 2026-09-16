@@ -256,6 +256,57 @@ func TestWebThreadProfile(t *testing.T) {
 	}
 }
 
+// TestWebProfileQuotes: on a profile page a reply carries the post it
+// answers, quoted above it as the head of its card, and a run of
+// replies under one parent shares one quote.
+func TestWebProfileQuotes(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	apub, apriv, _ := ed25519.GenerateKey(nil)
+	bpub, bpriv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, apriv, apub, 1, "profile.set", map[string]any{"name": "Ann"})
+	root := ingest(t, s, apriv, apub, 2, "post.create", map[string]any{"text": "the idea post"})
+	other := ingest(t, s, apriv, apub, 3, "post.create", map[string]any{"text": "a second thread"})
+	ingest(t, s, bpriv, bpub, 1, "post.create", map[string]any{"text": "first answer", "reply_to": root})
+	ingest(t, s, bpriv, bpub, 2, "post.create", map[string]any{"text": "second answer", "reply_to": root})
+	ingest(t, s, bpriv, bpub, 3, "post.create", map[string]any{"text": "on the other", "reply_to": other})
+	h := s.Handler()
+
+	// the profile id is the author's fingerprint, as the feed reports it
+	feed, _ := s.St.Feed("", 10, true)
+	var bob string
+	for _, p := range feed {
+		if p.Text == "first answer" {
+			bob = p.Author
+		}
+	}
+	code, body := get(t, h, "/u/"+bob)
+	if code != 200 {
+		t.Fatalf("GET /u/%s = %d", bob, code)
+	}
+	// newest first: "on the other" quotes its thread, "second answer"
+	// quotes the root, and "first answer" — same parent — shares that
+	// quote as the run under it
+	for _, want := range []string{
+		`<a class="quote" href="/p/` + root + `"><b>Ann</b> the idea post</a>`,
+		`<a class="quote" href="/p/` + other + `"><b>Ann</b> a second thread</a>`,
+		`class="post reply qrun"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("profile page lacks %q\n%s", want, body)
+		}
+	}
+	if n := strings.Count(body, `class="quote"`); n != 2 {
+		t.Errorf("profile page carries %d quotes, want 2", n)
+	}
+	if strings.Contains(body, `">in reply to</a>`) {
+		t.Error("a quoted reply still wears the bare in-reply-to link")
+	}
+	// the thread page keeps its own rendering: no quotes there
+	if _, tb := get(t, h, "/p/"+root); strings.Contains(tb, `class="quote"`) {
+		t.Error("a quote leaked onto the thread page")
+	}
+}
+
 // TestWebJoinToken: a token-gated hub's join block names the holding
 // — raw base units until the RPC has told it the mint's decimals.
 func TestWebJoinToken(t *testing.T) {

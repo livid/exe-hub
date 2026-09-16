@@ -156,6 +156,19 @@ type webPost struct {
 	// a nested reply links to it in place, by the name it was posted under
 	InThread   bool
 	ParentName string
+	// on a profile page: the post this reply answers, quoted as the head
+	// of its card. A run of replies under one parent shares one head —
+	// the later ones carry QuoteRun and attach to the card above.
+	Quote    *webQuote
+	QuoteRun bool
+}
+
+// webQuote is the quoted parent above a reply on a profile page: the
+// author and a line of the text, the whole quote opening the thread.
+type webQuote struct {
+	ID   string
+	Name string
+	Text string // an excerpt; "" for a post that is all pictures
 }
 
 // webMedia is a video or sound embed for the template: the player box's
@@ -365,6 +378,35 @@ func (s *Server) webPosts(posts []store.FeedPost) []webPost {
 		}
 	}
 	return out
+}
+
+// webQuoted dresses a profile page's replies with the post each one
+// answers, quoted as the head of its card, so a reply reads as an
+// exchange rather than half a conversation. A run of replies under one
+// parent gets one head — the page never repeats it — and a parent this
+// hub does not hold leaves the plain "in reply to" link as it was.
+func (s *Server) webQuoted(posts []webPost) []webPost {
+	parents := map[string]*store.FeedPost{}
+	for i := range posts {
+		id := posts[i].ReplyTo
+		if id == "" {
+			continue
+		}
+		p, seen := parents[id]
+		if !seen {
+			p, _ = s.St.Post(id) // nil on any error: the plain link stands
+			parents[id] = p
+		}
+		if p == nil {
+			continue
+		}
+		if i > 0 && posts[i-1].ReplyTo == id {
+			posts[i].QuoteRun = true
+			continue
+		}
+		posts[i].Quote = &webQuote{ID: p.ID, Name: authorLabel(*p), Text: excerpt(p.Text, 140)}
+	}
+	return posts
 }
 
 // webPager is one page of a keyset-paged list and its neighbours: Prev
@@ -711,7 +753,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	}
 	posts := pg.Posts
 	pr, err := s.St.Profile(id)
-	d := &webData{Page: "profile", Posts: s.webPosts(posts), Prev: pg.Prev, Next: pg.Next}
+	d := &webData{Page: "profile", Posts: s.webQuoted(s.webPosts(posts)), Prev: pg.Prev, Next: pg.Next}
 	switch {
 	case err == nil:
 		d.Profile, d.Count = pr, pr.Posts
