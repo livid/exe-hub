@@ -227,8 +227,9 @@ a { color: #333399; }
 .post:last-child { border-bottom: 0; }
 .post.reply { padding-left: 36px; background: #f6f6f6; }
 /* a thread page indents a reply one step per level under the reply it
-   answers (four steps at most, so a deep thread still fits a phone) */
-.post.reply { padding-left: calc(36px + min(var(--d, 1) - 1, 4) * 22px); }
+   answers, until the indent would eat two fifths of the window; past
+   that the levels flatten, so a deep thread still fits a phone */
+.post.reply { padding-left: min(calc(36px + (var(--d, 1) - 1) * 22px), 40%); }
 .post.reply.deep { border-left: 1px solid #ddd; }
 /* the reply a foot's latest link lands on (#anchor): the same tint
    the Hub app gives its jumped-to reply */
