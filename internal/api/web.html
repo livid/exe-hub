@@ -230,6 +230,9 @@ a { color: #333399; }
    answers (four steps at most, so a deep thread still fits a phone) */
 .post.reply { padding-left: calc(36px + min(var(--d, 1) - 1, 4) * 22px); }
 .post.reply.deep { border-left: 1px solid #ddd; }
+/* the reply a foot's latest link lands on (#anchor): the same tint
+   the Hub app gives its jumped-to reply */
+.post:target { background: #f4f4ff; }
 /* a profile page: a reply is the foot of a card whose head quotes the
    post it answers, so the indent goes — the quote explains the grey.
    A run of replies under one parent shares the head; the seam between
