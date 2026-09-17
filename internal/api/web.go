@@ -267,7 +267,7 @@ type webData struct {
 	Page           string // "home" | "thread" | "profile" | "error"
 	Posts          []webPost
 	Prev, Next     string // keyset cursors for the neighbouring pages, "" at either end
-	Live           bool   // the home page's first page: ships the live-feed script
+	Live           bool   // the home page's first page and every thread: ships the live script
 	Lang           string // the home page's ?lang= ("zh" | "en" | ""), carried by its pager links
 	PushKey        string // the home page on a hub that pushes: the VAPID public key for the Notify box
 	Query          string // the search page's words, and what the find strip's field holds
@@ -886,6 +886,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		Page: "thread", Title: threadTitle(*p, r.Host), Desc: excerpt(p.Text, 200),
 		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
+		Live: s.Events != nil,
 	}
 	if d.Desc == "" {
 		d.Desc = previewNoWords(*p) + " By " + authorLabel(*p) + " on " + r.Host + "."

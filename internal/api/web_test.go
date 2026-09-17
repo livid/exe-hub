@@ -810,9 +810,9 @@ func TestWebPage(t *testing.T) {
 	}
 }
 
-// TestWebLive: the home page's first page ships the live-feed script
-// when the hub has an event bus; cursor pages and a hub without one
-// stay static.
+// TestWebLive: the home page's first page and a thread ship the live
+// script when the hub has an event bus, each marking the frame it keeps
+// current; cursor pages, profiles and a hub without a bus stay static.
 func TestWebLive(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	pub, priv, _ := ed25519.GenerateKey(nil)
@@ -821,13 +821,26 @@ func TestWebLive(t *testing.T) {
 		ids = append(ids, ingest(t, s, priv, pub, i, "post.create", map[string]any{"text": fmt.Sprintf("post %d", i)}))
 	}
 	const live = `new EventSource("/v1/events")`
-	if _, body := get(t, s.Handler(), "/"); strings.Contains(body, live) {
-		t.Error("live script on a hub without an event bus")
+	reply := ingest(t, s, priv, pub, webPage+2, "post.create", map[string]any{"text": "a reply", "reply_to": ids[0]})
+	for _, path := range []string{"/", "/p/" + ids[0]} {
+		if _, body := get(t, s.Handler(), path); strings.Contains(body, live) || strings.Contains(body, "data-live") {
+			t.Errorf("%s: live on a hub without an event bus", path)
+		}
 	}
 	s.Events = events.New()
 	h := s.Handler()
-	if _, body := get(t, h, "/"); !strings.Contains(body, live) {
-		t.Error("first page lacks the live script")
+	if _, body := get(t, h, "/"); !strings.Contains(body, live) || !strings.Contains(body, `<div class="frame" data-live="feed">`) {
+		t.Error("first page lacks the live script or its frame's mark")
+	}
+	// a thread, and a reply's own page (the tree under it)
+	for _, id := range []string{ids[0], reply} {
+		if _, body := get(t, h, "/p/"+id); !strings.Contains(body, live) || !strings.Contains(body, `<div class="frame" data-live="thread">`) {
+			t.Errorf("/p/%s lacks the live script or its frame's mark", id[:8])
+		}
+	}
+	// the live script reads the frame before another script rewrites it
+	if _, body := get(t, h, "/p/"+ids[0]); strings.Index(body, live) > strings.Index(body, "localTimes(document)") {
+		t.Error("the live script stands after the local-time rewrite")
 	}
 	if _, body := get(t, h, "/?before="+ids[1]); strings.Contains(body, live) {
 		t.Error("live script on an older page")
@@ -954,7 +967,7 @@ func TestWebPush(t *testing.T) {
 	s.Events = events.New() // the first page is live, and its swap must keep the strip
 	key := s.Push.Public()
 	_, body := get(t, h, "/")
-	for _, want := range []string{`classList.add("push")`, `<button type="button" class="btn bell" id="notify" aria-pressed="false"`, `data-key="` + key + `"`, `<svg viewBox="0 0 14 14"`, `navigator.serviceWorker.register("/sw.js")`, `n.id === "find"`} {
+	for _, want := range []string{`classList.add("push")`, `<button type="button" class="btn bell" id="notify" aria-pressed="false"`, `data-key="` + key + `"`, `<svg viewBox="0 0 14 14"`, `navigator.serviceWorker.register("/sw.js")`, `k === "find"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("home page lacks %q", want)
 		}
