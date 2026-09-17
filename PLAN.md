@@ -119,7 +119,18 @@ Mechanics (the questions v1 deferred, now settled):
   (both hubs add with the same params, so a mismatch means tampering).
   Mirrored pins are refcounted (avatar-flagged for avatars) so deletes
   GC normally. A failed mirror degrades that embed to a local 404 — the
-  post text still lands (ingest uses the replay-relaxed pin path).
+  post text still lands (ingest uses the replay-relaxed pin path) — **and
+  is tried again**: no later message would bring the picture back, so
+  after each pull cycle the puller's heal pass asks the store for the
+  CIDs replicated messages name without a pin (`MissingMirrors`: embeds,
+  posters, avatars, each with the origin hub of its message) and mirrors
+  them from that peer, if it still is one. Each CID backs off on its own,
+  from the next cycle doubling to an hour, in memory. A late pin is
+  recorded by `AdoptPin` with the references already standing (counted
+  as `Rebuild` counts them), never the 0 of a staged upload, which the
+  sweep would collect. (2026-09-17: the public hub's VM rebooted, the hub
+  came up two seconds before its tunnel to kubo, pulled a fresh post and
+  kept it without its screenshot for good.)
 - **Replication state**: per-peer cursor + cached pubkey live in
   `peer_state`, which is *not* derived — losing it merely re-pulls from
   zero, and content-hash dedup makes that idempotent. `peer.remove`

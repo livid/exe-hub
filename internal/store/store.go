@@ -1492,6 +1492,76 @@ func (s *Store) AddPin(cid string, size int64, mime string, avatar bool) error {
 	return err
 }
 
+// AdoptPin records a pin mirrored after the message that names it was
+// ingested (the puller's heal pass). The references are already there, so
+// the refcount is their number, not the 0 a staged upload starts at — the
+// sweep would take a 0 for a never-used upload and drop the pin again.
+func (s *Store) AdoptPin(cid string, size int64, mime string, avatar bool) error {
+	av := 0
+	if avatar {
+		av = 1
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO pins (cid, size, mime, refs, is_avatar, created) VALUES (?,?,?,0,?,?)
+		ON CONFLICT(cid) DO UPDATE SET is_avatar = MAX(is_avatar, excluded.is_avatar)`,
+		cid, size, mime, av, time.Now().UnixMilli()); err != nil {
+		return err
+	}
+	// every kind of reference a pin can have, counted as Rebuild counts them
+	if _, err := tx.Exec(`UPDATE pins SET refs =
+		(SELECT COUNT(*) FROM embeds WHERE embeds.cid = pins.cid) +
+		(SELECT COUNT(*) FROM embeds WHERE embeds.poster = pins.cid) +
+		(SELECT COUNT(*) FROM profiles WHERE profiles.avatar = pins.cid) +
+		(SELECT COUNT(*) FROM cards WHERE cards.image = pins.cid AND cards.status='ok') +
+		(SELECT COUNT(*) FROM pictures WHERE pictures.cid = pins.cid AND pictures.status='ok')
+		WHERE cid=?`, cid); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// MissingMirror is an embed, poster or avatar that a replicated message
+// names and this hub holds no pin for: its mirror failed when the message
+// came in, and the message landed without it.
+type MissingMirror struct {
+	CID    string
+	Origin string // the peer hub the message was pulled from
+	Avatar bool
+}
+
+// MissingMirrors lists them, for the puller to try their peer again.
+func (s *Store) MissingMirrors() ([]MissingMirror, error) {
+	rows, err := s.db.Query(`
+		SELECT e.cid, m.origin, 0 FROM embeds e JOIN messages m ON m.id = e.post
+		 WHERE m.origin != '' AND NOT EXISTS (SELECT 1 FROM pins WHERE pins.cid = e.cid)
+		UNION
+		SELECT e.poster, m.origin, 0 FROM embeds e JOIN messages m ON m.id = e.post
+		 WHERE m.origin != '' AND e.poster != '' AND NOT EXISTS (SELECT 1 FROM pins WHERE pins.cid = e.poster)
+		UNION
+		SELECT p.avatar, COALESCE((SELECT origin FROM messages WHERE author = p.pubkey AND type = 'profile.set'
+		         ORDER BY rowid DESC LIMIT 1), ''), 1 FROM profiles p
+		 WHERE p.avatar != '' AND NOT EXISTS (SELECT 1 FROM pins WHERE pins.cid = p.avatar)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MissingMirror
+	for rows.Next() {
+		var m MissingMirror
+		if err := rows.Scan(&m.CID, &m.Origin, &m.Avatar); err != nil {
+			return nil, err
+		}
+		if m.Origin != "" { // a local message never lands without its pin
+			out = append(out, m)
+		}
+	}
+	return out, rows.Err()
+}
+
 // Facts is what a /v1/media conversion measured for its output file.
 type Facts struct {
 	Poster   string

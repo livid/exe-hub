@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"testing"
+	"time"
 
 	"exehub/internal/envelope"
 )
@@ -129,5 +130,69 @@ func TestReplicatedSeqConflicts(t *testing.T) {
 	// a replicated message must never regress the high-water
 	if n, _ := s.Seq(base64.StdEncoding.EncodeToString(carol.pub)); n != 2 {
 		t.Fatalf("seq high-water = %d, want 2", n)
+	}
+}
+
+// A replicated post lands without the picture its mirror failed to fetch.
+// MissingMirrors names it (with the peer to ask), AdoptPin takes the late
+// pin with the references it already has, and from there it lives and
+// dies like any pin.
+func TestMissingMirrorsAndAdoptPin(t *testing.T) {
+	s := openTest(t)
+	const peer, cid, poster = "ffeeddccbbaa9988", "bafylatecid234567", "bafylateposter23"
+	bob := newAuthor(t)
+	raw, sig, e, op := bob.msg(t, "post.create", map[string]any{
+		"text": "pic from a peer", "embeds": []map[string]string{{"cid": cid, "mime": "image/png", "poster": poster}}})
+	if _, _, err := s.IngestReplicated(raw, sig, e, op, peer); err != nil {
+		t.Fatal(err)
+	}
+	post := envelope.MsgID(raw)
+	// a second post with the same picture: one CID, two references
+	raw2, sig2, e2, op2 := bob.msg(t, "post.create", map[string]any{
+		"text": "again", "embeds": []map[string]string{{"cid": cid, "mime": "image/png"}}})
+	if _, _, err := s.IngestReplicated(raw2, sig2, e2, op2, peer); err != nil {
+		t.Fatal(err)
+	}
+
+	missing, err := s.MissingMirrors()
+	if err != nil || len(missing) != 2 {
+		t.Fatalf("missing = %+v, %v; want the embed and its poster", missing, err)
+	}
+	for _, m := range missing {
+		if (m.CID != cid && m.CID != poster) || m.Origin != peer || m.Avatar {
+			t.Fatalf("missing = %+v", m)
+		}
+	}
+
+	if err := s.AdoptPin(cid, 10, "image/png", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AdoptPin(poster, 5, "image/jpeg", false); err != nil {
+		t.Fatal(err)
+	}
+	if missing, _ = s.MissingMirrors(); len(missing) != 0 {
+		t.Fatalf("still missing after adoption: %+v", missing)
+	}
+	refs := func(c string) (n int) {
+		if err := s.db.QueryRow(`SELECT refs FROM pins WHERE cid=?`, c).Scan(&n); err != nil {
+			t.Fatalf("refs %s: %v", c, err)
+		}
+		return n
+	}
+	if refs(cid) != 2 || refs(poster) != 1 {
+		t.Fatalf("refs = %d, %d; want 2, 1", refs(cid), refs(poster))
+	}
+	// the sweep of never-used uploads leaves an adopted pin alone
+	if swept, err := s.SweepStaged(time.Now().Add(time.Hour)); err != nil || len(swept) != 0 {
+		t.Fatalf("sweep took %v, %v", swept, err)
+	}
+	// deleting the first post releases its poster and one of the two refs
+	raw, sig, e, op = bob.msg(t, "post.delete", map[string]string{"post": post})
+	_, unpin, err := s.IngestReplicated(raw, sig, e, op, peer)
+	if err != nil || len(unpin) != 1 || unpin[0] != poster {
+		t.Fatalf("delete: unpin = %v, %v; want the poster", unpin, err)
+	}
+	if refs(cid) != 1 {
+		t.Fatalf("refs after delete = %d, want 1", refs(cid))
 	}
 }

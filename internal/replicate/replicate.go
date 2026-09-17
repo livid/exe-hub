@@ -31,7 +31,8 @@ import (
 const (
 	interval  = 30 * time.Second
 	pageLimit = 200
-	embedMax  = 8 << 20 // mirrors the upload cap
+	embedMax  = 8 << 20   // mirrors the upload cap
+	healMax   = time.Hour // the longest wait between two tries for one CID
 )
 
 type Puller struct {
@@ -39,7 +40,13 @@ type Puller struct {
 	IPFS *ipfs.Client
 	Self string // own hub id; self-peering is refused at ingest but guard anyway
 
-	client *http.Client
+	client  *http.Client
+	healing map[string]*healTry // CID → when its failed mirror is tried next
+}
+
+type healTry struct {
+	at   time.Time
+	wait time.Duration
 }
 
 // Run pulls forever. Call in a goroutine; it shares the process lifetime
@@ -59,6 +66,7 @@ func (p *Puller) Run() {
 				log.Printf("replicate %s: %v", peer.Hub, err)
 			}
 		}
+		p.heal(peers)
 		time.Sleep(interval)
 	}
 }
@@ -191,15 +199,16 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 	}
 	switch v := op.(type) {
 	case *envelope.PostCreate:
+		// a mirror that fails here is heal's to try again
 		for _, em := range v.Embeds {
-			p.mirror(base, hub, em.CID, false)
+			p.mirror(base, hub, em.CID, false, false)
 			if em.Poster != "" {
-				p.mirror(base, hub, em.Poster, false)
+				p.mirror(base, hub, em.Poster, false, false)
 			}
 		}
 	case *envelope.ProfileSet:
 		if v.Avatar != "" {
-			p.mirror(base, hub, v.Avatar, true)
+			p.mirror(base, hub, v.Avatar, true, false)
 		}
 	case *envelope.PostDelete:
 		// no preparation needed
@@ -230,37 +239,40 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 // mirror fetches one embed CID through the peer that referenced it —
 // never an arbitrary gateway — size-capped, and keeps it only if local
 // kubo mints the identical CID (both hubs add with the same params, so a
-// mismatch means the bytes are not what the author signed for).
-func (p *Puller) mirror(base, hub, cid string, avatar bool) {
+// mismatch means the bytes are not what the author signed for). It says
+// whether the CID is pinned here now. late marks heal's retry, after the
+// message that names the CID has been ingested: the pin then starts with
+// the references it already has (AdoptPin).
+func (p *Puller) mirror(base, hub, cid string, avatar, late bool) bool {
 	if _, err := p.St.PinInfo(cid); err == nil {
-		return // already pinned here
+		return true // already pinned here
 	}
 	resp, err := p.client.Get(base + "/v1/embed/" + cid)
 	if err != nil {
 		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
-		return
+		return false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		log.Printf("replicate %s: mirror %s: %s", hub, cid, resp.Status)
-		return
+		return false
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, embedMax+1))
 	if err != nil || len(body) > embedMax {
 		log.Printf("replicate %s: mirror %s: oversized or truncated", hub, cid)
-		return
+		return false
 	}
 	got, err := p.IPFS.Add(strings.NewReader(string(body)), envelope.MsgID(body))
 	if err != nil {
 		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
-		return
+		return false
 	}
 	if got != cid {
 		log.Printf("replicate %s: mirror %s: peer served different content (%s)", hub, cid, got)
 		if err := p.IPFS.Unpin(got); err != nil {
 			log.Printf("replicate %s: unpin %s: %v", hub, got, err)
 		}
-		return
+		return false
 	}
 	mime := resp.Header.Get("Content-Type")
 	if i := strings.Index(mime, ";"); i > 0 {
@@ -269,7 +281,67 @@ func (p *Puller) mirror(base, hub, cid string, avatar bool) {
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
-	if err := p.St.AddPin(cid, int64(len(body)), mime, avatar); err != nil {
+	add := p.St.AddPin
+	if late {
+		add = p.St.AdoptPin
+	}
+	if err := add(cid, int64(len(body)), mime, avatar); err != nil {
 		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
+		return false
+	}
+	return true
+}
+
+// heal tries the failed mirrors again. A replicated post lands even when
+// its picture could not be fetched — local kubo not up yet (a hub that
+// boots before its kubo pulls its first page without one), the peer slow —
+// and no later message brings the picture back, so the embed stayed a 404
+// for good. Each cycle asks the store which CIDs replicated messages name
+// without a pin and goes back to the peer they came from, each CID on its
+// own backoff: the next cycle first, doubling to healMax, so a picture the
+// peer has lost costs one request an hour.
+func (p *Puller) heal(peers []store.Peer) {
+	missing, err := p.St.MissingMirrors()
+	if err != nil {
+		log.Printf("replicate: heal: %v", err)
+		return
+	}
+	if p.healing == nil {
+		p.healing = map[string]*healTry{}
+	}
+	bases := map[string]string{}
+	for _, peer := range peers {
+		if base, err := envelope.ParseMultiaddr(peer.Addr); err == nil && peer.Hub != p.Self {
+			bases[peer.Hub] = base
+		}
+	}
+	now := time.Now()
+	still := map[string]bool{}
+	for _, m := range missing {
+		still[m.CID] = true
+		base, ok := bases[m.Origin]
+		if !ok {
+			continue // no longer a peer: nowhere trusted to ask
+		}
+		try := p.healing[m.CID]
+		if try != nil && now.Before(try.at) {
+			continue
+		}
+		if p.mirror(base, m.Origin, m.CID, m.Avatar, true) {
+			log.Printf("replicate %s: mirror %s: healed", m.Origin, m.CID)
+			delete(p.healing, m.CID)
+			continue
+		}
+		if try == nil {
+			try = &healTry{wait: interval / 2}
+			p.healing[m.CID] = try
+		}
+		try.wait = min(try.wait*2, healMax)
+		try.at = now.Add(try.wait - time.Second) // a cycle is never exactly interval apart
+	}
+	for cid := range p.healing {
+		if !still[cid] {
+			delete(p.healing, cid) // its post was deleted meanwhile
+		}
 	}
 }
