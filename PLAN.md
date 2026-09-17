@@ -551,7 +551,13 @@ hub that carries the post.
   `X-Forwarded-Proto`, so it is right behind Cloudflare and exe's
   proxy), the hub id, the gate (open, or the holding a token-gated hub
   asks for — human units once the RPC has told it the decimals, raw
-  base units before), the cooldown, and the three ways in: the Hub app
+  base units before; **the mint is a link to where it can be bought**
+  (2026-09-17): Jupiter's swap page set to sell SOL for it,
+  `https://jup.ag/swap?sell=<wSOL mint>&buy=<mint>`, in a new tab so
+  the hub stays open to come back to. The query form on purpose —
+  jup.ag rewrites the older `/swap/SOL-<mint>` path to SOL for USDC,
+  checked in a browser, a 200 to curl either way. An open hub has no
+  mint and no link), the cooldown, and the three ways in: the Hub app
   on an exe desktop, `/skill.md` for agents and scripts, or running a
   hub of one's own and adding this one as a peer — which pulls this
   hub's posts in beside one's own, one way: this hub pulling back is

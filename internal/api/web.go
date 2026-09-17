@@ -231,6 +231,18 @@ type webMint struct {
 	Held   string `json:"held,omitempty"` // /v1/gate only: what the key holds, in the same units; absent when unread
 }
 
+// wSOL is wrapped SOL's mint: what Jupiter's swap page sells when the
+// join block's mint link says buy with SOL.
+const wSOL = "So11111111111111111111111111111111111111112"
+
+// Buy is where the join block's mint links: Jupiter's swap page set to
+// sell SOL for this mint, the holding the gate asks for one click from
+// where it can be bought. The query form, not the older
+// /swap/SOL-<mint> path — jup.ag rewrites that one to SOL for USDC.
+func (m webMint) Buy() string {
+	return "https://jup.ag/swap?sell=" + wSOL + "&buy=" + url.QueryEscape(m.Mint)
+}
+
 // webCompose is the strip that posts from a Solana wallet (see PLAN.md,
 // Posting from a wallet): a new post on the home page, a reply to the
 // post a thread page shows.
