@@ -1302,6 +1302,34 @@ the page works without JavaScript (a small script keeps it current).
   page computes only the four it shows). A computed report is cached
   ten seconds under its query. The feed's pager says "N online", a link
   to `/stats`, on a hub that counts.
+- **One view at a time, the latest asked for.** Every press used to
+  start its own fetch and whichever answer landed last did the swap and
+  the push: 24 hours then 30 days, the first answer last, left the
+  windows, the address and Back on 24 hours with 30 days held and
+  remembered (Codex's catch, 2026-09-17; Livid: "Improve it."). Now a
+  counter (`turn`) takes a step at every press, Back and Forward; an
+  answer is let in, pushed, or allowed its fallback to a full load only
+  while its turn is still the latest, and the fetch it overtakes is
+  aborted, that rejection going nowhere (the server has usually rendered
+  by then — a report is a few milliseconds and cached — so the abort is
+  for the page's sake: the late answer never reaches it). The 20 s
+  refresh takes no turn: it rides the latest, stands aside while a view
+  is on its way, and a press calls it off, so an old refresh cannot
+  redraw a newer view. Leaving the page is a turn too (a plain click on a
+  link out, `pagehide`), so a fetch the browser fails on the way out
+  cannot pull the reader back through the fallback. And since every link
+  in the windows is written from the view they show, a press while
+  another is still on its way carries over only what it changes to the
+  view asked for (`over`): 24 hours then Channels is both, both buttons
+  staying held, not Channels over the old range with the pressed button
+  springing back; with nothing on its way a link is followed exactly as
+  the server wrote it. The same row pressed twice is asked for once; the
+  latest view failing still loads whole, the composed view, on its
+  window. Check: `~/tools/playwright/exe-hub-stats-race-check.js` — it
+  holds answers back with `page.route` and lets them land out of order,
+  each scenario twice: as served, and with `AbortController.abort` a
+  no-op so the turn check alone has to turn the late answer away; it
+  fails on the old script in every scenario.
 - **The range last pressed is remembered** (asked by Livid 2026-09-17),
   in the browser: a press on a range button — in place, into a new tab,
   or on the held one to keep a range a link brought — writes

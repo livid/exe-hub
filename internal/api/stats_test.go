@@ -152,6 +152,8 @@ func TestStatsPage(t *testing.T) {
 		// the range last pressed is remembered in the browser: the head goes on to it, past the default, among the ranges there are
 		`r !== "7d" && ["today", "yesterday", "24h", "7d", "30d", "3m", "6m", "12m", ].includes(r)`,
 		`localStorage.setItem("exe-hub-stats-range", u.searchParams.get("range"))`,
+		// one view at a time: an overtaken answer is turned away, its fetch called off
+		`if (mine !== turn) return false;`, `signal: ctl.signal`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stats page lacks %q", want)
