@@ -850,6 +850,27 @@ hub that carries the post.
     costs an open thread nothing. When the thread's own post is
     deleted the refetch answers 404 and the page reloads into "No such
     post."
+  - *The filter asks the page, so it is only as good as the page is
+    current* (Codex's catch, 2026-09-17, reproduced against a real hub
+    before the fix). A reply whose event was taken is not on the page
+    until its fetch lands, and a reply under it — or its delete, or
+    its author's new name — would be turned away, with nothing to ask
+    again. Two rules close that. A fetch still to start brings those
+    anyway, since an event goes out only after its post is stored; a
+    fetch already in the air may have been drawn before them, so
+    *while one is in the air every event counts* and one follow-up
+    fetch runs when it lands (the price: an extra self-fetch when an
+    unrelated post lands in that moment, never a page view). And *a
+    fetch stays owed for as long as the page is behind*: a refetch
+    that fails — a dropped connection, a 5xx — is tried again, after
+    2 s, then 4, doubling to a minute, until one lands; before this a
+    failed refetch was simply dropped, and the reply it was for stayed
+    away, with the replies under it, until something else happened.
+    A list of accepted ids would do the first rule's work without the
+    extra fetch; the flag is one word, needs no upkeep, and covers a
+    delete and a rename by the same sentence. What neither can see is
+    an event the bus dropped for a slow subscriber; the reconnect
+    fetch is the net under that.
   - *The reader's place holds.* Before the swap the script notes where
     the first kept child still in view stands, and afterwards scrolls
     by however far it moved: a reply landing above the reader (a
@@ -872,8 +893,10 @@ hub that carries the post.
   `~/tools/playwright/exe-hub-live-thread-test.js` against a scratch
   hub (replies at the foot and nested above the reader, with and
   without the browser's anchoring; other traffic costing no fetch; a
-  delete, a rename, a playing video through a swap on both pages; the
-  404), and the wallet harness's reply step for landing in place.
+  delete, a rename; a reply stored under a reply whose refetch is held
+  in the air; a refetch that fails twice; a playing video through a
+  swap on both pages; the 404), and the wallet harness's reply step
+  for landing in place.
 
 ## Notifications — Web Push for every new post (built)
 
