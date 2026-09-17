@@ -443,7 +443,6 @@ type statsList struct {
 	Empty    string
 	Bots     bool   // the Bots window
 	OnlyBots string // the Bots window, unfiltered: the link that holds the whole view to crawlers
-	Order    int    // its place in reading order: what a phone's one column stacks by
 }
 
 type statsView struct {
@@ -465,7 +464,7 @@ type statsPage struct {
 	Filters  []statsChip
 	Tiles    []statsTile
 	Chart    statsChart
-	Lanes    [][]statsList // the list windows, packed two abreast (statsLanes)
+	Lanes    [][]statsList // the list windows, dealt two abreast (statsLanes)
 	Span     string        // the span in words, the chart's status line
 	Zone     string
 	ZoneAbbr string // the zone as the clock says it now: PDT
@@ -509,33 +508,44 @@ const (
 	statsWinGap    = 22 // the margin under a window
 )
 
-// statsLanes packs the list windows into the two lanes they stand in
-// once there is room, the way masonry does: each window, in reading
-// order, goes under the shorter lane — the first on a tie — so Devices
-// climbs up under the shorter column instead of leaving a hole beside
-// Locations. The server packs because it can: it knows every window's
-// height, so no script measures and nothing moves after the first
-// paint. (CSS Grid Level 3's `display: grid-lanes` packs the same way,
-// but only Safari 26.4 has it; Chrome and Firefox keep it behind a
-// flag, so the page does not lean on it.) Each window keeps its place
-// in reading order for the single column of a phone.
+// statsLanes deals the list windows into the two lanes they stand in
+// once there is room. A lane is a run of the reading order: the first
+// few windows left, the rest right, cut where the two lanes' heights
+// come closest (the left one the taller on a tie) — so Devices climbs
+// up under a short lane instead of leaving a hole beside Locations, and
+// the order the page is written in is the order the eye reads at every
+// width: down the left lane and then the right, or down a phone's one
+// column. Tab and a screen reader step through the markup, so the two
+// must not disagree — a shorter-lane-first packing dealt the windows
+// out of order and put them back with the `order` property, which moves
+// the picture and not the sequence (Codex caught it, 2026-09-17). The
+// server cuts because it can: it knows every window's height, so no
+// script measures and nothing moves after the first paint. (CSS Grid
+// Level 3's `display: grid-lanes` packs without the server, but only
+// Safari 26.4 has it; Chrome and Firefox keep it behind a flag, so the
+// page does not lean on it.)
 func statsLanes(lists []statsList) [][]statsList {
-	lanes := make([][]statsList, 2)
-	var tall [2]int
+	tall := make([]int, len(lists))
+	all := 0
 	for i, l := range lists {
-		l.Order = i
-		h := statsWinChrome + statsWinRow*len(l.Rows) + statsWinGap
+		tall[i] = statsWinChrome + statsWinRow*len(l.Rows) + statsWinGap
 		if len(l.Rows) == 0 {
-			h += statsWinNone
+			tall[i] += statsWinNone
 		}
-		k := 0
-		if tall[1] < tall[0] {
-			k = 1
-		}
-		lanes[k] = append(lanes[k], l)
-		tall[k] += h
+		all += tall[i]
 	}
-	return lanes
+	cut, best, left := len(lists), all+1, 0
+	for k := 1; k < len(lists); k++ { // both lanes hold a window when there are two
+		left += tall[k-1]
+		apart := left - (all - left)
+		if apart < 0 {
+			apart = -apart
+		}
+		if apart <= best {
+			cut, best = k, apart
+		}
+	}
+	return [][]statsList{lists[:cut], lists[cut:]}
 }
 
 // statsListViews are each window's views, in strip order.

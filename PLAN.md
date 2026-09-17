@@ -1158,22 +1158,26 @@ the page works without JavaScript (a small script keeps it current).
   lines an SVG stretched over the plot with non-scaling 2px strokes, the
   grid the top borders of four boxes, the labels HTML, so nothing blurs
   at a fractional scale; the bucket still filling hangs off the end in
-  grey. Lists, two abreast when there is room, packed into the two
-  lanes like masonry — by the server, not by the CSS: `statsLanes`
-  deals each window, in reading order, under the shorter lane (the
-  first on a tie), reckoning a window's height from its row count (92px
-  of chrome, 20px a row, 22px for the one line of an empty list, 22px
-  of margin — measured in the browser), and a lane is a plain flex
-  column, so every browser draws the same packing at the first paint
-  and no script measures. One column on a narrow screen: the lanes
-  dissolve (`display: contents`) and the windows stack by `order`,
-  their reading order. When a click or the refresh changes the packing
-  the page moves the windows to the lanes the answer has them in,
-  moved, not rebuilt. (First built on CSS Grid Level 3's
-  `display: grid-lanes` — Livid pointed at WebKit's masonry post
-  2026-09-16 — but only Safari 26.4 ships it and Chrome needs an
-  experimental flag, so Livid asked for it without the new CSS,
-  2026-09-17.) The windows: Sources (Sources,
+  grey. Lists, two abreast when there is room, with no masonry in the
+  CSS: `statsLanes` cuts the reading order into two lanes — the first
+  few windows left, the rest right, cut where the two heights come
+  closest, the left lane the taller on a tie — reckoning a window's
+  height from its row count (92px of chrome, 20px a row, 22px for the
+  one line of an empty list, 22px of margin — measured in the browser),
+  and a lane is a plain flex column, so every browser draws the same
+  page at the first paint and no script measures. The markup is in
+  reading order, so a narrow screen just stacks the lanes, and Tab and
+  a screen reader step through the windows as the eye reads them at
+  every width. When a click or the refresh moves the cut the page moves
+  the windows to the lanes the answer has them in, moved, not rebuilt.
+  (History: first CSS Grid Level 3's `display: grid-lanes` — Livid
+  pointed at WebKit's masonry post 2026-09-16 — but only Safari 26.4
+  ships it and Chrome needs an experimental flag, so Livid asked for it
+  without the new CSS, 2026-09-17; then a shorter-lane-first packing
+  with `display: contents` and `order` putting a phone's column back in
+  reading order — Codex caught that `order` moves the picture and not
+  the Tab or screen-reader sequence, the same day, and the cut replaced
+  it at the price of a slightly looser pack.) The windows: Sources (Sources,
   Channels, Campaigns — sessions), Pages (Top by visitors; Entry and
   Exit by sessions; a thread named by its author and first words, a
   profile by its name), Locations (Countries with the code beside the

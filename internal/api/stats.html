@@ -5,18 +5,18 @@
    bevel button held down, as the Notify bell is; every click is a link. */
 .sdesk { max-width: 960px; margin: 0 auto; }
 .sdesk .window { max-width: none; margin: 0 0 22px; }
-/* the lists pack like masonry with no masonry in the CSS: the server
-   deals the windows into two lanes, each under the shorter one
+/* the lists stand two abreast with no masonry in the CSS: the server
+   cuts the reading order into two lanes of about one height
    (statsLanes), and a lane is a plain column — Devices climbs up under
-   the shorter lane instead of leaving a hole beside Locations. A narrow
-   screen has one column: the lanes dissolve (display: contents) and
-   the windows stack by `order`, their reading order. */
+   a short lane instead of leaving a hole beside Locations. The markup
+   is in reading order, so a narrow screen just stacks the lanes, and
+   Tab and a screen reader step through the windows as the eye does. */
 .sgrid { display: flex; flex-direction: column; }
-.sgrid .lane { display: contents; }
+.sgrid .lane { min-width: 0; }
 .sgrid .window { min-width: 0; } /* a long label never widens a window past its column */
 @media (min-width: 720px) {
   .sgrid { flex-direction: row; align-items: flex-start; gap: 24px; }
-  .sgrid .lane { display: block; flex: 1 1 0; min-width: 0; }
+  .sgrid .lane { flex: 1 1 0; }
 }
 .strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px;
   border-bottom: 1px solid #262626; background: #ddd;
@@ -127,7 +127,7 @@
   </div>
 </div>
 <div class="sgrid">{{range .Lanes}}<div class="lane">{{range .}}{{$l := .}}
-<div class="window sw" id="{{.Anchor}}" style="order: {{.Order}}">
+<div class="window sw" id="{{.Anchor}}">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Title}}</span><span class="stripe"></span></div>
   <div class="frame">
     <div class="strip">{{range .Views}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}#{{$l.Anchor}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</div>
@@ -151,10 +151,10 @@
   // the status line — and only a part that changed, so a strip whose
   // held button the click already set is left as it is: no rebuild, no
   // flash (Livid saw one, 2026-09-16)
-  // the server packs the list windows into their lanes; when a list
-  // grew or shrank enough to change the packing, the windows here move
-  // to the lanes the answer has them in — moved, not rebuilt — and only
-  // then, so the frames pair up in order below
+  // the server cuts the list windows into their lanes; when a list grew
+  // or shrank enough to move the cut, the windows here move to the
+  // lanes the answer has them in — moved, not rebuilt — and only then,
+  // so the frames pair up in order below
   const pack = fresh => {
     const ids = l => [...l.children].map(w => w.id).join(" ");
     const have = [...document.querySelectorAll(".sgrid > .lane")], next = [...fresh.querySelectorAll(".sgrid > .lane")];

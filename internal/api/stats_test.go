@@ -141,14 +141,14 @@ func TestStatsPage(t *testing.T) {
 		`<path class="f" style="fill: #4b0082"`,       // bbbb's disc: 0xbb % 20 = 7, Indigo
 		`<path class="f" style="fill: #c8a2c8"`,       // aaaa's: 0xaa % 20 = 10, Lilac
 		`headers: { "X-Hub-Live": "1" }`,
-		`<div class="window sw" id="w-bt" style="order: 4">`, // the Bots window
-		`href="/stats?bot=Googlebot&amp;range=7d#w-bt"`,      // a crawler's row holds the view to it
+		`<div class="window sw" id="w-bt">`,             // the Bots window
+		`href="/stats?bot=Googlebot&amp;range=7d#w-bt"`, // a crawler's row holds the view to it
 		`Page views · left out of every other number`,
 		`<a href="/stats?bot=all&amp;range=7d#w-bt">Only crawlers</a>`,
-		`<div class="window sw" id="w-dev" style="order: 3">`, // a window is an anchor, and keeps its place for a phone's one column
-		`href="/stats?dev=browsers&amp;range=7d#w-dev"`,       // a view link lands on its window without script
-		`history.pushState(null, "", url)`,                    // with script the view is fetched in place
-		`<div class="sgrid"><div class="lane">`,               // the lists dealt into lanes by the server: no masonry CSS to wait for
+		`<div class="window sw" id="w-dev">`,            // a window is an anchor
+		`href="/stats?dev=browsers&amp;range=7d#w-dev"`, // a view link lands on its window without script
+		`history.pushState(null, "", url)`,              // with script the view is fetched in place
+		`<div class="sgrid"><div class="lane">`,         // the lists cut into lanes by the server: no masonry CSS to wait for
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stats page lacks %q", want)
@@ -243,34 +243,37 @@ func TestStatsPage(t *testing.T) {
 	}
 }
 
-// TestStatsLanes: the list windows pack like masonry — each, in reading
-// order, under the shorter lane, the first on a tie — and keep their
-// place in reading order for a phone's one column.
+// TestStatsLanes: the list windows stand in two lanes that are a cut of
+// the reading order — the first few left, the rest right, cut where the
+// heights come closest, the left lane the taller on a tie — so the
+// markup's order is the eye's at every width.
 func TestStatsLanes(t *testing.T) {
 	for _, c := range []struct {
 		rows []int
 		want string
 	}{
-		{[]int{10, 12, 12, 4, 9}, "0 2|1 3 4"},   // Devices and Bots climb under the short Pages lane
-		{[]int{12, 12, 12, 12, 12}, "0 2 4|1 3"}, // a tie goes left
-		{[]int{12, 0, 0, 0, 12}, "0 4|1 2 3"},    // three empty windows (408) outgrow one full one (354)
-		{[]int{12, 0, 0, 12, 3}, "0 4|1 2 3"},    // two empty ones do not: Devices stays right, Bots goes left
-		{[]int{0, 0, 0, 0, 0}, "0 2 4|1 3"},
+		{[]int{10, 12, 12, 4, 9}, "0 1|2 3 4"},   // 668 beside 842: a third window left would be 1022 beside 488
+		{[]int{7, 12, 12, 4, 12}, "0 1|2 3 4"},   // the public hub's page on the day this was written
+		{[]int{12, 12, 12, 12, 12}, "0 1 2|3 4"}, // a tie: the left lane is the taller
+		{[]int{12, 0, 0, 0, 12}, "0 1 2|3 4"},    // 626 beside 490 either way round: the tie goes left
+		{[]int{0, 0, 0, 0, 0}, "0 1 2|3 4"},
+		{[]int{3}, "0|"},
+		{[]int{0, 12}, "0|1"}, // two windows never share a lane
 	} {
 		var lists []statsList
-		for _, n := range c.rows {
-			lists = append(lists, statsList{Rows: make([]statsRowView, n)})
+		for i, n := range c.rows {
+			lists = append(lists, statsList{Anchor: strconv.Itoa(i), Rows: make([]statsRowView, n)})
 		}
 		var got []string
 		for _, lane := range statsLanes(lists) {
 			var ids []string
 			for _, l := range lane {
-				ids = append(ids, strconv.Itoa(l.Order))
+				ids = append(ids, l.Anchor)
 			}
 			got = append(got, strings.Join(ids, " "))
 		}
 		if g := strings.Join(got, "|"); g != c.want {
-			t.Errorf("rows %v pack as %q, want %q", c.rows, g, c.want)
+			t.Errorf("rows %v stand as %q, want %q", c.rows, g, c.want)
 		}
 	}
 }
