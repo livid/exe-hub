@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -140,13 +141,14 @@ func TestStatsPage(t *testing.T) {
 		`<path class="f" style="fill: #4b0082"`,       // bbbb's disc: 0xbb % 20 = 7, Indigo
 		`<path class="f" style="fill: #c8a2c8"`,       // aaaa's: 0xaa % 20 = 10, Lilac
 		`headers: { "X-Hub-Live": "1" }`,
-		`<div class="window sw" id="w-bt">`,             // the Bots window
-		`href="/stats?bot=Googlebot&amp;range=7d#w-bt"`, // a crawler's row holds the view to it
+		`<div class="window sw" id="w-bt" style="order: 4">`, // the Bots window
+		`href="/stats?bot=Googlebot&amp;range=7d#w-bt"`,      // a crawler's row holds the view to it
 		`Page views · left out of every other number`,
 		`<a href="/stats?bot=all&amp;range=7d#w-bt">Only crawlers</a>`,
-		`<div class="window sw" id="w-dev">`,            // a window is an anchor
-		`href="/stats?dev=browsers&amp;range=7d#w-dev"`, // a view link lands on its window without script
-		`history.pushState(null, "", url)`,              // with script the view is fetched in place
+		`<div class="window sw" id="w-dev" style="order: 3">`, // a window is an anchor, and keeps its place for a phone's one column
+		`href="/stats?dev=browsers&amp;range=7d#w-dev"`,       // a view link lands on its window without script
+		`history.pushState(null, "", url)`,                    // with script the view is fetched in place
+		`<div class="sgrid"><div class="lane">`,               // the lists dealt into lanes by the server: no masonry CSS to wait for
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stats page lacks %q", want)
@@ -238,6 +240,38 @@ func TestStatsPage(t *testing.T) {
 	}
 	if _, body := get(t, h, "/"); strings.Contains(body, "online</a>") {
 		t.Error("the feed links stats a hub does not have")
+	}
+}
+
+// TestStatsLanes: the list windows pack like masonry — each, in reading
+// order, under the shorter lane, the first on a tie — and keep their
+// place in reading order for a phone's one column.
+func TestStatsLanes(t *testing.T) {
+	for _, c := range []struct {
+		rows []int
+		want string
+	}{
+		{[]int{10, 12, 12, 4, 9}, "0 2|1 3 4"},   // Devices and Bots climb under the short Pages lane
+		{[]int{12, 12, 12, 12, 12}, "0 2 4|1 3"}, // a tie goes left
+		{[]int{12, 0, 0, 0, 12}, "0 4|1 2 3"},    // three empty windows (408) outgrow one full one (354)
+		{[]int{12, 0, 0, 12, 3}, "0 4|1 2 3"},    // two empty ones do not: Devices stays right, Bots goes left
+		{[]int{0, 0, 0, 0, 0}, "0 2 4|1 3"},
+	} {
+		var lists []statsList
+		for _, n := range c.rows {
+			lists = append(lists, statsList{Rows: make([]statsRowView, n)})
+		}
+		var got []string
+		for _, lane := range statsLanes(lists) {
+			var ids []string
+			for _, l := range lane {
+				ids = append(ids, strconv.Itoa(l.Order))
+			}
+			got = append(got, strings.Join(ids, " "))
+		}
+		if g := strings.Join(got, "|"); g != c.want {
+			t.Errorf("rows %v pack as %q, want %q", c.rows, g, c.want)
+		}
 	}
 }
 

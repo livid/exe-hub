@@ -443,6 +443,7 @@ type statsList struct {
 	Empty    string
 	Bots     bool   // the Bots window
 	OnlyBots string // the Bots window, unfiltered: the link that holds the whole view to crawlers
+	Order    int    // its place in reading order: what a phone's one column stacks by
 }
 
 type statsView struct {
@@ -464,8 +465,8 @@ type statsPage struct {
 	Filters  []statsChip
 	Tiles    []statsTile
 	Chart    statsChart
-	Lists    []statsList
-	Span     string // the span in words, the chart's status line
+	Lanes    [][]statsList // the list windows, packed two abreast (statsLanes)
+	Span     string        // the span in words, the chart's status line
 	Zone     string
 	ZoneAbbr string // the zone as the clock says it now: PDT
 	JSON     string // the same view as JSON
@@ -497,6 +498,45 @@ type statsXLabel struct {
 
 // statsShown caps a list on the page; the JSON has them all.
 const statsShown = 12
+
+// A list window's height is known before it is drawn: its chrome, 20px
+// a row, one line when the list is empty, and the margin under it
+// (stats.html; measured in the browser, 92 + 20n).
+const (
+	statsWinChrome = 92 // titlebar 17, the window's and the frame's edges 8, strip 37, the rows' padding 14, status line 16
+	statsWinRow    = 20
+	statsWinNone   = 22 // the line an empty list says
+	statsWinGap    = 22 // the margin under a window
+)
+
+// statsLanes packs the list windows into the two lanes they stand in
+// once there is room, the way masonry does: each window, in reading
+// order, goes under the shorter lane — the first on a tie — so Devices
+// climbs up under the shorter column instead of leaving a hole beside
+// Locations. The server packs because it can: it knows every window's
+// height, so no script measures and nothing moves after the first
+// paint. (CSS Grid Level 3's `display: grid-lanes` packs the same way,
+// but only Safari 26.4 has it; Chrome and Firefox keep it behind a
+// flag, so the page does not lean on it.) Each window keeps its place
+// in reading order for the single column of a phone.
+func statsLanes(lists []statsList) [][]statsList {
+	lanes := make([][]statsList, 2)
+	var tall [2]int
+	for i, l := range lists {
+		l.Order = i
+		h := statsWinChrome + statsWinRow*len(l.Rows) + statsWinGap
+		if len(l.Rows) == 0 {
+			h += statsWinNone
+		}
+		k := 0
+		if tall[1] < tall[0] {
+			k = 1
+		}
+		lanes[k] = append(lanes[k], l)
+		tall[k] += h
+	}
+	return lanes
+}
 
 // statsListViews are each window's views, in strip order.
 var statsListViews = []struct {
@@ -613,6 +653,7 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Tiles = statsTiles(rep.Summary, rep.Previous)
 	p.Chart = statsChartOf(rep.Series, sp)
+	var lists []statsList
 	for _, lv := range statsListViews {
 		l := statsList{Title: lv.title, Anchor: "w-" + lv.param}
 		for _, o := range lv.views {
@@ -650,8 +691,9 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 				l.OnlyBots = sq.with("bot", "all") + "#w-bt"
 			}
 		}
-		p.Lists = append(p.Lists, l)
+		lists = append(lists, l)
 	}
+	p.Lanes = statsLanes(lists)
 	for i := range p.Recent {
 		p.Recent[i].Label = s.statsPathLabel(p.Recent[i].Path)
 	}
