@@ -1,8 +1,8 @@
 // Package replicate is the pulling half of hub aggregation (see PLAN.md):
 // a background loop that drains each curated peer's /v1/replicate log page
 // by page, verifies the hub signature on every page and the author
-// signature on every envelope, mirrors embeds through the peer, and
-// ingests what survives. Trust is the admin's peer.add — nothing here
+// signature on every envelope, mirrors embeds through the peer (and goes
+// back, to any peer, for the ones that failed), and ingests what survives. Trust is the admin's peer.add — nothing here
 // discovers peers or follows a peer's peers.
 package replicate
 
@@ -17,6 +17,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"exehub/internal/envelope"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/media"
 	"exehub/internal/store"
 )
 
@@ -32,7 +34,7 @@ const (
 	interval  = 30 * time.Second
 	pageLimit = 200
 	embedMax  = 8 << 20   // mirrors the upload cap
-	healMax   = time.Hour // the longest wait between two tries for one CID
+	healMax   = time.Hour // the longest wait between two rounds for one file
 )
 
 type Puller struct {
@@ -40,14 +42,23 @@ type Puller struct {
 	IPFS *ipfs.Client
 	Self string // own hub id; self-peering is refused at ingest but guard anyway
 
-	client  *http.Client
-	healing map[string]*healTry // CID → when its failed mirror is tried next
+	client    *http.Client
+	healing   map[string]*healTry // CID → when its sources are asked next
+	healPeers map[string]bool     // the peers heal saw last cycle
 }
 
 type healTry struct {
 	at   time.Time
 	wait time.Duration
 }
+
+// peerDown is a mirror that failed because the peer did not answer at all,
+// kuboDown one that failed on local kubo: neither says anything about the
+// file, and heal treats them differently from a peer's "no such embed".
+type (
+	peerDown struct{ error }
+	kuboDown struct{ error }
+)
 
 // Run pulls forever. Call in a goroutine; it shares the process lifetime
 // like the sweep loop.
@@ -58,15 +69,18 @@ func (p *Puller) Run() {
 		if err != nil {
 			log.Printf("replicate: peers: %v", err)
 		}
+		var up []store.Peer // the peers that answered this cycle: the ones heal may ask
 		for _, peer := range peers {
 			if peer.Hub == p.Self {
 				continue
 			}
 			if err := p.pull(peer); err != nil {
 				log.Printf("replicate %s: %v", peer.Hub, err)
+				continue
 			}
+			up = append(up, peer)
 		}
-		p.heal(peers)
+		p.heal(up)
 		time.Sleep(interval)
 	}
 }
@@ -201,14 +215,14 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 	case *envelope.PostCreate:
 		// a mirror that fails here is heal's to try again
 		for _, em := range v.Embeds {
-			p.mirror(base, hub, em.CID, false, false)
+			p.mirrorNow(base, hub, em.CID, false)
 			if em.Poster != "" {
-				p.mirror(base, hub, em.Poster, false, false)
+				p.mirrorNow(base, hub, em.Poster, false)
 			}
 		}
 	case *envelope.ProfileSet:
 		if v.Avatar != "" {
-			p.mirror(base, hub, v.Avatar, true, false)
+			p.mirrorNow(base, hub, v.Avatar, true)
 		}
 	case *envelope.PostDelete:
 		// no preparation needed
@@ -236,60 +250,60 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 	}
 }
 
-// mirror fetches one embed CID through the peer that referenced it —
-// never an arbitrary gateway — size-capped, and keeps it only if local
-// kubo mints the identical CID (both hubs add with the same params, so a
-// mismatch means the bytes are not what the author signed for). It says
-// whether the CID is pinned here now. late marks heal's retry, after the
-// message that names the CID has been ingested: the pin then starts with
-// the references it already has (AdoptPin).
-func (p *Puller) mirror(base, hub, cid string, avatar, late bool) bool {
+// mirrorNow mirrors a CID as its message is ingested, from the peer the
+// message came through.
+func (p *Puller) mirrorNow(base, hub, cid string, avatar bool) {
+	if err := p.mirror(base, cid, avatar, false); err != nil {
+		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
+	}
+}
+
+// mirror fetches one CID from a configured peer — never an arbitrary
+// gateway — size-capped, and keeps it only if local kubo mints the
+// identical CID (both hubs add with the same params, so a mismatch means
+// the bytes are not what the author signed for). Nothing but the bytes is
+// taken from the peer: the type they are served with is read from them
+// here, the way an upload's is (media.Sniff), not from the peer's
+// Content-Type — which is what makes a peer that never named the file as
+// safe to ask as the one that did. nil means the CID is pinned here now.
+// late marks heal's retry, after the message that names the CID has been
+// ingested: the pin then starts with the references it already has
+// (AdoptPin).
+func (p *Puller) mirror(base, cid string, avatar, late bool) error {
 	if _, err := p.St.PinInfo(cid); err == nil {
-		return true // already pinned here
+		return nil // already pinned here
 	}
 	resp, err := p.client.Get(base + "/v1/embed/" + cid)
 	if err != nil {
-		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
-		return false
+		return peerDown{err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		log.Printf("replicate %s: mirror %s: %s", hub, cid, resp.Status)
-		return false
+		return errors.New(resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, embedMax+1))
 	if err != nil || len(body) > embedMax {
-		log.Printf("replicate %s: mirror %s: oversized or truncated", hub, cid)
-		return false
+		return errors.New("oversized or truncated")
 	}
 	got, err := p.IPFS.Add(strings.NewReader(string(body)), envelope.MsgID(body))
 	if err != nil {
-		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
-		return false
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return kuboDown{err}
+		}
+		return err
 	}
 	if got != cid {
-		log.Printf("replicate %s: mirror %s: peer served different content (%s)", hub, cid, got)
 		if err := p.IPFS.Unpin(got); err != nil {
-			log.Printf("replicate %s: unpin %s: %v", hub, got, err)
+			log.Printf("replicate: unpin %s: %v", got, err)
 		}
-		return false
-	}
-	mime := resp.Header.Get("Content-Type")
-	if i := strings.Index(mime, ";"); i > 0 {
-		mime = mime[:i]
-	}
-	if mime == "" {
-		mime = "application/octet-stream"
+		return fmt.Errorf("peer served different content (%s)", got)
 	}
 	add := p.St.AddPin
 	if late {
 		add = p.St.AdoptPin
 	}
-	if err := add(cid, int64(len(body)), mime, avatar); err != nil {
-		log.Printf("replicate %s: mirror %s: %v", hub, cid, err)
-		return false
-	}
-	return true
+	return add(cid, int64(len(body)), media.Sniff(body), avatar)
 }
 
 // heal tries the failed mirrors again. A replicated post lands even when
@@ -297,9 +311,20 @@ func (p *Puller) mirror(base, hub, cid string, avatar, late bool) bool {
 // boots before its kubo pulls its first page without one), the peer slow —
 // and no later message brings the picture back, so the embed stayed a 404
 // for good. Each cycle asks the store which CIDs replicated messages name
-// without a pin and goes back to the peer they came from, each CID on its
-// own backoff: the next cycle first, doubling to healMax, so a picture the
-// peer has lost costs one request an hour.
+// without a pin, and a file whose turn has come has its sources asked in
+// one round: first the peers its messages came through, then every other
+// configured peer — one that mirrored the post may hold the file without
+// ever having sent it here, and mirror takes nothing from a peer but bytes
+// that must hash to the signed CID. The first copy that checks out ends
+// the round. Only a round in which every source failed backs the file
+// off, from the next cycle doubling to healMax, so a file that is lost
+// everywhere costs one request per peer an hour. What says nothing about
+// the file does not count: with local kubo down heal waits for it, and
+// peers are the ones whose pull just succeeded — a peer that stops
+// answering halfway is left alone for the rest of the cycle, and a round
+// in which no peer answered at all is simply held again next cycle. A
+// peer that was not there last cycle, new or back from an outage, starts
+// every wait over, so it is asked now rather than within the hour.
 func (p *Puller) heal(peers []store.Peer) {
 	missing, err := p.St.MissingMirrors()
 	if err != nil {
@@ -309,39 +334,110 @@ func (p *Puller) heal(peers []store.Peer) {
 	if p.healing == nil {
 		p.healing = map[string]*healTry{}
 	}
+
+	// the peers there are to ask, in the store's order
+	var hubs []string
 	bases := map[string]string{}
 	for _, peer := range peers {
-		if base, err := envelope.ParseMultiaddr(peer.Addr); err == nil && peer.Hub != p.Self {
+		if base, err := envelope.ParseMultiaddr(peer.Addr); err == nil && peer.Hub != p.Self && bases[peer.Hub] == "" {
+			hubs = append(hubs, peer.Hub)
 			bases[peer.Hub] = base
 		}
 	}
-	now := time.Now()
-	still := map[string]bool{}
-	for _, m := range missing {
-		still[m.CID] = true
-		base, ok := bases[m.Origin]
-		if !ok {
-			continue // no longer a peer: nowhere trusted to ask
+	seen := map[string]bool{}
+	for _, hub := range hubs {
+		seen[hub] = true
+		if !p.healPeers[hub] {
+			clear(p.healing)
 		}
-		try := p.healing[m.CID]
+	}
+	p.healPeers = seen
+
+	// one file per CID, with the peers that named it
+	type file struct {
+		cid    string
+		avatar bool
+		named  []string
+	}
+	var files []*file
+	byCID := map[string]*file{}
+	for _, m := range missing {
+		f := byCID[m.CID]
+		if f == nil {
+			f = &file{cid: m.CID}
+			byCID[m.CID] = f
+			files = append(files, f)
+		}
+		f.avatar = f.avatar || m.Avatar
+		f.named = append(f.named, m.Origin)
+	}
+	for cid := range p.healing {
+		if byCID[cid] == nil {
+			delete(p.healing, cid) // its post was deleted meanwhile
+		}
+	}
+	if len(hubs) == 0 {
+		return // nowhere trusted to ask
+	}
+
+	now := time.Now()
+	down := map[string]bool{} // peers that did not answer this cycle
+	kubo := false             // local kubo answered this cycle
+	for _, f := range files {
+		try := p.healing[f.cid]
 		if try != nil && now.Before(try.at) {
 			continue
 		}
-		if p.mirror(base, m.Origin, m.CID, m.Avatar, true) {
-			log.Printf("replicate %s: mirror %s: healed", m.Origin, m.CID)
-			delete(p.healing, m.CID)
+		if !kubo {
+			if err := p.IPFS.Available(); err != nil {
+				return // nothing can be kept; the files' waits stand still
+			}
+			kubo = true
+		}
+		var sources []string
+		asked := map[string]bool{}
+		for _, hub := range append(f.named, hubs...) {
+			if bases[hub] != "" && !asked[hub] {
+				asked[hub] = true
+				sources = append(sources, hub)
+			}
+		}
+		var fails []string
+		healed, answered := false, false
+		for _, hub := range sources {
+			if down[hub] {
+				continue
+			}
+			err := p.mirror(bases[hub], f.cid, f.avatar, true)
+			if err == nil {
+				log.Printf("replicate %s: mirror %s: healed", hub, f.cid)
+				healed = true
+				break
+			}
+			if errors.As(err, &kuboDown{}) {
+				log.Printf("replicate: heal %s: %v", f.cid, err)
+				return
+			}
+			if errors.As(err, &peerDown{}) {
+				down[hub] = true
+			} else {
+				answered = true
+			}
+			fails = append(fails, hub+": "+err.Error())
+		}
+		if healed {
+			delete(p.healing, f.cid)
+			continue
+		}
+		if !answered {
 			continue
 		}
 		if try == nil {
 			try = &healTry{wait: interval / 2}
-			p.healing[m.CID] = try
+			p.healing[f.cid] = try
 		}
 		try.wait = min(try.wait*2, healMax)
 		try.at = now.Add(try.wait - time.Second) // a cycle is never exactly interval apart
-	}
-	for cid := range p.healing {
-		if !still[cid] {
-			delete(p.healing, cid) // its post was deleted meanwhile
-		}
+		log.Printf("replicate: heal %s: %s; next round in %s", f.cid, strings.Join(fails, "; "), try.wait)
 	}
 }

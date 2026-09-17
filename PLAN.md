@@ -112,25 +112,49 @@ Mechanics (the questions v1 deferred, now settled):
   (MAX) so their next direct write here can't collide. Genuinely
   concurrent same-author profile.set conflicts resolve by arrival order
   — as good as any for concurrent writes.
-- **Embeds mirror through the peer**, not arbitrary CIDs: on ingesting a
-  replicated post (or avatar), each unknown CID is fetched from the
-  peer's `/v1/embed/{cid}` with an 8MB cap and hard timeout, added to
-  local kubo, and **accepted only if kubo mints the identical CID**
-  (both hubs add with the same params, so a mismatch means tampering).
-  Mirrored pins are refcounted (avatar-flagged for avatars) so deletes
-  GC normally. A failed mirror degrades that embed to a local 404 — the
-  post text still lands (ingest uses the replay-relaxed pin path) — **and
-  is tried again**: no later message would bring the picture back, so
-  after each pull cycle the puller's heal pass asks the store for the
-  CIDs replicated messages name without a pin (`MissingMirrors`: embeds,
-  posters, avatars, each with the origin hub of its message) and mirrors
-  them from that peer, if it still is one. Each CID backs off on its own,
-  from the next cycle doubling to an hour, in memory. A late pin is
-  recorded by `AdoptPin` with the references already standing (counted
-  as `Rebuild` counts them), never the 0 of a staged upload, which the
-  sweep would collect. (2026-09-17: the public hub's VM rebooted, the hub
-  came up two seconds before its tunnel to kubo, pulled a fresh post and
-  kept it without its screenshot for good.)
+- **Embeds mirror through a peer**, never an arbitrary gateway: on
+  ingesting a replicated post (or avatar), each unknown CID is fetched
+  from the peer's `/v1/embed/{cid}` with an 8MB cap and hard timeout,
+  added to local kubo, and **accepted only if kubo mints the identical
+  CID** (both hubs add with the same params, so a mismatch means
+  tampering). **Nothing but the bytes is taken from the peer**: the type
+  the file is served with is read from them here, the way an upload's is
+  (`media.Sniff`), not from the peer's Content-Type — a peer cannot label
+  a picture as something a browser would run (checked 2026-09-17: sniffed
+  = served for all 551 embeds on the hub). Mirrored pins are refcounted
+  (avatar-flagged for avatars) so deletes GC normally. A failed mirror
+  degrades that embed to a local 404 — the post text still lands (ingest
+  uses the replay-relaxed pin path) — **and is tried again**: no later
+  message would bring the picture back, so after each pull cycle the
+  puller's heal pass asks the store for the CIDs replicated messages
+  name without a pin (`MissingMirrors`: embeds, posters, avatars, one
+  row per hub a message came through).
+  - **A round asks every source.** A file whose turn has come has its
+    sources asked in one go: first the peers its messages came through,
+    then every other configured peer — one that mirrored the post may
+    hold the file without ever having sent it here, and since only
+    CID-checked bytes are taken, it is as safe to ask as the one that
+    named it. The first copy that checks out ends the round. (Until
+    2026-09-17 the wait was kept per file but set by the first peer's
+    failure, so a second source was skipped by that very wait and never
+    asked: Codex's catch.)
+  - **Only a round in which every source failed backs the file off**,
+    from the next cycle doubling to an hour, in memory: a file lost
+    everywhere costs one request per peer an hour, one log line a round.
+  - **What says nothing about the file does not count.** With local kubo
+    down heal asks nobody and no wait grows, so the file is there the
+    cycle after kubo answers. The peers asked are the ones whose pull
+    just succeeded; one that stops answering halfway is left alone for
+    the rest of the cycle, and a round no peer answered is held again
+    next cycle.
+  - **A peer that was not there last cycle** — newly added, or back from
+    an outage — starts every wait over, so it is asked now rather than
+    within the hour.
+  - A late pin is recorded by `AdoptPin` with the references already
+    standing (counted as `Rebuild` counts them), never the 0 of a staged
+    upload, which the sweep would collect. (2026-09-17: the public hub's
+    VM rebooted, the hub came up two seconds before its tunnel to kubo,
+    pulled a fresh post and kept it without its screenshot for good.)
 - **Replication state**: per-peer cursor + cached pubkey live in
   `peer_state`, which is *not* derived — losing it merely re-pulls from
   zero, and content-hash dedup makes that idempotent. `peer.remove`
@@ -1135,7 +1159,9 @@ ffmpeg) does not, and draws what it mirrors all the same.
 
 - Whether an aggregator should eventually re-serve mirrored embeds to its
   own peers (today each hub mirrors from the peer it pulled the post
-  from; a one-hop topology makes that sufficient).
+  from, and heal goes back to any configured peer for a file that
+  failed — `/v1/embed` serves mirrored pins too; a one-hop topology
+  makes that sufficient).
 - Hub-to-hub trust exchange beyond replication (the reserved use of the
   hub identity): signed peer recommendations, cross-hub ban hints.
 
