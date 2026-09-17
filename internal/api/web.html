@@ -9,6 +9,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 {{if .PushKey}}<script>if ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window) document.documentElement.classList.add("push");</script>
 {{end}}{{if .Compose}}<script>document.documentElement.classList.add("js"); try { if (localStorage.getItem("exe-hub-wallet")) document.documentElement.classList.add("wallet"); } catch (e) {}</script>
+{{end}}{{if eq .Page "stats"}}{{template "statshead" .StatsPage}}
 {{end}}<meta name="theme-color" content="#cccccc">
 {{if .Canonical}}<link rel="canonical" href="{{.Base}}{{.Path}}">
 {{end}}<meta property="og:site_name" content="{{.Host}}">

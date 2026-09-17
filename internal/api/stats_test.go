@@ -149,6 +149,9 @@ func TestStatsPage(t *testing.T) {
 		`href="/stats?dev=browsers&amp;range=7d#w-dev"`, // a view link lands on its window without script
 		`history.pushState(null, "", url)`,              // with script the view is fetched in place
 		`<div class="sgrid"><div class="lane">`,         // the lists cut into lanes by the server: no masonry CSS to wait for
+		// the range last pressed is remembered in the browser: the head goes on to it, past the default, among the ranges there are
+		`r !== "7d" && ["today", "yesterday", "24h", "7d", "30d", "3m", "6m", "12m", ].includes(r)`,
+		`localStorage.setItem("exe-hub-stats-range", u.searchParams.get("range"))`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("stats page lacks %q", want)

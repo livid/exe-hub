@@ -461,6 +461,7 @@ type statsRowView struct {
 type statsPage struct {
 	Report   *statsReport
 	Ranges   []statsView
+	Default  string // the range of a URL that names none: the remembered one need not replace it
 	Filters  []statsChip
 	Tiles    []statsTile
 	Chart    statsChart
@@ -643,7 +644,7 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The stats could not be read.")
 		return
 	}
-	p := &statsPage{Report: rep, Online: rep.Live.Online, Recent: rep.Live.Recent, Zone: rep.Zone,
+	p := &statsPage{Report: rep, Default: statsDefaultRange, Online: rep.Live.Online, Recent: rep.Live.Recent, Zone: rep.Zone,
 		ZoneAbbr: now.In(s.Stats.Location()).Format("MST")}
 	p.JSON = strings.Replace(sq.String(), "/stats", "/v1/stats", 1)
 	for _, rg := range statsRanges {

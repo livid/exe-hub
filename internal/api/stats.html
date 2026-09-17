@@ -1,4 +1,27 @@
+{{define "statshead"}}<script>
+// The range last pressed is kept in this browser (localStorage; the
+// click handler under the windows sets it), and a visit whose URL names
+// no range goes on to it: the URL is replaced from the head, before
+// anything is drawn, so the server still renders every view and every
+// state is still a URL. Chromium stops parsing at a scheduled replace
+// (checked; WebKit's parser too, by its source) — the default's page
+// never gets a body; for a browser that parses on, .recall keeps it
+// unseen, and lets go if the way out stalls. A URL that names a range
+// is left alone, and is not remembered: only a press is.
+try {
+  const u = new URL(location.href), r = localStorage.getItem("exe-hub-stats-range");
+  if (!u.searchParams.get("range") && r !== {{.Default}} && [{{range .Ranges}}{{.Key}}, {{end}}].includes(r)) {
+    document.documentElement.classList.add("recall");
+    setTimeout(() => document.documentElement.classList.remove("recall"), 5000);
+    u.searchParams.set("range", r);
+    u.searchParams.sort(); // as the server writes its links
+    location.replace(u.pathname + u.search + u.hash);
+  }
+} catch (e) {}
+</script>{{end}}
 {{define "statscss"}}<style>
+/* on its way to the remembered range (statshead): the desk alone */
+.recall body { visibility: hidden; }
 /* Stats (PLAN.md, Stats): a desk of windows — the numbers and the chart,
    Live, and the ranked lists two abreast once there is room. The
    strips are the find strip's platinum; a chosen range or view is a
@@ -197,9 +220,13 @@
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
   document.addEventListener("click", e => {
     const a = e.target.closest("a[href]");
-    if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return; // a new tab is still a new tab
+    if (!a || e.button) return;
     const u = new URL(a.href);
     if (u.origin !== location.origin || u.pathname !== "/stats") return;
+    // a pressed range is the one the next visit opens on (statshead) —
+    // pressed into a new tab too, and the held one again to keep a range a link brought
+    if (a.closest(".ranges")) try { localStorage.setItem("exe-hub-stats-range", u.searchParams.get("range")); } catch (e) {}
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // a new tab is still a new tab
     e.preventDefault();
     if (a.classList.contains("on")) return; // already here
     hold(a);

@@ -1302,6 +1302,25 @@ the page works without JavaScript (a small script keeps it current).
   page computes only the four it shows). A computed report is cached
   ten seconds under its query. The feed's pager says "N online", a link
   to `/stats`, on a hub that counts.
+- **The range last pressed is remembered** (asked by Livid 2026-09-17),
+  in the browser: a press on a range button — in place, into a new tab,
+  or on the held one to keep a range a link brought — writes
+  `localStorage["exe-hub-stats-range"]`, and a visit whose URL names no
+  range is replaced (`location.replace`, so Back still leaves the page)
+  with the remembered one by a script in the head (`statshead`), the
+  filters, views and anchor riding along, the query sorted as the server
+  writes it. The server still renders every view and every state is
+  still a URL; a URL that names a range wins and is not remembered; the
+  default (the server passes it, with the ranges it offers) and a range
+  no longer offered cause no second load. Nothing of the default's page
+  is drawn on the way: Chromium stops parsing a document once a replace
+  is scheduled, so it never gets a body (checked; WebKit's parser does
+  the same by its source, `locationChangePending`), and for a browser
+  that parses on `.recall` hides the body, for 5 s at most. (That
+  stopped parser also holds every DevTools message to the page until the
+  navigation lands, so the check reads the in-between state through a
+  proxy the page beats to: `~/tools/playwright/exe-hub-stats-range-check.js`.)
+  `/stats` itself is never counted, so the second load counts nothing.
 - **Config**: `"stats": {"enabled": true, "timezone": "America/Los_Angeles",
   "retention_days": 0}` — on by default; off hides `/stats` and the
   link and counts nothing; read at start like `media`. Page views are
