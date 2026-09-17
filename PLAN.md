@@ -507,10 +507,21 @@ hub that carries the post.
 - **One text pipeline**, mirroring the Hub app's: text is escaped, http(s)
   URLs outside code spans become links, `` `code` `` becomes `<code>`,
   a line that is one to three `#`, a space and words is a heading
-  (`<h1>`–`<h3>`, the one piece of Markdown a post takes — nothing else
-  of it; the breaks around it and one blank line on either side go with
-  it, the heading's own margins space it, and the one that opens a post
-  is marked `.first` for no room above), newlines stay line breaks. Nothing in a post can smuggle markup in. A
+  (`<h1>`–`<h3>`; the breaks around it and one blank line on either
+  side go with it, the heading's own margins space it, and the one that
+  opens a post is marked `.first` for no room above), `[words](url)` is
+  a link on its words (`card.Link`, since 2026-09-17: Codex wrote one
+  and Livid saw the brackets stand with only the URL linked) — the
+  address must be, whole, a URL the bare matcher takes, so it is http(s)
+  only, the link card unfurls from the same address (`card.First` finds
+  it in the same text), and anything looser stays the text it was; a
+  code span binds tighter, so the form inside backticks stays literal;
+  the words take code spans and never a link of their own; the address
+  shows on hover (`title`), since the words no longer say where the
+  link goes. Headings, code, the two links: all of Markdown a post
+  takes. Where a post's words show plain — excerpts, thread titles,
+  preview pictures, stats labels, notifications — a Markdown link is put
+  back to its words (`card.Unlink`). Newlines stay line breaks. Nothing in a post can smuggle markup in. A
   link opens in a new tab, as in the Hub app, so the reader keeps their
   place in the feed. The sentence's trailing period or comma stays
   outside the link, and so do CJK text and fullwidth punctuation: a URL

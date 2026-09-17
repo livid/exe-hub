@@ -100,7 +100,7 @@ func (s *Server) handlePreviewPost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	body := webHeadingMark.ReplaceAllString(p.Text, "")
+	body := webWords(p.Text)
 	if strings.TrimSpace(body) == "" {
 		body = previewNoWords(*p)
 	}

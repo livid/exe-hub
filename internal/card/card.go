@@ -37,7 +37,25 @@ import (
 // those percent-encoded.
 const urlLatin = `\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{24F}`
 
-var URL = regexp.MustCompile(`https?://[\w#$%&+,\-./:;=?@\[\]~` + urlLatin + `]*[\w#$%&+\-/;=@` + urlLatin + `]`)
+const urlPattern = `https?://[\w#$%&+,\-./:;=?@\[\]~` + urlLatin + `]*[\w#$%&+\-/;=@` + urlLatin + `]`
+
+var URL = regexp.MustCompile(urlPattern)
+
+// Link is a Markdown link, [words](url): the words, on one line and
+// without brackets of their own, become the link. The address between
+// the parentheses must be, whole, a URL the matcher above takes — so it
+// is http(s) and nothing else, First finds the same address in the same
+// text, and a link written this way unfurls into the same card as a
+// bare one. Anything looser stays the text it was, its URL still linked.
+// Submatch 1 is the words, 2 the address.
+var Link = regexp.MustCompile(`\[([^\[\]\n]+)\]\((` + urlPattern + `)\)`)
+
+// Unlink is text with every Markdown link put back to its words, for
+// the places that show a post's words plain: an excerpt, a page title,
+// a preview picture, a notification.
+func Unlink(text string) string {
+	return Link.ReplaceAllString(text, "$1")
+}
 
 // First is the link a post's card is derived from: the first URL in its
 // text, exactly as the linkifier would wrap it — skipping IPFS links,

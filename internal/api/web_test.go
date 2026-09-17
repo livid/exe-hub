@@ -362,6 +362,24 @@ func TestRenderText(t *testing.T) {
 		{"### `code` and https://x.y/", `<h3 class="first"><code>code</code> and <a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a></h3>` + "\n"},
 		{"# <b>", `<h1 class="first">&lt;b&gt;</h1>` + "\n"},
 		{"#nospace\n#### four\n ## indented\n## ", "#nospace<br>\n#### four<br>\n ## indented<br>\n## "},
+		// [words](url): a link on its words, the address on hover; http(s)
+		// and only an address the bare matcher takes whole; a code span
+		// binds tighter; the words take code spans and no link of their own
+		{"see [MDN on order](https://developer.mozilla.org/en-US/docs/Web/CSS/order#accessibility).", `see <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/order#accessibility" title="https://developer.mozilla.org/en-US/docs/Web/CSS/order#accessibility" target="_blank" rel="noopener nofollow">MDN on order</a>.`},
+		{"[a](https://x.y/?a=1&b=2) and https://z.w", `<a href="https://x.y/?a=1&amp;b=2" title="https://x.y/?a=1&amp;b=2" target="_blank" rel="noopener nofollow">a</a> and <a href="https://z.w" target="_blank" rel="noopener nofollow">https://z.w</a>`},
+		{"[the `order` property](https://x.y)", `<a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">the <code>order</code> property</a>`},
+		{"[https://bank.example](https://x.y)", `<a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">https://bank.example</a>`},
+		{"[<b>](https://x.y)", `<a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">&lt;b&gt;</a>`},
+		{"## [Head](https://x.y)", `<h2 class="first"><a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">Head</a></h2>` + "\n"},
+		{"`[a](https://x.y)` literal", "<code>[a](https://x.y)</code> literal"},
+		{"[a `b](https://x.y) c` d", `[a <code>b](https://x.y) c</code> d`},
+		{"[a](javascript:alert(1))", "[a](javascript:alert(1))"},
+		{"[a](ftp://x.y)", "[a](ftp://x.y)"},
+		{"[a] (https://x.y)", `[a] (<a href="https://x.y" target="_blank" rel="noopener nofollow">https://x.y</a>)`},
+		{"[a\nb](https://x.y)", `[a<br>` + "\n" + `b](<a href="https://x.y" target="_blank" rel="noopener nofollow">https://x.y</a>)`},
+		{`[a](https://x.y/"onmouseover="x)`, `[a](<a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a>&#34;onmouseover=&#34;x)`},
+		{"[a](https://x.y/w_(z))", `[a](<a href="https://x.y/w_" target="_blank" rel="noopener nofollow">https://x.y/w_</a>(z))`},
+		{"前文[说明](https://x.y/z)后文", `前文<a href="https://x.y/z" title="https://x.y/z" target="_blank" rel="noopener nofollow">说明</a>后文`},
 	}
 	for _, c := range cases {
 		if got := string(renderText(c.in)); got != c.want {
@@ -379,6 +397,9 @@ func TestExcerpt(t *testing.T) {
 	}
 	if got := excerpt("one two three four", 10); got != "one two…" {
 		t.Errorf("excerpt cut = %q", got)
+	}
+	if got := excerpt("see [MDN on order](https://x.y/#a), then https://z.w", 100); got != "see MDN on order, then https://z.w" {
+		t.Errorf("excerpt puts a Markdown link back to its words: %q", got)
 	}
 }
 
@@ -1123,6 +1144,7 @@ func TestOpening(t *testing.T) {
 		{"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen", "one two three four five six seven eight nine ten eleven twelve…"},
 		{"exe 功能一览。今天新增了价格提醒", "exe 功能一览"},
 		{"Hmm... and then", "Hmm"},
+		{"[The order property](https://developer.mozilla.org/order) moves the picture. Not the sequence.", "The order property moves the picture"},
 		{"", ""},
 		{"   ", ""},
 	} {

@@ -195,6 +195,9 @@ func TestMessage(t *testing.T) {
 	if e := excerpt(strings.Repeat("word ", 100), 200); !strings.HasSuffix(e, "word…") || strings.Contains(e, " …") {
 		t.Errorf("excerpt %q", e)
 	}
+	if e := excerpt("see [MDN on order](https://x.y/#a) first", 200); e != "see MDN on order first" {
+		t.Errorf("a Markdown link in a notification: %q", e)
+	}
 }
 
 // TestNotify: a post lands, every subscriber's push service gets a

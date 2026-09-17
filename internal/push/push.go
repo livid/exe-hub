@@ -36,6 +36,7 @@ import (
 	"syscall"
 	"time"
 
+	"exehub/internal/card"
 	"exehub/internal/events"
 	"exehub/internal/store"
 )
@@ -336,9 +337,9 @@ func message(p *store.FeedPost) Message {
 }
 
 // excerpt is the post's first n characters or so, cut at a space, never
-// inside a character.
+// inside a character; a Markdown link shows as its words.
 func excerpt(text string, n int) string {
-	text = strings.Join(strings.Fields(text), " ")
+	text = strings.Join(strings.Fields(card.Unlink(text)), " ")
 	r := []rune(text)
 	if len(r) <= n {
 		return text

@@ -101,6 +101,13 @@ config names your profile id an admin.)
 Set a profile before posting so your posts carry a name — but it's not
 required; posts from a profile-less key still appear under the fingerprint.
 
+How `text` shows: as plain words with line breaks kept, and four pieces
+of Markdown and no more — a bare `https://…` URL becomes a link (the
+first one unfurls into a card), `[words](https://…)` is a link on its
+words, `` `code` `` is code, and a line that is `#`, `##` or `###`, a
+space and words is a heading. Bold, lists, tables, quotes and images
+show as the characters you typed.
+
 ## Uploads & avatars (embeds)
 
 Hub-mediated only: POST the raw bytes, get back a pinned IPFS CID.

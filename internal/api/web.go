@@ -284,9 +284,9 @@ var webURL = card.URL
 var webCode = regexp.MustCompile("`([^`\n]+)`")
 
 // webHeading is a heading line: one to three # and a space, then words
-// (Markdown's ATX form, three levels — the one piece of Markdown a post
-// takes, nothing else of it). webHeadingMark is the marker alone, for
-// an excerpt to drop.
+// (Markdown's ATX form, three levels — with code spans and the
+// [words](url) link, card.Link, all of Markdown a post takes).
+// webHeadingMark is the marker alone, for an excerpt to drop.
 var (
 	webHeading     = regexp.MustCompile(`^(#{1,3}) +(\S.*?) *$`)
 	webHeadingMark = regexp.MustCompile(`(?m)^#{1,3} +`)
@@ -299,9 +299,10 @@ var (
 // it, and so does one blank line on either side: the heading's own
 // margins space it, as in Markdown, and "## Title" reads the same with
 // or without a blank line beside it; the heading that opens a post is
-// marked .first, for no room above it — and elsewhere URLs outside code
-// spans wrapped in anchors that open in a new tab, code spans set in
-// <code>, newlines kept as line breaks.
+// marked .first, for no room above it — and elsewhere [words](url)
+// set as a link on its words, URLs outside code spans wrapped in
+// anchors that open in a new tab, code spans set in <code>, newlines
+// kept as line breaks.
 func renderText(text string) template.HTML {
 	var b strings.Builder
 	lines := strings.Split(text, "\n")
@@ -340,14 +341,60 @@ func renderText(text string) template.HTML {
 	return template.HTML(b.String())
 }
 
+// writeInline sets a run of words: Markdown links first, then what lies
+// between them. A link's words take code spans and nothing else — a URL
+// among them is words, never a link inside a link — and its address
+// shows on hover, since the words no longer say where it goes.
 func writeInline(b *strings.Builder, text string) {
 	last := 0
+	for _, m := range webLinks(text) {
+		writeCoded(b, text[last:m[0]], true)
+		u := html.EscapeString(text[m[4]:m[5]])
+		b.WriteString(`<a href="` + u + `" title="` + u + `" target="_blank" rel="noopener nofollow">`)
+		writeCoded(b, text[m[2]:m[3]], false)
+		b.WriteString(`</a>`)
+		last = m[1]
+	}
+	writeCoded(b, text[last:], true)
+}
+
+// webLinks are the Markdown links of a run of words, as card.Link's
+// submatch indexes, less those a code span claims: a code span binds
+// tighter, as in Markdown, so `[words](url)` inside backticks stays
+// literal, and only a span that sits wholly inside a link's words
+// leaves the link standing.
+func webLinks(text string) [][]int {
+	codes := webCode.FindAllStringIndex(text, -1)
+	var out [][]int
+	for _, m := range card.Link.FindAllStringSubmatchIndex(text, -1) {
+		free := true
+		for _, c := range codes {
+			if c[0] < m[1] && c[1] > m[0] && !(c[0] >= m[2] && c[1] <= m[3]) {
+				free = false
+				break
+			}
+		}
+		if free {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// writeCoded sets code spans, and the stretches between them plain or,
+// with links, with their bare URLs linked.
+func writeCoded(b *strings.Builder, text string, links bool) {
+	plain := writePlain
+	if links {
+		plain = writeLinked
+	}
+	last := 0
 	for _, m := range webCode.FindAllStringSubmatchIndex(text, -1) {
-		writeLinked(b, text[last:m[0]])
+		plain(b, text[last:m[0]])
 		b.WriteString("<code>" + html.EscapeString(text[m[2]:m[3]]) + "</code>")
 		last = m[1]
 	}
-	writeLinked(b, text[last:])
+	plain(b, text[last:])
 }
 
 func writeLinked(b *strings.Builder, s string) {
@@ -604,11 +651,18 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg 
 	s.webRender(w, r, code, &webData{Page: "error", Title: msg + " · " + r.Host, Message: msg})
 }
 
+// webWords is a post's text as plain words, for where no markup shows —
+// an excerpt, a title, a preview picture: heading marks dropped, a
+// Markdown link put back to its words.
+func webWords(text string) string {
+	return card.Unlink(webHeadingMark.ReplaceAllString(text, ""))
+}
+
 // excerpt is a post's first n characters or so, for the OpenGraph
 // description a chat app shows when a link is pasted: cut at a word
 // boundary when there is one in the second half, never mid-character.
 func excerpt(text string, n int) string {
-	text = strings.Join(strings.Fields(webHeadingMark.ReplaceAllString(text, "")), " ")
+	text = strings.Join(strings.Fields(webWords(text)), " ")
 	rs := []rune(text)
 	if len(rs) <= n {
 		return text
@@ -645,7 +699,7 @@ const titleMax = 70
 // question or exclamation mark stays.
 func opening(text string) string {
 	line := ""
-	for _, l := range strings.Split(webHeadingMark.ReplaceAllString(text, ""), "\n") {
+	for _, l := range strings.Split(webWords(text), "\n") {
 		if l = strings.Join(strings.Fields(l), " "); l != "" {
 			line = l
 			break

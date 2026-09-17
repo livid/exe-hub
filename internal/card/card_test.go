@@ -20,10 +20,41 @@ func TestFirst(t *testing.T) {
 		{"two https://a.example and https://b.example", "https://a.example"},
 		{"no link here", ""},
 		{"(https://a.example/p?q=1)", "https://a.example/p?q=1"},
+		{"a [Markdown link](https://a.example/p#frag) unfurls as a bare one", "https://a.example/p#frag"},
 	} {
 		if got := First(c.text); got != c.want {
 			t.Errorf("First(%q) = %q, want %q", c.text, got, c.want)
 		}
+	}
+}
+
+// TestLink: [words](url) is a link when the address is, whole, a URL the
+// bare matcher takes — so First and the link agree — and Unlink puts it
+// back to its words.
+func TestLink(t *testing.T) {
+	for _, c := range []struct{ text, words, addr string }{
+		{"see [MDN on order](https://developer.mozilla.org/order#accessibility).", "MDN on order", "https://developer.mozilla.org/order#accessibility"},
+		{"[说明](https://x.y/z)后文", "说明", "https://x.y/z"},
+		{"[a](javascript:alert(1))", "", ""},
+		{"[a](http://x.y/z.)", "", ""}, // the full stop the bare matcher leaves out
+		{"[a](https://x.y/w_(z))", "", ""},
+		{"[a](https://x.y/ z)", "", ""},
+		{"[](https://x.y)", "", ""},
+		{"[a\nb](https://x.y)", "", ""},
+	} {
+		m := Link.FindStringSubmatch(c.text)
+		if c.addr == "" {
+			if m != nil {
+				t.Errorf("Link matched %q: %q", c.text, m)
+			}
+			continue
+		}
+		if m == nil || m[1] != c.words || m[2] != c.addr || First(c.text) != c.addr {
+			t.Errorf("Link(%q) = %q, First %q; want %q → %q", c.text, m, First(c.text), c.words, c.addr)
+		}
+	}
+	if got := Unlink("a [b c](https://x.y) d [e](ftp://no) https://z.w"); got != "a b c d [e](ftp://no) https://z.w" {
+		t.Errorf("Unlink = %q", got)
 	}
 }
 
