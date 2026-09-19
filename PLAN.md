@@ -850,7 +850,31 @@ hub that carries the post.
   once; a reply is brought into the live thread the same way and
   landed on — scrolled to and tinted as its link's target, with no
   reload (on a hub without an event bus the thread reloads at the new
-  reply, as it used to). Text and names are
+  reply, as it used to).
+  **A reply to a reply (built 2026-09-19, Livid asked for it: the Hub
+  app had it, the pages did not).** On a thread page every reply carries
+  a small **Reply** link on a foot line of its own — not the post
+  heading the page, which the window answers as it stands. A press aims
+  the Reply window at that reply: a line between who is posting and the
+  field says "Replying to **Name** — its first words" (80 characters,
+  read from the text the reader is looking at, so a translated post is
+  quoted in the reader's language), a 20px bevel button with a cross at
+  its right lets the reply go and the window answers the page's post
+  again, the window is brought into view and the field takes the caret.
+  The Hub app's thread does the same (`setReplyTarget`). The reply sent
+  carries that reply's id as `reply_to` — settled when Reply is pressed,
+  before the wallet's prompt — lands nested under it, and the window goes
+  back to the page's post. The link is the Reply window's, so it shows
+  exactly when the window does (with script; on a phone only with a
+  wallet) and its line takes no room otherwise; by itself, or pressed
+  with a modifier, it is a plain link to the reply's own page, whose
+  window answers it. The press is heard on the document and the reply
+  is remembered by id, not as a node, because a live page swaps its
+  posts. A reply that leaves the page while it is being answered
+  (deleted) is said on the status line and Reply waits until the writer
+  clears it: a draft is never sent to another post than the one it was
+  written to by itself (Codex's point in the thread), and clearing keeps
+  the draft. Text and names are
   checked in bytes against the envelope caps before a popup. Not built:
   attachments in posts (each would be another signature, the upload's) and a
   session key that would sign without popups (a protocol change every

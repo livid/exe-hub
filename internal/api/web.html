@@ -203,6 +203,18 @@ a.mention { text-decoration: none; }
 .compose textarea, .compose input[type=text] { display: block; box-sizing: border-box; margin: 0; padding: 2px 5px;
   font: inherit; line-height: 16px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
   box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+/* the line that names the reply the window answers, between who is
+   posting and the field: "Replying to Name — its first words" on one
+   line, ellipsized, and a 20px bevel button whose cross lets the reply
+   go, so the window answers the page's post again. Not there at all
+   while the window answers the page's post, the default. */
+.compose .re-row { flex-wrap: nowrap; margin-top: 8px; }
+.compose .re-q { flex: 1 1 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compose .re-q b { font-size: 12px; color: #262626; }
+.compose .re-clear { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; min-width: 0; padding: 0; }
+.compose .re-clear .x { display: block; width: 8px; height: 8px; shape-rendering: crispEdges; }
+.compose .re-clear .x .k { fill: currentColor; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .compose .re-clear .x { shape-rendering: geometricPrecision; } }
 .compose .field { position: relative; margin: 8px 0; }
 .compose textarea { width: 100%; height: 56px; resize: vertical; }
 /* the "@" list: the people a mention may name, in the app contextual
@@ -397,6 +409,17 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .foot .count { white-space: nowrap; }
 .foot .latest { color: #666; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .foot .latest b { color: #444; }
+/* Reply, under each reply of a thread: it aims the Reply window at that
+   reply, as the Hub app's thread does. The link is that window's, so it
+   shows exactly when the window does — with script, and on a phone only
+   with a wallet — and its line takes no room otherwise. By itself it is
+   a plain link to the reply's own page, whose window answers it. */
+.foot.re { display: none; }
+.js .foot.re { display: flex; }
+@media (pointer: coarse) {
+  .js .foot.re { display: none; }
+  .js.solana .foot.re, .js.wallet .foot.re { display: flex; }
+}
 .pad { padding: 12px 14px; }
 .pad p { margin: 0 0 8px; }
 .join ol { margin: 6px 0 0; padding-left: 20px; }
@@ -1046,6 +1069,7 @@ document.addEventListener("click", e => {
 
   // ---- state ----
   let me = null, verdict = null, until = 0, busy = false, flash = "", timer = 0;
+  let target = null; // on a thread page: the reply this window answers instead of the page's post
   const watched = new WeakSet();
 
   function need(v) {
@@ -1057,6 +1081,7 @@ document.addEventListener("click", e => {
     if (v.banned) return "This key is banned from posting here.";
     if (v.gate === "below") return "This address holds less than " + need(v) + ", so it can read but not " + noun + ".";
     if (v.gate === "unavailable") return "The hub can’t check holdings right now. Try again later.";
+    if (target && target.gone) return "That reply is gone. Clear it to answer the thread instead.";
     if (left > 0) return "You can " + noun + " again in " + left + " s.";
     return "Each " + noun + " asks your wallet for one signature.";
   }
@@ -1069,7 +1094,7 @@ document.addEventListener("click", e => {
     const can = !!v && !v.banned && v.gate !== "below" && v.gate !== "unavailable";
     const t = text.value.trim();
     const over = bytes(t) - MAX_TEXT;
-    send.disabled = busy || !can || left > 0 || !t || over > 0;
+    send.disabled = busy || !can || left > 0 || !t || over > 0 || !!(target && target.gone);
     profileBtn.disabled = busy;
     status.textContent = over > 0 ? "That is " + over + " bytes past the " + MAX_TEXT + "-byte limit." : flash || line(left);
     if (left > 0 && !flash) timer = setTimeout(render, 1000);
@@ -1380,17 +1405,61 @@ document.addEventListener("click", e => {
     e.preventDefault();
     e.stopImmediatePropagation();
   }, true);
+  // ---- a reply to a reply (PLAN.md, Posting from a wallet) ----
+  // Every reply on a thread page carries a Reply link, and a press aims
+  // this window at that reply instead of the page's post: a line over
+  // the field names it and quotes its first words, and the cross lets it
+  // go. The Hub app's thread does the same (sysapps/hub setReplyTarget).
+  // The press is heard on the document and the reply is remembered by
+  // its id, never as a node, because a live page swaps its posts. A reply
+  // that leaves the page while it is being answered (deleted) is said so
+  // and Reply waits for the writer: words written to one post are never
+  // sent to another by themselves. A press with a modifier is the link
+  // it is — the reply's own page, in a new tab.
+  const reRow = q(".re-row"), reQ = q(".re-q"), reClear = q(".re-clear");
+  function showTarget() {
+    reRow.hidden = !target;
+    if (target) reQ.replaceChildren("Replying to ", Object.assign(document.createElement("b"), { textContent: target.name }), target.words ? " — " + target.words : "");
+    render();
+  }
+  function aim(post) {
+    const name = post.querySelector(".meta b"), said = post.querySelector(".text:not([hidden])");
+    const words = [...(said ? said.innerText.replace(/\s+/g, " ").trim() : "")];
+    target = { id: post.id, name: name ? name.textContent : "", words: words.length > 80 ? words.slice(0, 80).join("") + "…" : words.join("") };
+    showTarget();
+    box.closest(".window").scrollIntoView({ block: "center" });
+    text.focus({ preventScroll: true });
+  }
+  if (reRow) {
+    document.addEventListener("click", e => {
+      const a = e.target instanceof Element && e.target.closest("a.rlink");
+      const post = a && a.closest(".post");
+      if (!post || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      aim(post);
+    });
+    reClear.addEventListener("click", () => { target = null; showTarget(); text.focus(); });
+    // the thread's frame, which a live page rewrites: the page's post is its child
+    const head = document.getElementById(replyTo);
+    if (head) new MutationObserver(() => {
+      const gone = !!target && !document.getElementById(target.id);
+      if (target && gone !== !!target.gone) { target.gone = gone; render(); }
+    }).observe(head.parentNode, { childList: true });
+  }
   send.addEventListener("click", async () => {
     const t = withIds(text.value.trim());
-    if (!t || busy || !me) return;
+    if (!t || busy || !me || (target && target.gone)) return;
+    // the post answered is settled now, before the wallet's prompt
+    const to = target ? target.id : replyTo;
     busy = true;
     render();
     try {
       const body = { text: t };
-      if (replyTo) body.reply_to = replyTo;
+      if (to) body.reply_to = to;
       const id = await sendOp("post.create", body);
       text.value = "";
       picked.clear();
+      if (target && target.id === to) { target = null; showTarget(); }
       if (verdict.cooldown) until = Date.now() + verdict.cooldown * 1000;
       // a live page brings it in (a reply is landed on); a static one loads again, a thread at the new reply
       if (!window.hubRefresh) { if (replyTo) history.replaceState(null, "", "#" + id); location.reload(); return; }
@@ -1591,7 +1660,8 @@ document.addEventListener("click", e => {
   </div>
   <div class="in">
     <div class="row who-row"><span class="grow who-wrap"><a class="me-av" aria-label="Your page" hidden><img alt=""></a><span class="who"><b class="name">…</b> <span class="mono id"></span></span></span><button type="button" class="btn profile-btn">Profile…</button><button type="button" class="btn signout">Sign Out</button></div>
-    <div class="field"><textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea><div class="at-list" role="listbox" aria-label="Mention" hidden></div></div>
+    {{if .ReplyTo}}<div class="row re-row" hidden><span class="grow re-q"></span><button type="button" class="btn re-clear" aria-label="Answer the thread’s post instead">{{template "cross"}}</button></div>
+    {{end}}<div class="field"><textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea><div class="at-list" role="listbox" aria-label="Mention" hidden></div></div>
     <div class="row"><span class="grow status">Checking this address…</span><button type="button" class="btn send" disabled>{{if .ReplyTo}}Reply{{else}}Post{{end}}</button></div>
   </div>
   <div class="veil" hidden>
@@ -1612,6 +1682,11 @@ document.addEventListener("click", e => {
 {{define "arrow"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M4 0h1v1h-1zM3 1h2v1h-2zM2 2h3v1h-3zM1 3h10v1h-10zM0 4h11v1h-11zM1 5h10v1h-10zM2 6h3v1h-3zM3 7h2v1h-2zM4 8h1v1h-1z"/></svg>{{end}}
 {{define "arrow-r"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M6 0h1v1h-1zM6 1h2v1h-2zM6 2h3v1h-3zM0 3h10v1h-10zM0 4h11v1h-11zM0 5h10v1h-10zM6 6h3v1h-3zM6 7h2v1h-2zM6 8h1v1h-1z"/></svg>{{end}}
 
+{{/* the cross on the button that lets a reply go: 8×8, two 1px
+     diagonals — an even size, so it centres on whole pixels in the
+     button's 18px face */}}
+{{define "cross"}}<svg class="x" viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path class="k" d="M0 0h1v1h-1zM7 0h1v1h-1zM1 1h1v1h-1zM6 1h1v1h-1zM2 2h1v1h-1zM5 2h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM3 4h1v1h-1zM4 4h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM1 6h1v1h-1zM6 6h1v1h-1zM0 7h1v1h-1zM7 7h1v1h-1z"/></svg>{{end}}
+
 {{define "bell"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM4 2h1v1h-1zM9 2h1v1h-1zM3 3h1v1h-1zM10 3h1v1h-1zM3 4h1v1h-1zM10 4h1v1h-1zM3 5h1v1h-1zM10 5h1v1h-1zM3 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM11 7h1v1h-1zM1 8h1v1h-1zM12 8h1v1h-1zM0 9h1v1h-1zM13 9h1v1h-1zM0 10h14v1h-14zM5 11h4v1h-4zM6 12h2v1h-2z"/><path class="s" d="M7 1h1v1h-1zM8 2h1v1h-1zM9 3h1v1h-1zM9 4h1v1h-1zM9 5h1v1h-1zM9 6h1v1h-1zM10 7h1v1h-1zM10 8h2v1h-2zM1 9h12v1h-12z"/><path class="f" d="M6 1h1v1h-1zM6 2h2v1h-2zM5 3h4v1h-4zM5 4h4v1h-4zM5 5h4v1h-4zM4 6h5v1h-5zM3 7h7v1h-7zM2 8h8v1h-8z"/><path class="w" d="M5 2h1v1h-1zM4 3h1v1h-1zM4 4h1v1h-1zM4 5h1v1h-1z"/></svg>{{end}}
 
 {{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}{{if gt .Depth 1}} deep{{end}}{{if .Quote}} qhead{{end}}{{if .QuoteRun}} qrun{{end}}" id="{{.ID}}"{{if gt .Depth 1}} style="--d:{{.Depth}}"{{end}}>
@@ -1622,6 +1697,7 @@ document.addEventListener("click", e => {
     {{if .Text}}{{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text"{{if .Lang}} lang="{{.Lang}}"{{end}}{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>{{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.ID}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}{{end}}
     {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">Archived copy{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
     {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}Sound{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Page{{end}}">{{if .Filename}}{{.Filename}}{{else}}Page{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>download</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
+    {{if .InThread}}<div class="foot re"><a class="rlink" role="button" href="/p/{{.ID}}{{.Q}}">Reply</a></div>{{end}}
     {{if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}{{.Q}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a>{{with .Latest}}<a class="latest" href="/p/{{$.ID}}{{$.Q}}#{{.ID}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}</div>{{end}}
   </div>
 </div>

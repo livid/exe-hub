@@ -220,6 +220,27 @@ func TestWebThreadProfile(t *testing.T) {
 	if strings.Contains(body, `<a href="/p/`+root+`">in reply to</a>`) {
 		t.Error("a direct reply on the thread page still links back to the same page")
 	}
+	// every reply carries a Reply link, which the page's script turns into
+	// the Reply window's aim and which by itself leads to the reply's own
+	// page; the post heading the page has none (the window answers it as
+	// it stands), and the window has the line that names the reply, hidden
+	for _, id := range []string{reply, deep} {
+		if !strings.Contains(body, `<div class="foot re"><a class="rlink" role="button" href="/p/`+id+`">Reply</a></div>`) {
+			t.Errorf("reply %s lacks its Reply link", id)
+		}
+	}
+	if strings.Contains(body, `class="rlink" role="button" href="/p/`+root+`"`) || strings.Count(body, `class="rlink"`) != 2 {
+		t.Error("the thread's head carries a Reply link, or the links are not one a reply")
+	}
+	if !strings.Contains(body, `<div class="row re-row" hidden><span class="grow re-q"></span><button type="button" class="btn re-clear"`) {
+		t.Error("the Reply window lacks the line naming the reply it answers")
+	}
+	// nowhere else: a feed or a profile has no Reply window to aim
+	for _, path := range []string{"/", "/u/" + identity.Fingerprint(pub)} {
+		if _, other := get(t, h, path); strings.Contains(other, `class="rlink"`) || strings.Contains(other, `class="row re-row"`) {
+			t.Errorf("%s carries a Reply link or the reply line", path)
+		}
+	}
 	// the JSON keeps the one-level replies and adds the tree with depths
 	if code, body := get(t, h, "/v1/post/"+root); code != 200 || !strings.Contains(body, `"thread":[`) || !strings.Contains(body, `"depth":2`) {
 		t.Errorf("post JSON lacks the thread: %d %s", code, body)
