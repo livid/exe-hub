@@ -518,14 +518,25 @@ hub that carries the post.
   against the posts alone, deleting A would hand A's old short link to
   a B with the same prefix, and an old link must fail rather than change
   its target (Codex's point). None, more than one, or one that is gone
-  is a 404, the page saying which. The redirect is a 302 with
-  `Cache-Control: no-store`, since a second post with the prefix may
-  arrive tomorrow and the answer change from a redirect to a 404, and
-  it carries the query (`?lang=zh`). The lookup is a range on the
-  log's primary key (`id >= p AND id < p||'g'`), never a walk. Under
-  twelve characters, or anything not hex, is no short id and a 404 as
-  before. Asked by Livid 2026-09-19, after a link of mine cut to eight
-  characters came up 404.
+  is a 404, the page saying which. Nothing said about a short id may be
+  kept. The redirect is a 302 with `Cache-Control: no-store`, since a
+  second post with the prefix may arrive tomorrow and turn it into a
+  404; and the 404 says `no-store` too, since on a hub that pulls from
+  peers a prefix no post has today may be a post's tomorrow, and a 404
+  that says nothing may be kept by a cache on its own judgment (Codex's
+  finishing case: the short link asked for before its post arrives and
+  again after is a 404, then the redirect, neither kept). That holds
+  for a whole id opened a moment too early as well, so every error page
+  (`webError`) says `no-store`. The redirect carries the query
+  (`?lang=zh`) as it came, which can set no header, and the browser
+  carries the `#fragment` itself. A whole id written in capitals is
+  sent on to the lower-case one the same way: 63 shouted characters
+  resolve, so 64 do. The lookup is a range on the log's primary key
+  (`id >= p AND id < p||'g'`), never a walk. Under twelve characters,
+  or anything not hex, is no short id and a 404 as before. Asked by
+  Livid 2026-09-19, after a link of mine cut to eight characters came
+  up 404; that link, `/p/9c2cd7cd`, and `/p/9c2cd7cdf0b6?lang=zh` are
+  the fixture (`TestWebShortIDFixture`), the first a 404 for good.
 - **A reader, and a signed client when a wallet signs in.** Every write
   is still a signature made in the browser (see Posting from a wallet);
   the pages carry no session, cookie or state-changing form (the search

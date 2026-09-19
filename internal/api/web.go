@@ -1027,7 +1027,14 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	}
 }
 
+// webError is the page that says what went wrong. What it says is true
+// for now and may not be kept: a post that is not here may be on its way
+// from a peer, a profile may be set tomorrow, a store that could not be
+// read will be. A 404 without a word on caching may be kept by a cache
+// on its own judgment (RFC 9110, heuristic freshness), and a link opened
+// a moment too early would stay "No such post." after the post arrived.
 func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg string) {
+	w.Header().Set("Cache-Control", "no-store")
 	s.webRender(w, r, code, &webData{Page: "error", Title: msg + " · " + r.Host, Message: msg})
 }
 
@@ -1236,26 +1243,39 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	s.webRender(w, r, http.StatusOK, d)
 }
 
-// webShortID says id could be the start of a post's id rather than a
-// whole one: hex, store.PostPrefixMin characters or more, under the 64 of
-// a whole id. Case is the writer's; the ids are lower-case.
+// webShortID says id is not a post's address but may find one: the start
+// of an id — hex, store.PostPrefixMin characters or more — or a whole id
+// in the wrong case. It comes back lower-case, as the ids are; a whole id
+// as it is written is the page itself and no short id.
 func webShortID(id string) (string, bool) {
-	id = strings.ToLower(id)
-	if len(id) < store.PostPrefixMin || len(id) >= 64 || strings.Trim(id, "0123456789abcdef") != "" {
+	low := strings.ToLower(id)
+	if len(low) < store.PostPrefixMin || len(low) > 64 || strings.Trim(low, "0123456789abcdef") != "" {
 		return "", false
 	}
-	return id, true
+	if len(low) == 64 && low == id {
+		return "", false
+	}
+	return low, true
 }
 
 // handleThreadPage: /p/{id} is a post and the thread under it. The start
 // of an id, twelve characters or more, is sent on to the whole one (see
-// PLAN.md, Public pages — a short id finds its post): a 302 that nothing
-// may keep, since a second post with the prefix can arrive and turn the
-// answer into a 404, the query carried so ?lang= lasts. The page has one
-// address, the whole id; a prefix only finds it.
+// PLAN.md, Public pages — a short id finds its post), the query carried
+// so ?lang= lasts; the browser carries the #fragment itself. The page
+// has one address, the whole id; a short one only finds it. Nothing
+// said about a short id may be kept, the redirect or the 404: a second
+// post with the prefix can arrive and turn the one into the other, and
+// on a hub that pulls from peers a prefix no post has today may be a
+// post's tomorrow.
 func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 	if short, ok := webShortID(r.PathValue("id")); ok {
-		id, err := s.St.ResolvePrefix(short)
+		w.Header().Set("Cache-Control", "no-store")
+		id, err := short, error(nil)
+		if len(short) < 64 {
+			id, err = s.St.ResolvePrefix(short)
+		} else if _, err = s.St.Post(short); err != nil {
+			id = "" // a whole id in capitals that is no post's
+		}
 		switch {
 		case errors.Is(err, store.ErrAmbiguous):
 			s.webError(w, r, http.StatusNotFound, "More than one post begins that way. Use the whole id.")
@@ -1268,7 +1288,6 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 			if r.URL.RawQuery != "" {
 				to += "?" + r.URL.RawQuery
 			}
-			w.Header().Set("Cache-Control", "no-store")
 			http.Redirect(w, r, to, http.StatusFound)
 		}
 		return
