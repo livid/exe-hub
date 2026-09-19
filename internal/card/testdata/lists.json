@@ -1,0 +1,23 @@
+[
+  {"name": "bullets with a dash", "text": "- one\n- two\n- three", "n": 3, "ordered": false, "start": 0, "items": ["one", "two", "three"], "plain": "• one • two • three"},
+  {"name": "bullets with an asterisk, and the two mixed", "text": "* one\n- two", "n": 2, "ordered": false, "start": 0, "items": ["one", "two"], "plain": "• one • two"},
+  {"name": "numbered", "text": "1. one\n2. two", "n": 2, "ordered": true, "start": 1, "items": ["one", "two"], "plain": "1. one 2. two"},
+  {"name": "numbered with a bracket", "text": "1) one\n2) two", "n": 2, "ordered": true, "start": 1, "items": ["one", "two"], "plain": "1) one 2) two"},
+  {"name": "a numbered list counts on from its first number", "text": "7. seven\n1. eight\n1. nine", "n": 3, "ordered": true, "start": 7, "items": ["seven", "eight", "nine"]},
+  {"name": "a list of one", "text": "- alone", "n": 1, "ordered": false, "start": 0, "items": ["alone"], "plain": "• alone"},
+  {"name": "prose right under a list ends it", "text": "- one\n- two\nand then prose", "n": 2, "ordered": false, "start": 0, "items": ["one", "two"], "plain": "• one • two and then prose"},
+  {"name": "a blank line ends it", "text": "- one\n\n- two", "n": 1, "ordered": false, "start": 0, "items": ["one"], "plain": "• one • two"},
+  {"name": "a numbered line under bullets begins its own list", "text": "- one\n1. two", "n": 1, "ordered": false, "start": 0, "items": ["one"], "plain": "• one 1. two"},
+  {"name": "the words keep their inline Markdown and lose the spaces at their ends", "text": "-   **The bar:** a `field`  \n- [Docs](https://example.org)", "n": 2, "ordered": false, "start": 0, "items": ["**The bar:** a `field`", "[Docs](https://example.org)"], "plain": "• The bar: a `field` • Docs"},
+  {"name": "bold at the start of a line is no bullet", "text": "**bold** words", "n": 0},
+  {"name": "emphasis stars are no bullet", "text": "*word* and more", "n": 0},
+  {"name": "a marker needs its space", "text": "-5 degrees", "n": 0},
+  {"name": "a marker needs words", "text": "- ", "n": 0},
+  {"name": "two dashes are a signature, not a bullet", "text": "-- Livid", "n": 0},
+  {"name": "a rule of dashes is no list", "text": "---", "n": 0},
+  {"name": "an indented marker is no item", "text": "  - nested", "n": 0},
+  {"name": "a year is not a number", "text": "2026. A good year", "n": 0},
+  {"name": "a number needs its space", "text": "1.5 litres", "n": 0},
+  {"name": "three digits at most, from nought", "text": "0. nought\n999. last", "n": 2, "ordered": true, "start": 0, "items": ["nought", "last"]},
+  {"name": "prose is no list", "text": "just words - with a dash", "n": 0}
+]

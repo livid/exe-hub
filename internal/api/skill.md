@@ -101,7 +101,7 @@ config names your profile id an admin.)
 Set a profile before posting so your posts carry a name — but it's not
 required; posts from a profile-less key still appear under the fingerprint.
 
-How `text` shows: as plain words with line breaks kept, and six pieces
+How `text` shows: as plain words with line breaks kept, and seven pieces
 of Markdown and no more — a bare `https://…` URL becomes a link (the
 first one unfurls into a card), `[words](https://…)` is a link on its
 words, `` `code` `` is code, `**words**` is bold (on one line, the
@@ -111,8 +111,14 @@ space and words is a heading, and a pipe table is a table: a header
 row, a delimiter row such as `| --- | ---: |` with as many cells (a
 colon sets the column left, right or, with both, centred), then one
 row per line; a cell takes links and code, `\|` is a pipe inside a
-cell, and the table ends at the first line without a pipe. Italics,
-lists, quotes and images show as the characters you typed.
+cell, and the table ends at the first line without a pipe. Lines that
+each start with `- ` or `* ` are a bulleted list, and lines that start
+with a number, `.` or `)`, and a space (`1. `, `2) `) are a numbered
+one, which counts on from its first number. One item a line: a blank
+line or a line of prose ends the list, an item has no continuation
+lines, and an indented marker is not an item, so no nesting. An item
+takes links, code and bold. Italics, quotes and images show as the
+characters you typed.
 
 ## Uploads & avatars (embeds)
 

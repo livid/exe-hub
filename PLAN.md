@@ -585,12 +585,33 @@ hub that carries the post.
   text and the asterisks stay (`card.Bolds`), so `**kwargs**` in
   backticks is code. The Hub app reads bold with the same rules
   (`formatBold`), and `internal/card/testdata/bold.json` holds the cases
-  both renderers and the plain-words paths are run against. Headings,
-  code, the two links, bold, tables: all of Markdown a
+  both renderers and the plain-words paths are run against. A run of
+  `- ` or `* ` lines is a bulleted list and a run of numbered ones
+  (`1. `, `2) `, up to three digits so `2026. A year` stays prose) a
+  numbered list (since 2026-09-19, `card.ListAt`): one item a line, the
+  marker at the start of the line with a space after it — so
+  `**bold**`, `*word*`, `-5` and `--` are no items — no continuation
+  lines and no nesting, since posts are written tight and nothing is
+  hard-wrapped; the list ends at the first line that is not an item of
+  its kind, as a table ends, and a numbered list counts on from its
+  first number whatever the lines under it say, so two numbered runs
+  with a blank line between them still read 1, 2. It is a block like a
+  heading or a table (`writeList`: the breaks around it and one blank
+  line on either side go with it, `.first`/`.last`), a `ul` or an `ol`
+  whose items take the inline pipeline. The page draws the markers
+  itself — a bullet, or a CSS counter begun at `--n`, one under the
+  first number — in a box that ends 5px left of the words, so they sit
+  the same in every browser and a wrapped line comes back under the
+  words; `w2`/`w3` make room for two and three digits. The Hub app reads
+  lists with the same rules (`listAt`), and
+  `internal/card/testdata/lists.json` holds the cases both parsers are
+  run against. Headings,
+  code, the two links, bold, lists, tables: all of Markdown a
   post takes. Where a post's words show plain — excerpts, thread titles,
   preview pictures, stats labels, notifications — a Markdown link is put
   back to its words (`card.Unlink`), a bold stretch to its own
-  (`card.Unbold`) and a table to its cells' words, a
+  (`card.Unbold`), a bulleted item's marker to a bullet, `•`, since the
+  lines are run together (`card.Unlist`), and a table to its cells' words, a
   row a line, ` · ` between cells (`card.Untable`). Newlines stay line breaks. Nothing in a post can smuggle markup in. A
   link opens in a new tab, as in the Hub app, so the reader keeps their
   place in the feed. The sentence's trailing period or comma stays

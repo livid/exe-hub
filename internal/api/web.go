@@ -318,7 +318,10 @@ var (
 // scrolls sideways when the table is wider than the post, its cells
 // through the inline pipeline and its columns aligned by class; .first
 // when it opens the post and .last when it ends it, for no room on
-// that side — and elsewhere [words](url) set as a link on its words,
+// that side — a list (card.ListAt: "- " or "* " items, or numbered
+// ones) a block again, a ul or an ol of its items, each through the
+// inline pipeline, .first and .last as a table has them — and
+// elsewhere [words](url) set as a link on its words,
 // URLs outside code spans wrapped in anchors that open in a new tab,
 // code spans set in <code>, newlines kept as line breaks.
 func renderText(text string) template.HTML {
@@ -350,6 +353,10 @@ func renderText(text string) template.HTML {
 			block()
 			i += n - 1
 			writeTable(&b, t, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "")
+		} else if l, n := card.ListAt(lines, i); l != nil {
+			block()
+			i += n - 1
+			writeList(&b, l, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "")
 		} else {
 			plain += lines[i]
 			if i < len(lines)-1 {
@@ -401,6 +408,40 @@ func writeTable(b *strings.Builder, t *card.Table, first, last bool) {
 		b.WriteString("</tbody>")
 	}
 	b.WriteString("</table></div>\n")
+}
+
+// writeList sets a list: a ul, or an ol that counts on from the list's
+// first number — the page draws its own markers (web.html, a CSS
+// counter begun at --n, one under the first number), so that number
+// rides in the style, and the class w2 or w3 says how many digits the
+// widest marker has, for the room it needs left of the words.
+func writeList(b *strings.Builder, l *card.List, first, last bool) {
+	tag, class, style := "ul", "", ""
+	if l.Ordered {
+		tag = "ol"
+		if n := len(strconv.Itoa(l.Start + len(l.Items) - 1)); n > 1 {
+			class = " w" + strconv.Itoa(n)
+		}
+		if l.Start != 1 {
+			style = ` style="--n:` + strconv.Itoa(l.Start-1) + `"`
+		}
+	}
+	if first {
+		class += " first"
+	}
+	if last {
+		class += " last"
+	}
+	if class != "" {
+		class = ` class="` + class[1:] + `"`
+	}
+	b.WriteString("<" + tag + class + style + ">")
+	for _, item := range l.Items {
+		b.WriteString("<li>")
+		writeInline(b, item)
+		b.WriteString("</li>")
+	}
+	b.WriteString("</" + tag + ">\n")
 }
 
 // writeInline sets a run of words: **bold** first (card.Bolds), the
@@ -833,10 +874,10 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg 
 
 // webWords is a post's text as plain words, for where no markup shows —
 // an excerpt, a title, a preview picture: heading marks dropped, a
-// table put back to its cells' words, a Markdown link and a bold
-// stretch to theirs.
+// table put back to its cells' words, a bulleted item's marker to a
+// bullet, a Markdown link and a bold stretch to their words.
 func webWords(text string) string {
-	return card.Unbold(card.Unlink(card.Untable(webHeadingMark.ReplaceAllString(text, ""))))
+	return card.Unbold(card.Unlink(card.Unlist(card.Untable(webHeadingMark.ReplaceAllString(text, "")))))
 }
 
 // excerpt is a post's first n characters or so, for the OpenGraph

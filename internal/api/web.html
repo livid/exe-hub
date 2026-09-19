@@ -271,6 +271,26 @@ a { color: #333399; }
 .meta a:hover { text-decoration: underline; }
 .mono { font-family: Monaco, "Courier New", monospace; font-size: 11px; }
 .text { margin-top: 2px; overflow-wrap: anywhere; }
+/* a list (web.go writeList: "- " or "* " items, or numbered ones): a
+   block like a table — 8px above and below, none on the side that opens
+   (.first) or ends (.last) the post — its items hung: the marker stands
+   in the room left of the words, right-aligned 5px from them, and a
+   wrapped line comes back under the words, not under the marker. The
+   page draws the markers itself, a bullet or a counter begun at --n, so
+   they sit to the pixel the same in every browser; w2 and w3 make room
+   for two and three digits. The Hub app carries the same numbers. */
+.text ul, .text ol { margin: 8px 0; padding: 0; list-style: none; }
+.text ul.last, .text ol.last { margin-bottom: 0; }
+.text ol { counter-reset: item var(--n, 0); }
+.text li { position: relative; margin: 0; padding-left: 14px; }
+.text li + li { margin-top: 2px; }
+.text ol > li { padding-left: 18px; counter-increment: item; }
+.text ol.w2 > li { padding-left: 25px; }
+.text ol.w3 > li { padding-left: 32px; }
+.text li::before { box-sizing: border-box; position: absolute; left: 0; top: 0; width: 9px; text-align: right; content: "\2022"; }
+.text ol > li::before { width: 13px; content: counter(item) "."; }
+.text ol.w2 > li::before { width: 20px; }
+.text ol.w3 > li::before { width: 27px; }
 /* a found word on a search page (web.go markHits): highlighter yellow
    behind the type, which keeps its own colour — a link stays blue — its
    weight and its width, so a marked post sets as it does in the feed.

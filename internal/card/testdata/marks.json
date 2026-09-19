@@ -9,6 +9,7 @@
   {"name": "every word of the query", "text": "Pieces of code", "q": "pie code", "marks": ["Pie", "code"]},
   {"name": "in a bare link's address, which is its words", "text": "see https://example.com/pie-recipes now", "q": "pie", "marks": ["pie"]},
   {"name": "in a heading, a link's words, code, bold and a table cell", "text": "# Pie day\n\n[pie shop](https://x.y/) and `pie()` and **pie**\n\n| Dish |\n| --- |\n| Pie |", "q": "pie", "marks": ["Pie", "pie", "pie", "pie", "Pie"]},
+  {"name": "in the items of a list, bulleted or numbered", "text": "- apple pie\n- cherry\n\n1. pie chart", "q": "pie", "marks": ["pie", "pie"]},
   {"name": "markup in a query is words", "text": "a <b> pie", "q": "<b>", "marks": ["<b>"]},
   {"name": "quotes are characters", "text": "say \"pie\" and 'pie'", "q": "\"pie\" 'pie'", "marks": ["\"pie\"", "'pie'"]},
   {"name": "a stretch never spans two elements", "text": "**bo**ld", "q": "bold", "marks": []},
