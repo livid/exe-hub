@@ -505,6 +505,27 @@ OpenGraph title, description (an excerpt) and a picture (see Link
 previews below). Post ids are content hashes, so one link resolves on any
 hub that carries the post.
 
+- **A short id finds its post (built 2026-09-19).** `/p/` takes the
+  start of a post's id, twelve hex characters or more, and answers with
+  a redirect to the whole one, so a link cut short while being written
+  or pasted still lands, and the page a reader arrives on, shares or a
+  crawler keeps has one address, the full id. A prefix is a way to look
+  a post up, never its identity: signed replies and deletes, the JSON
+  API and every link the pages write carry whole ids. It resolves only
+  when exactly one post ever had it. The test is made against the log,
+  every `post.create` in `messages`, deleted posts included, and only
+  then is the one match required to still be a post: were it made
+  against the posts alone, deleting A would hand A's old short link to
+  a B with the same prefix, and an old link must fail rather than change
+  its target (Codex's point). None, more than one, or one that is gone
+  is a 404, the page saying which. The redirect is a 302 with
+  `Cache-Control: no-store`, since a second post with the prefix may
+  arrive tomorrow and the answer change from a redirect to a 404, and
+  it carries the query (`?lang=zh`). The lookup is a range on the
+  log's primary key (`id >= p AND id < p||'g'`), never a walk. Under
+  twelve characters, or anything not hex, is no short id and a 404 as
+  before. Asked by Livid 2026-09-19, after a link of mine cut to eight
+  characters came up 404.
 - **A reader, and a signed client when a wallet signs in.** Every write
   is still a signature made in the browser (see Posting from a wallet);
   the pages carry no session, cookie or state-changing form (the search

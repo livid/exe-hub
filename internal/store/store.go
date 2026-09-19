@@ -28,6 +28,7 @@ var (
 	ErrFacts     = errors.New("embed player facts differ from the conversion's")
 	ErrNotAvatar = errors.New("avatar must be a CID from /v1/avatar")
 	ErrNotFound  = errors.New("not found")
+	ErrAmbiguous = errors.New("more than one post begins that way")
 )
 
 type Store struct {
@@ -1516,6 +1517,64 @@ func (s *Store) SearchCount(q string) (int, error) {
 }
 
 // Post returns one post; Replies its children oldest-first (thread order).
+// PostPrefixMin is the fewest characters of an id that may stand for the
+// whole: twelve hex, 48 bits, which no two posts share by chance at any
+// size this hub will see — and ResolvePrefix never trusts to chance.
+const PostPrefixMin = 12
+
+// ResolvePrefix is the whole id of the post whose id begins with prefix
+// (lower-case hex, PostPrefixMin characters or more; see PLAN.md, Public
+// pages — a short id finds its post). It answers only when exactly one
+// post ever began that way: the test is made against the log, every
+// post.create in messages, deleted posts included, and only then is the
+// one match required to still be a post. Made against the posts alone,
+// deleting A would hand A's old short link to a B with the same prefix;
+// an old link fails rather than change its target. ErrAmbiguous for more
+// than one, ErrNotFound for none or a post that is gone. The lookup is a
+// range on the log's primary key, never a walk: every id under the
+// prefix sorts from the prefix itself to below the prefix with a 'g',
+// the character after hex's last.
+func (s *Store) ResolvePrefix(prefix string) (string, error) {
+	if len(prefix) < PostPrefixMin || len(prefix) >= 64 || strings.Trim(prefix, "0123456789abcdef") != "" {
+		return "", ErrNotFound
+	}
+	rows, err := s.db.Query(prefixQuery, prefix, prefix+"g")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	rows.Close()
+	switch len(ids) {
+	case 0:
+		return "", ErrNotFound
+	case 1:
+	default:
+		return "", ErrAmbiguous
+	}
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE id = ?`, ids[0]).Scan(&n); err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", ErrNotFound
+	}
+	return ids[0], nil
+}
+
+// two are enough to know there is more than one
+const prefixQuery = `SELECT id FROM messages WHERE id >= ? AND id < ? AND type = 'post.create' LIMIT 2`
+
 func (s *Store) Post(id string) (*FeedPost, error) {
 	rows, err := s.db.Query(feedQuery+`WHERE p.id = ?`, id)
 	if err != nil {

@@ -1236,7 +1236,43 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	s.webRender(w, r, http.StatusOK, d)
 }
 
+// webShortID says id could be the start of a post's id rather than a
+// whole one: hex, store.PostPrefixMin characters or more, under the 64 of
+// a whole id. Case is the writer's; the ids are lower-case.
+func webShortID(id string) (string, bool) {
+	id = strings.ToLower(id)
+	if len(id) < store.PostPrefixMin || len(id) >= 64 || strings.Trim(id, "0123456789abcdef") != "" {
+		return "", false
+	}
+	return id, true
+}
+
+// handleThreadPage: /p/{id} is a post and the thread under it. The start
+// of an id, twelve characters or more, is sent on to the whole one (see
+// PLAN.md, Public pages — a short id finds its post): a 302 that nothing
+// may keep, since a second post with the prefix can arrive and turn the
+// answer into a 404, the query carried so ?lang= lasts. The page has one
+// address, the whole id; a prefix only finds it.
 func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
+	if short, ok := webShortID(r.PathValue("id")); ok {
+		id, err := s.St.ResolvePrefix(short)
+		switch {
+		case errors.Is(err, store.ErrAmbiguous):
+			s.webError(w, r, http.StatusNotFound, "More than one post begins that way. Use the whole id.")
+		case errors.Is(err, store.ErrNotFound):
+			s.webError(w, r, http.StatusNotFound, "No such post.")
+		case err != nil:
+			s.webError(w, r, http.StatusInternalServerError, "The post could not be read.")
+		default:
+			to := "/p/" + id
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			http.Redirect(w, r, to, http.StatusFound)
+		}
+		return
+	}
 	p, err := s.St.Post(r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
 		s.webError(w, r, http.StatusNotFound, "No such post.")

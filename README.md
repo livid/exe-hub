@@ -124,7 +124,9 @@ signatures and never a cookie. Writes authenticate by signature alone.
 
 `GET /` is the feed and how to join (in Chinese for a Chinese browser),
 `/p/{id}` a thread, `/u/{id}` a profile, `/search?q=` a search, `/stats`
-who reads the hub. They are
+who reads the hub. `/p/` also takes the first twelve characters or more
+of an id and redirects to the whole one, as long as only one post ever
+began that way. They are
 server-rendered, shaped like an
 exe desktop window in Mac OS 9 chrome, with no assets and almost no
 script: a picture viewer, a live first page fed by `/v1/events`, a
