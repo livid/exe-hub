@@ -191,7 +191,7 @@ func TestWebTrNote(t *testing.T) {
 		{en, "zh-Hans", "Translated from Chinese"}, {en, "zh-Hant", "Translated from Chinese"}, {en, "sr-Latn", "Translated from Serbian"},
 		{zh, "en", "译自英语"}, {zh, "zh-Hant", "译自繁体中文"}, {zh, "sr-Latn", "译自塞尔维亚语"}, {zh, "ja", "译自日语"},
 	} {
-		if got := c.rd.tr(store.Translation{Text: "x", From: c.from}).Note; got != c.want {
+		if got := c.rd.tr(store.Translation{Text: "x", From: c.from}, nil).Note; got != c.want {
 			t.Errorf("%s for %s = %q, want %q", c.from, c.rd.Reader, got, c.want)
 		}
 	}

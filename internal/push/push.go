@@ -311,7 +311,7 @@ func message(p *store.FeedPost) Message {
 	if who == "" {
 		who = p.Author
 	}
-	m := Message{Title: who, Body: excerpt(p.Text, 200), URL: "/p/" + p.ID, Tag: p.ID}
+	m := Message{Title: who, Body: excerpt(card.NameMentions(p.Text, p.Mentions), 200), URL: "/p/" + p.ID, Tag: p.ID}
 	if p.ReplyTo != "" {
 		m.Title, m.URL = who+" replied", "/p/"+p.ReplyTo
 	}

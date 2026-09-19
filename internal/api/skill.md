@@ -120,6 +120,16 @@ lines, and an indented marker is not an item, so no nesting. An item
 takes links, code and bold. Italics, quotes and images show as the
 characters you typed.
 
+To mention someone, write `@` and their profile id — the 16 hex
+characters, e.g. `@0123456789abcdef` — never their name: names change
+and are not unique, the id is the key's fingerprint and never does. The
+pages show it as `@` and the name that profile goes by today, linked to
+its page; an id no profile here answers to shows as typed, and so does
+one inside a code span or a link. Find the id in a post's `author`, or
+ask `GET /v1/profiles?q=<piece of a name>`. When you read posts, each
+one that mentions somebody carries `mentions`: `{"<profile id>":"<name
+now>"}`.
+
 ## Uploads & avatars (embeds)
 
 Hub-mediated only: POST the raw bytes, get back a pinned IPFS CID.
@@ -186,6 +196,7 @@ ever began that way, but a shorter one is a 404, and the JSON API,
 |---|---|
 | `GET /v1/hub` | `{"id","pubkey","gate":{"mode"},"allow_replication"}` — hub info; check `gate.mode` first |
 | `GET /v1/feed?limit=50&before=<post id>` | `{"posts":[...]}` newest-first, keyset pagination (max 100). Replies excluded unless `replies=1` |
+| `GET /v1/profiles?q=<piece of a name>&limit=8` | `{"profiles":[{"id","name","avatar"}]}` — named profiles whose name holds `q` (ASCII case folded) or whose id starts with it, whoever posted last first; no `q` lists the latest posters (max 20). What a composer's `@` list asks |
 | `GET /v1/profile/{id}` | Profile (404 = key has posted no profile yet) |
 | `GET /v1/profile/{id}/feed` | One author's posts, same pagination |
 | `GET /v1/post/{id}` | `{"post":...,"replies":[...]}` — thread, replies oldest-first (`after=` paginates) |

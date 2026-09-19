@@ -100,7 +100,7 @@ func (s *Server) handlePreviewPost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	body := webWords(p.Text)
+	body := webWords(named(*p))
 	if strings.TrimSpace(body) == "" {
 		body = previewNoWords(*p)
 	}

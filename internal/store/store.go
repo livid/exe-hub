@@ -18,6 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"exehub/internal/envelope"
+	"exehub/internal/mention"
 )
 
 var (
@@ -819,6 +820,10 @@ type FeedPost struct {
 	// see Feed — a reply bumps its thread in the home feed)
 	Activity  int64     `json:"activity,omitempty"`
 	LastReply *ReplyRef `json:"last_reply,omitempty"`
+	// the profiles its text mentions ("@" and a profile id), id to the
+	// name each goes by today — its newest reply's too (see PLAN.md,
+	// Mentions)
+	Mentions map[string]string `json:"mentions,omitempty"`
 }
 
 // ReplyRef is the newest reply in a thread, as the root carries it.
@@ -952,7 +957,110 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 			}
 		}
 	}
+	if err := s.nameMentions(out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// nameMentions gives each post the names of the profiles its text
+// mentions, as they are now: one lookup for the page, and none when no
+// post holds an "@".
+func (s *Store) nameMentions(posts []FeedPost) error {
+	ids := make([][]string, len(posts))
+	var all []string
+	for i, p := range posts {
+		if p.LastReply != nil {
+			ids[i] = mention.IDs(p.Text, p.LastReply.Text)
+		} else {
+			ids[i] = mention.IDs(p.Text)
+		}
+		all = append(all, ids[i]...)
+	}
+	if len(all) == 0 {
+		return nil
+	}
+	names, err := s.ProfileNames(all)
+	if err != nil {
+		return err
+	}
+	for i := range posts {
+		for _, id := range ids[i] {
+			if name := names[id]; name != "" {
+				if posts[i].Mentions == nil {
+					posts[i].Mentions = map[string]string{}
+				}
+				posts[i].Mentions[id] = name
+			}
+		}
+	}
+	return nil
+}
+
+// ProfileNames is the name each of ids goes by, for those that are
+// profiles here with a name.
+func (s *Store) ProfileNames(ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	for len(ids) > 0 {
+		n := min(len(ids), 500)
+		args := make([]any, n)
+		for i, id := range ids[:n] {
+			args[i] = id
+		}
+		rows, err := s.db.Query(`SELECT id, name FROM profiles WHERE name != '' AND id IN (?`+strings.Repeat(",?", n-1)+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id, name string
+			if err := rows.Scan(&id, &name); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[id] = name
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+		ids = ids[n:]
+	}
+	return out, nil
+}
+
+// ProfileHit is one profile a composer offers to mention.
+type ProfileHit struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Avatar string `json:"avatar,omitempty"`
+}
+
+// FindProfiles is the named profiles a composer offers for what has been
+// typed after an "@": those whose name holds q, or whose id begins with
+// it, the ones that posted last first — whoever is in the conversation
+// is who gets mentioned. An empty q is everyone, in that order. Banned
+// profiles are left out. LIKE folds ASCII case and no other, as the
+// search does.
+func (s *Store) FindProfiles(q string, limit int) ([]ProfileHit, error) {
+	esc := likeEscaper.Replace(q)
+	rows, err := s.db.Query(`SELECT pr.id, pr.name, pr.avatar
+		FROM profiles pr
+		WHERE pr.name != '' AND (pr.name LIKE ? ESCAPE '\' OR pr.id LIKE ? ESCAPE '\')
+		  AND NOT EXISTS (SELECT 1 FROM bans b WHERE b.target = pr.id)
+		ORDER BY IFNULL((SELECT MAX(p.received) FROM posts p WHERE p.author = pr.id), 0) DESC, pr.updated DESC, pr.id
+		LIMIT ?`, "%"+esc+"%", strings.ToLower(esc)+"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ProfileHit{}
+	for rows.Next() {
+		var h ProfileHit
+		if err := rows.Scan(&h.ID, &h.Name, &h.Avatar); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) postEmbeds(post string) ([]envelope.Embed, error) {

@@ -269,3 +269,20 @@ func TestTidy(t *testing.T) {
 		t.Fatalf("rewrote %q", st.rewrote)
 	}
 }
+
+// a translation keeps the post's mentions as they were written: the id
+// is what the page turns into a name
+func TestCheckMentions(t *testing.T) {
+	post := "Thanks @0123456789abcdef, this fixes the feed for everyone who reads it on a phone."
+	if err := Check(post, "谢谢 @0123456789abcdef，这修好了所有在手机上阅读的人的信息流。", "zh-Hans"); err != nil {
+		t.Errorf("a kept mention: %v", err)
+	}
+	for _, out := range []string{
+		"谢谢 Livid，这修好了所有在手机上阅读的人的信息流。",
+		"谢谢 @0123456789abcdee，这修好了所有在手机上阅读的人的信息流。",
+	} {
+		if err := Check(post, out, "zh-Hans"); err == nil || !strings.Contains(err.Error(), "the mentions differ") {
+			t.Errorf("%q: %v", out, err)
+		}
+	}
+}

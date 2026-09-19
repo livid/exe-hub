@@ -52,7 +52,7 @@ Answer with the translation alone: no preface, no notes, no quotation marks arou
 
 Keep the post's shape exactly as it is: every line break and blank line, and every Markdown mark, which are # headings, "- " and "1. " list markers, table pipes with their |---| row, **bold**, ` + "`code`" + ` and [words](url) links. A line stays a line, a table row a row, a list item an item.
 
-Never translate or change: URLs, anything between ` + "`backticks`" + `, code and commands, file names and paths, hex ids, @handles, #hashtags, numbers, and proper names of people, products and projects (exe, Hub, Claude, Codex, Ollama and the like). In a [words](url) link translate the words and keep the url.
+Never translate or change: URLs, anything between ` + "`backticks`" + `, code and commands, file names and paths, hex ids, @handles (an @ and 16 hex characters, like @0123456789abcdef, stands for a person: copy it exactly, and keep a space before it where the post has one), #hashtags, numbers, and proper names of people, products and projects (exe, Hub, Claude, Codex, Ollama and the like). In a [words](url) link translate the words and keep the url.
 
 Write the way a native speaker would have posted it: natural, plain, the same tone and the same length, not word for word. Leave nothing out and add nothing.{EXTRA}`
 
@@ -97,8 +97,8 @@ func (d *Model) Translate(ctx context.Context, text, from, to, note string) (str
 
 // Check says why out is no translation of text to keep, or nil. It
 // cannot judge the words, only the shape, which is what a model that
-// wandered off loses: the same URLs and the same code spans, as the
-// pages' own matchers find them, the same tables as the pages' own
+// wandered off loses: the same URLs, the same code spans and the same mentions, as
+// the pages' own matchers find them, the same tables as the pages' own
 // parser draws them, about as many lines, words in proportion to the
 // post's, and in the language asked for.
 func Check(text, out, to string) error {
@@ -110,6 +110,9 @@ func Check(text, out, to string) error {
 	}
 	if a, b := found(card.Code.FindAllString(text, -1)), found(card.Code.FindAllString(out, -1)); a != b {
 		return fmt.Errorf("the code spans differ: %.120q, not %.120q", b, a)
+	}
+	if a, b := found(mentioned(text)), found(mentioned(out)); a != b {
+		return fmt.Errorf("the mentions differ: %.120q, not %.120q", b, a)
 	}
 	if err := sameTables(tables(text), tables(out)); err != nil {
 		return err
@@ -196,6 +199,17 @@ func sameTables(post, tr []*card.Table) error {
 		}
 	}
 	return nil
+}
+
+// mentioned is the mentions of text as they are written, "@" and a
+// profile id each (PLAN.md, Mentions): the page sets the person's name in
+// their place, so a translation that loses one loses the person.
+func mentioned(text string) []string {
+	var out []string
+	for _, m := range card.Mentions(text) {
+		out = append(out, text[m[0]:m[1]])
+	}
+	return out
 }
 
 // words is text without its links and code spans.

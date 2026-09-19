@@ -39,6 +39,9 @@
 body { margin: 0; padding: 24px 12px 48px; background: #ccc; color: #262626;
   font: 12px/1.45 "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; }
 a { color: #333399; }
+/* a mention: a person's name as it is today, linked to their page; a
+   name, so it is not underlined the way an address is */
+a.mention { text-decoration: none; }
 .window { max-width: 640px; margin: 0 auto 22px; background: #ccc; border: 1px solid #262626;
   box-shadow: 2px 2px 0 #262626, inset 1px 1px 0 #fff, inset -1px -1px 0 #999; }
 /* the home page is a desk: the join window, then a column of the post
@@ -200,7 +203,24 @@ a { color: #333399; }
 .compose textarea, .compose input[type=text] { display: block; box-sizing: border-box; margin: 0; padding: 2px 5px;
   font: inherit; line-height: 16px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
   box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
-.compose textarea { width: 100%; height: 56px; margin: 8px 0; resize: vertical; }
+.compose .field { position: relative; margin: 8px 0; }
+.compose textarea { width: 100%; height: 56px; resize: vertical; }
+/* the "@" list: the people a mention may name, in the app contextual
+   menu's dress (sysapps/hub .dropdown: #ddd face, 1px outline, white and
+   #bbb bevel, the hard 2px shadow, 18px lines) hung 2px under the field.
+   It floats, so nothing under it moves, and it never takes the focus: the
+   field keeps the caret while the arrows walk the rows. One row is
+   inverted at a time, the arrows' or the pointer's. */
+.compose .at-list { position: absolute; left: 0; top: calc(100% + 3px); z-index: 60; box-sizing: border-box;
+  min-width: 170px; max-width: 100%; padding: 2px 1px; background: #ddd; border: 1px solid #262626;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb, 2px 2px 0 rgba(38,38,38,.85); cursor: default; user-select: none; -webkit-user-select: none; }
+.compose .at-item { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 6px; line-height: 18px; white-space: nowrap; }
+.compose .at-item .av { flex: none; box-sizing: border-box; width: 18px; height: 18px; border: 1px solid #262626; background: #ccc; }
+.compose .at-item .av img { display: block; width: 16px; height: 16px; image-rendering: pixelated; }
+.compose .at-item .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.compose .at-item .mono { flex: none; font-size: 10px; color: #666; }
+.compose .at-item.on { background: #333399; color: #fff; }
+.compose .at-item.on .mono { color: #fff; }
 .compose input[type=text] { flex: 1 1 12em; min-width: 0; height: 20px; line-height: 14px; }
 .compose textarea:focus, .compose input[type=text]:focus { outline: none; }
 /* the profile dialog, the Hub app's dialog panel (sysapps/hub #dlg and
@@ -1249,8 +1269,119 @@ document.addEventListener("click", e => {
     shiftReturn = false;
     if (!plain && listReturn(e.target)) e.preventDefault();
   });
+  // ---- mentions (PLAN.md, Mentions) ----
+  // "@" and what is typed after it opens a list of the hub's profiles
+  // (GET /v1/profiles). A pick puts "@" and the name in the field, which
+  // is what the writer reads, and is remembered; when the post is sent
+  // every remembered "@Name" goes out as "@" and the profile's id, the
+  // one thing about a person that never changes, and the pages look the
+  // name up again each time they draw the post. A name typed in full and
+  // left with a space counts as a pick when just one profile has it. The
+  // arrows walk the list, Return or Tab picks, Escape puts it away; a
+  // Return that ends an input method's composition is left alone. The
+  // exe Hub app's composer does the same (sysapps/hub index.html):
+  // change both.
+  const atList = q(".at-list");
+  const AT_RE = /(?:^|[^A-Za-z0-9_])@([^\s@]{0,24})$/;
+  const picked = new Map(); // the name as it stands in the field -> the profile's id
+  let at = null, atHits = [], atOn = 0, atSeq = 0, atShut = -1;
+  function atQuery() {
+    if (text.selectionStart !== text.selectionEnd) return null;
+    const m = AT_RE.exec(text.value.slice(0, text.selectionStart));
+    return m ? { from: text.selectionStart - m[1].length - 1, q: m[1] } : null;
+  }
+  function atClose() {
+    at = null; atHits = []; atSeq++;
+    atList.hidden = true;
+    atList.replaceChildren();
+  }
+  function atMark() {
+    [...atList.children].forEach((row, i) => {
+      row.classList.toggle("on", i === atOn);
+      row.setAttribute("aria-selected", i === atOn ? "true" : "false");
+    });
+  }
+  function atRender() {
+    atList.replaceChildren(...atHits.map((h, i) => {
+      const row = document.createElement("div");
+      row.className = "at-item";
+      row.setAttribute("role", "option");
+      const av = span("av", "");
+      if (h.avatar) av.append(Object.assign(document.createElement("img"), { src: "/v1/embed/" + h.avatar, alt: "" }));
+      row.append(av, span("nm", h.name), span("mono", h.id));
+      row.addEventListener("pointermove", () => { if (atOn !== i) { atOn = i; atMark(); } });
+      row.addEventListener("pointerdown", e => { e.preventDefault(); atPick(i); }); // the field keeps the caret
+      return row;
+    }));
+    atList.hidden = !atHits.length;
+    atMark();
+  }
+  async function atLook() {
+    const now = atQuery(), was = at, hits = atHits;
+    if (!now) {
+      // a name typed out and left: a pick, when one profile alone has it
+      if (was && was.q && /\s$/.test(text.value.slice(0, text.selectionStart))) {
+        const same = hits.filter(h => h.name.toLowerCase() === was.q.toLowerCase());
+        if (same.length === 1 && text.value.slice(was.from + 1, was.from + 1 + was.q.length) === was.q) picked.set(was.q, same[0].id);
+      }
+      atShut = -1;
+      return atClose();
+    }
+    if (now.from === atShut) return; // put away with Escape: it stays away until another "@"
+    at = now;
+    const seq = ++atSeq;
+    try {
+      const res = await fetch("/v1/profiles?limit=6&q=" + encodeURIComponent(now.q));
+      const d = await res.json();
+      if (seq !== atSeq) return;
+      atHits = (d.profiles || []).filter(h => !(verdict && h.id === verdict.profile));
+      atOn = 0;
+      atRender();
+    } catch (e) {
+      if (seq === atSeq) atClose();
+    }
+  }
+  function atPick(i) {
+    const h = atHits[i];
+    if (!h || !at) return;
+    const put = "@" + h.name + " ", from = at.from, to = text.selectionStart;
+    picked.set(h.name, h.id);
+    atClose();
+    text.setSelectionRange(from, to);
+    if (!document.execCommand("insertText", false, put)) {
+      text.setRangeText(put, from, to, "end");
+      text.dispatchEvent(new Event("input"));
+    }
+  }
+  // the post as it is sent: each remembered "@Name" as "@" and the id,
+  // the longest names first ("@Codex on Spark" before "@Codex"), a code
+  // span left as it was written
+  function withIds(t) {
+    const names = [...picked.keys()].sort((a, b) => b.length - a.length);
+    if (!names.length) return t;
+    const re = new RegExp("(^|[^A-Za-z0-9_])@(" + names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?![A-Za-z0-9_])", "g");
+    return t.split(/(`[^`\n]+`)/).map((part, i) => i % 2 ? part : part.replace(re, (all, pre, name) => pre + "@" + picked.get(name))).join("");
+  }
+  text.addEventListener("input", atLook);
+  text.addEventListener("click", atLook);
+  text.addEventListener("keyup", e => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) atLook(); });
+  text.addEventListener("blur", atClose);
+  text.addEventListener("keydown", e => {
+    if (atList.hidden || e.isComposing || e.keyCode === 229) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      atOn = (atOn + (e.key === "ArrowDown" ? 1 : atHits.length - 1)) % atHits.length;
+      atMark();
+    } else if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey) || e.key === "Tab") {
+      atPick(atOn);
+    } else if (e.key === "Escape") {
+      atShut = at.from;
+      atClose();
+    } else return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
   send.addEventListener("click", async () => {
-    const t = text.value.trim();
+    const t = withIds(text.value.trim());
     if (!t || busy || !me) return;
     busy = true;
     render();
@@ -1259,6 +1390,7 @@ document.addEventListener("click", e => {
       if (replyTo) body.reply_to = replyTo;
       const id = await sendOp("post.create", body);
       text.value = "";
+      picked.clear();
       if (verdict.cooldown) until = Date.now() + verdict.cooldown * 1000;
       // a live page brings it in (a reply is landed on); a static one loads again, a thread at the new reply
       if (!window.hubRefresh) { if (replyTo) history.replaceState(null, "", "#" + id); location.reload(); return; }
@@ -1459,7 +1591,7 @@ document.addEventListener("click", e => {
   </div>
   <div class="in">
     <div class="row who-row"><span class="grow who-wrap"><a class="me-av" aria-label="Your page" hidden><img alt=""></a><span class="who"><b class="name">…</b> <span class="mono id"></span></span></span><button type="button" class="btn profile-btn">Profile…</button><button type="button" class="btn signout">Sign Out</button></div>
-    <textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea>
+    <div class="field"><textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea><div class="at-list" role="listbox" aria-label="Mention" hidden></div></div>
     <div class="row"><span class="grow status">Checking this address…</span><button type="button" class="btn send" disabled>{{if .ReplyTo}}Reply{{else}}Post{{end}}</button></div>
   </div>
   <div class="veil" hidden>

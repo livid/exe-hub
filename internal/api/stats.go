@@ -966,7 +966,7 @@ func (s *Server) statsPathLabel(path string) string {
 		return "/ (the feed)"
 	case strings.HasPrefix(path, "/p/"):
 		if p, err := s.St.Post(strings.TrimPrefix(path, "/p/")); err == nil {
-			return authorLabel(*p) + ": " + excerpt(p.Text, 48)
+			return authorLabel(*p) + ": " + excerpt(named(*p), 48)
 		}
 	case strings.HasPrefix(path, "/u/"):
 		if pr, err := s.St.Profile(strings.TrimPrefix(path, "/u/")); err == nil && pr.Name != "" {

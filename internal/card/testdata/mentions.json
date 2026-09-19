@@ -1,0 +1,19 @@
+[
+  {"name": "ordinary", "text": "Hello @0123456789abcdef, welcome", "names": {"0123456789abcdef": "Livid"}, "mentions": ["Livid"], "plain": "Hello @Livid, welcome"},
+  {"name": "the whole post", "text": "@0123456789abcdef", "names": {"0123456789abcdef": "Livid"}, "mentions": ["Livid"], "plain": "@Livid"},
+  {"name": "flush against Chinese, the way it is written", "text": "哈哈@0123456789abcdef你好", "names": {"0123456789abcdef": "Livid"}, "mentions": ["Livid"], "plain": "哈哈@Livid你好"},
+  {"name": "a name of several words", "text": "cc @00112233445566ff please", "names": {"00112233445566ff": "Codex on Spark"}, "mentions": ["Codex on Spark"], "plain": "cc @Codex on Spark please"},
+  {"name": "two people, one of them twice", "text": "@0123456789abcdef and @00112233445566ff, then @0123456789abcdef again", "names": {"0123456789abcdef": "Livid", "00112233445566ff": "Joe"}, "mentions": ["Livid", "Joe", "Livid"], "plain": "@Livid and @Joe, then @Livid again"},
+  {"name": "a possessive", "text": "@0123456789abcdef's idea", "names": {"0123456789abcdef": "Livid"}, "mentions": ["Livid"], "plain": "@Livid's idea"},
+  {"name": "an id no profile answers to stays as typed", "text": "ask @ffffffffffffffff about it", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "ask @ffffffffffffffff about it"},
+  {"name": "an address is no mention", "text": "mail@0123456789abcdef", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "mail@0123456789abcdef"},
+  {"name": "a longer run of hex is no id", "text": "@0123456789abcdef0 and @0123456789abcdefg", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "@0123456789abcdef0 and @0123456789abcdefg"},
+  {"name": "capitals are no id", "text": "@0123456789ABCDEF", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "@0123456789ABCDEF"},
+  {"name": "a nickname typed by hand is words", "text": "@Livid hello", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "@Livid hello"},
+  {"name": "a code span keeps it", "text": "write `@0123456789abcdef` to mention", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "write `@0123456789abcdef` to mention"},
+  {"name": "a link keeps its words", "text": "[@0123456789abcdef](https://example.org) here", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "@0123456789abcdef here"},
+  {"name": "a URL keeps its path", "text": "see https://example.org/@0123456789abcdef now", "names": {"0123456789abcdef": "Livid"}, "mentions": [], "plain": "see https://example.org/@0123456789abcdef now"},
+  {"name": "inside bold", "text": "thanks **@0123456789abcdef**!", "names": {"0123456789abcdef": "Livid"}, "mentions": ["Livid"], "plain": "thanks @Livid!"},
+  {"name": "a name is words, never markup", "text": "hi @0123456789abcdef", "names": {"0123456789abcdef": "<b>Tom & Co</b>"}, "mentions": ["<b>Tom & Co</b>"], "plain": "hi @<b>Tom & Co</b>"},
+  {"name": "in a heading, a list and a table", "text": "# For @0123456789abcdef\n\n- ask @00112233445566ff\n\n| who | what |\n| --- | --- |\n| @0123456789abcdef | review |", "names": {"0123456789abcdef": "Livid", "00112233445566ff": "Joe"}, "mentions": ["Livid", "Joe", "Livid"], "plain": "For @Livid • ask @Joe who · what @Livid · review"}
+]

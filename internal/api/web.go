@@ -19,6 +19,7 @@ import (
 	"exehub/internal/card"
 	"exehub/internal/envelope"
 	"exehub/internal/lang"
+	"exehub/internal/mention"
 	"exehub/internal/preview"
 	"exehub/internal/store"
 )
@@ -565,6 +566,64 @@ func writePlain(b *strings.Builder, s string) {
 	b.WriteString(strings.ReplaceAll(html.EscapeString(s), "\n", "<br>\n"))
 }
 
+// renderPost is renderText with the post's mentions set: each "@" and
+// profile id that names holds a name for becomes a link to that profile,
+// reading "@" and the name it goes by today (see PLAN.md, Mentions). It
+// goes over renderText's HTML one text node at a time, as markHits does,
+// and leaves what a link or a code span holds alone: an id inside
+// backticks is code, and a link keeps its words and its address. An id
+// is hex, so nothing in one is ever escaped and the token reads the same
+// in the HTML as in the post; a node's start counts as a free edge, the
+// way the Hub app's chunks begin. An id without a name stays as typed.
+func renderPost(text string, names map[string]string) template.HTML {
+	page := renderText(text)
+	if len(names) == 0 {
+		return page
+	}
+	src := string(page)
+	var b strings.Builder
+	held := 0 // inside this many <a> or <code>
+	last := 0
+	node := func(s string) {
+		if held > 0 {
+			b.WriteString(s)
+			return
+		}
+		at := 0
+		for _, m := range mention.At(s) {
+			id := s[m[0]+1 : m[1]]
+			name := names[id]
+			if name == "" {
+				continue
+			}
+			b.WriteString(s[at:m[0]])
+			b.WriteString(`<a class="mention" href="/u/` + id + `">@` + html.EscapeString(name) + `</a>`)
+			at = m[1]
+		}
+		b.WriteString(s[at:])
+	}
+	for _, t := range webTag.FindAllStringIndex(src, -1) {
+		node(src[last:t[0]])
+		tag := src[t[0]:t[1]]
+		switch {
+		case strings.HasPrefix(tag, "<a ") || tag == "<code>":
+			held++
+		case tag == "</a>" || tag == "</code>":
+			held--
+		}
+		b.WriteString(tag)
+		last = t[1]
+	}
+	node(src[last:])
+	return template.HTML(b.String())
+}
+
+// named is a post's words with its mentions set as names, for an
+// excerpt, a title or a preview: what excerpt and opening are given.
+func named(p store.FeedPost) string {
+	return card.NameMentions(p.Text, p.Mentions)
+}
+
 // webTag is one tag of renderText's own HTML. Every attribute value in
 // it is escaped, so no ">" sits inside one and a tag ends at the first.
 var webTag = regexp.MustCompile(`<[^>]*>`)
@@ -677,9 +736,9 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 	trs := s.webTranslations(rd, ids)
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
-		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
+		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
 		if t, ok := trs[p.ID]; ok && p.Text != "" {
-			out[i].Tr = rd.tr(t)
+			out[i].Tr = rd.tr(t, p.Mentions)
 		}
 		if p.LastReply != nil && p.ReplyTo == "" {
 			name := p.LastReply.AuthorName
@@ -690,7 +749,7 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 			if t, ok := trs[p.LastReply.ID]; ok {
 				said = t.Text
 			}
-			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(said, 90)}
+			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(card.NameMentions(said, p.Mentions), 90)}
 		}
 		for _, e := range p.Embeds {
 			switch {
@@ -744,7 +803,7 @@ func (s *Server) webQuoted(rd webReading, posts []webPost) []webPost {
 		if t, ok := trs[id]; ok {
 			said = t.Text
 		}
-		posts[i].Quote = &webQuote{ID: p.ID, Name: authorLabel(*p), Text: excerpt(said, 140)}
+		posts[i].Quote = &webQuote{ID: p.ID, Name: authorLabel(*p), Text: excerpt(card.NameMentions(said, p.Mentions), 140)}
 	}
 	return posts
 }
@@ -963,9 +1022,10 @@ func (rd webReading) shows(from string) bool {
 }
 
 // tr dresses a translation for the page, the line under it in the
-// reader's language.
-func (rd webReading) tr(t store.Translation) *webTr {
-	tr := &webTr{HTML: renderText(t.Text), Lang: rd.Target}
+// reader's language; names is the post's mentions, which a translation
+// keeps as they were written.
+func (rd webReading) tr(t store.Translation, names map[string]string) *webTr {
+	tr := &webTr{HTML: renderPost(t.Text, names), Lang: rd.Target}
 	// the language alone: its script tells only a Chinese reader
 	// something, Traditional from the Simplified they are reading
 	from, _, _ := strings.Cut(t.From, "-")
@@ -1118,7 +1178,7 @@ func opening(text string) string {
 // preview has a subject of its own even when a client shows no
 // description; a post with no words is its author on this hub.
 func threadTitle(p store.FeedPost, host string) string {
-	if s := opening(p.Text); s != "" {
+	if s := opening(named(p)); s != "" {
 		return s + " — " + authorLabel(p)
 	}
 	return authorLabel(p) + " on " + host
@@ -1320,7 +1380,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		replies[i].ParentName = names[replies[i].ReplyTo]
 	}
 	d := &webData{
-		Page: "thread", Title: threadTitle(*p, r.Host), Desc: excerpt(p.Text, 200),
+		Page: "thread", Title: threadTitle(*p, r.Host), Desc: excerpt(named(*p), 200),
 		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 		Live: s.Events != nil, Lang: rd.Lang, Q: rd.Q,
@@ -1329,7 +1389,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		d.Desc = previewNoWords(*p) + " By " + authorLabel(*p) + " on " + r.Host + "."
 	}
 	// the picture: the post's first one, else a card drawn from its words
-	d.ImageAlt = authorLabel(*p) + " on " + r.Host + ": " + excerpt(p.Text, 120)
+	d.ImageAlt = authorLabel(*p) + " on " + r.Host + ": " + excerpt(named(*p), 120)
 	switch v := append(post.Videos, post.Sounds...); {
 	case len(post.Images) > 0:
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID

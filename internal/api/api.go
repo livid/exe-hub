@@ -152,6 +152,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/media", s.handleMedia)
 	mux.HandleFunc("GET /v1/media/{job}", s.handleMediaJob)
 	mux.HandleFunc("GET /v1/feed", s.handleFeed)
+	mux.HandleFunc("GET /v1/profiles", s.handleProfiles)
 	mux.HandleFunc("GET /v1/profile/{id}", s.handleProfile)
 	mux.HandleFunc("GET /v1/profile/{id}/feed", s.handleProfileFeed)
 	mux.HandleFunc("GET /v1/post/{id}", s.handlePost)
@@ -648,6 +649,28 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProfileFeed(w http.ResponseWriter, r *http.Request) {
 	posts, err := s.St.ProfileFeed(r.PathValue("id"), r.URL.Query().Get("before"), limitParam(r))
 	s.writeFeed(w, posts, err)
+}
+
+// handleProfiles is what a composer's "@" list asks: the named profiles
+// that match q (a piece of a name, or the start of an id), whoever
+// posted last first; no q is the ones that posted last. Eight unless
+// limit says otherwise, never more than twenty.
+func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimPrefix(strings.TrimSpace(r.URL.Query().Get("q")), "@")
+	if len(q) > 64 {
+		writeErr(w, http.StatusBadRequest, errors.New("q is too long"))
+		return
+	}
+	limit := 8
+	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 {
+		limit = min(n, 20)
+	}
+	hits, err := s.St.FindProfiles(q, limit)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"profiles": hits})
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
