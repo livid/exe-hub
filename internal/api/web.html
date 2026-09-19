@@ -410,16 +410,14 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .foot .latest { color: #666; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .foot .latest b { color: #444; }
 /* Reply, under each reply of a thread: it aims the Reply window at that
-   reply, as the Hub app's thread does. The link is that window's, so it
-   shows exactly when the window does — with script, and on a phone only
-   with a wallet — and its line takes no room otherwise. By itself it is
-   a plain link to the reply's own page, whose window answers it. */
+   reply, as the Hub app's thread does. Only someone signed in can reply,
+   so only they see it: the link shows under <html class="wallet"> — a
+   wallet signed in, or one that signed in before, which the head script
+   says before layout, so a returning reader's thread never jumps — and
+   its line takes no room otherwise. By itself it is a plain link to the
+   reply's own page, whose window answers it. */
 .foot.re { display: none; }
-.js .foot.re { display: flex; }
-@media (pointer: coarse) {
-  .js .foot.re { display: none; }
-  .js.solana .foot.re, .js.wallet .foot.re { display: flex; }
-}
+.wallet .foot.re { display: flex; }
 .pad { padding: 12px 14px; }
 .pad p { margin: 0 0 8px; }
 .join ol { margin: 6px 0 0; padding-left: 20px; }
@@ -1166,6 +1164,7 @@ document.addEventListener("click", e => {
   }
   function signedOut() {
     verdict = null; flash = ""; until = 0;
+    if (target) { target = null; showTarget(); } // the Reply links go with the wallet, and so does their aim
     remember(null);
     root.classList.remove("wallet");
     meAva("");

@@ -864,9 +864,13 @@ hub that carries the post.
   The Hub app's thread does the same (`setReplyTarget`). The reply sent
   carries that reply's id as `reply_to` — settled when Reply is pressed,
   before the wallet's prompt — lands nested under it, and the window goes
-  back to the page's post. The link is the Reply window's, so it shows
-  exactly when the window does (with script; on a phone only with a
-  wallet) and its line takes no room otherwise; by itself, or pressed
+  back to the page's post. Only someone signed in can reply, so only
+  they see the link (Livid, the same day: it should not show before
+  sign-in): it shows under `<html class="wallet">` — a wallet signed
+  in, or one that signed in before, which the head script says before
+  layout, so a returning reader's thread never jumps — its line takes no
+  room otherwise, and signing out takes the links and any aim with it;
+  by itself, or pressed
   with a modifier, it is a plain link to the reply's own page, whose
   window answers it. The press is heard on the document and the reply
   is remembered by id, not as a node, because a live page swaps its

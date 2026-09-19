@@ -232,6 +232,10 @@ func TestWebThreadProfile(t *testing.T) {
 	if strings.Contains(body, `class="rlink" role="button" href="/p/`+root+`"`) || strings.Count(body, `class="rlink"`) != 2 {
 		t.Error("the thread's head carries a Reply link, or the links are not one a reply")
 	}
+	// only someone signed in sees the links: they show under the wallet class alone
+	if !strings.Contains(body, ".foot.re { display: none; }\n.wallet .foot.re { display: flex; }\n") || strings.Contains(body, ".js .foot.re") {
+		t.Error("the Reply links are not kept to a signed-in wallet")
+	}
 	if !strings.Contains(body, `<div class="row re-row" hidden><span class="grow re-q"></span><button type="button" class="btn re-clear"`) {
 		t.Error("the Reply window lacks the line naming the reply it answers")
 	}
