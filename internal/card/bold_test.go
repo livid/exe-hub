@@ -10,7 +10,8 @@ import (
 // BoldCase is one case of testdata/bold.json: the bold stretches a
 // renderer must set (Strong, each one's words as they read), the links'
 // words where the case has any, and the text as plain words (Plain;
-// empty where the case says nothing of it). The hub's renderText
+// empty where the case says nothing of it) — by the whole chain the
+// pages and the notifications use, Untable, Unlist, Unlink, Unbold. The hub's renderText
 // (internal/api) and the Hub app's formatText and plainWords
 // (~/tools/playwright/exe-hub-bold-test.js reads this file) are run
 // against the same cases.
@@ -37,7 +38,7 @@ func TestUnbold(t *testing.T) {
 		if c.Plain == "" {
 			continue
 		}
-		if got := strings.Join(strings.Fields(Unbold(Unlink(Untable(c.Text)))), " "); got != c.Plain {
+		if got := strings.Join(strings.Fields(Unbold(Unlink(Unlist(Untable(c.Text))))), " "); got != c.Plain {
 			t.Errorf("%s:\n got %q\nwant %q", c.Name, got, c.Plain)
 		}
 	}

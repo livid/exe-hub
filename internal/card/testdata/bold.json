@@ -1,6 +1,6 @@
 [
   {"name": "ordinary bold", "text": "A **bold** word.", "strong": ["bold"], "plain": "A bold word."},
-  {"name": "a label with its colon, the way a list line opens", "text": "- **The bar:** a \"Search posts\" field", "strong": ["The bar:"], "plain": "- The bar: a \"Search posts\" field"},
+  {"name": "a label with its colon, the way a list line opens", "text": "- **The bar:** a \"Search posts\" field", "strong": ["The bar:"], "plain": "• The bar: a \"Search posts\" field"},
   {"name": "two on a line", "text": "**a** and **b c**", "strong": ["a", "b c"], "plain": "a and b c"},
   {"name": "bold round a link", "text": "**[Docs](https://example.org)** here", "strong": ["Docs"], "links": ["Docs"], "plain": "Docs here"},
   {"name": "bold inside a link's words", "text": "[**Docs** page](https://example.org) here", "strong": ["Docs"], "links": ["Docs page"], "plain": "Docs page here"},
