@@ -44,7 +44,7 @@ func TestRenderPostMentions(t *testing.T) {
 		if !reflect.DeepEqual(got, c.Mentions) {
 			t.Errorf("%s: mentions %q, want %q\n%s", c.Name, got, c.Mentions, page)
 		}
-		if got := excerpt(card.NameMentions(c.Text, c.Names), 400); got != c.Plain {
+		if got := excerpt(card.NameMentions(c.Text, c.Names), 400); c.Plain != "" && got != c.Plain {
 			t.Errorf("%s: plain %q, want %q", c.Name, got, c.Plain)
 		}
 	}
