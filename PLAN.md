@@ -1345,10 +1345,15 @@ time, so what is saved must be the stable id under it.
   or whose id begins with it, whoever posted last first — the people in
   the conversation are the ones mentioned — banned ones left out; no `q`
   is the latest posters. Eight by default, twenty at most.
-- **The composer** (the pages' Post and Reply windows; the Hub app's
-  follows): typing `@` at the start of a word opens the list under the
-  field, in the contextual menu's dress, floating so nothing moves and
-  never taking the focus. The arrows walk it, Return or Tab picks, Escape
+- **The composer** (the pages' Post and Reply windows, and the exe Hub
+  app's since 2026-09-19, exe `sysapps/hub` "mentions in the composer" —
+  the same functions, change both): typing `@` at the start of a word
+  opens the list in the contextual menu's dress, floating so nothing moves
+  and never taking the focus. On the pages it hangs under the field; the
+  Hub app's field has the pencil's mirror, so there it hangs 2px under the
+  `@` itself, and its rows wear the post head's 14px picture. The app asks
+  `/v1/profiles` by the road it reads the feed by, the daemon's relay
+  included (any `/v1/` read passes it). The arrows walk it, Return or Tab picks, Escape
   puts it away until another `@`, a press picks on a phone; the writer's
   own profile is not offered. A pick puts `@Name` in the field — what the
   writer reads — and remembers name → id; **the ids go in when the post is
@@ -1363,13 +1368,15 @@ time, so what is saved must be the stable id under it.
 - Check: `go test ./...` (`card`, `api` mention tests, `lang`
   TestCheckMentions) and `~/tools/playwright/exe-hub-mention-test.js`
   against a scratch hub — the list, the keys, a pick, the signed text, the
-  page, a rename.
+  page, a rename. The Hub app's list: `exe-hub-app-mention-list-test.js`
+  (the unbuilt app over the live desktop, the publish held by the test so
+  nothing is posted).
 - **Not built:** telling the person they were mentioned (push is per
   hub, not per reader, today); search by name does not find a post that
   mentions that name, since the text holds the id (searching the id
   does); two profiles with one name picked in the same post both go out
-  as the one picked last; the list sits under the field, not under the
-  caret.
+  as the one picked last; on the pages the list sits under the field,
+  not under the caret (they have no mirror of the field to ask).
 
 ## Open questions
 
