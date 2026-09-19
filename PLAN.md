@@ -1690,10 +1690,48 @@ Asked by Livid 2026-09-19.
   nothing of the note in the text. The hub's operator writes it, not the
   model and not the author, so it is neither derived nor signed; it
   stays across `Rebuild` and goes with its post.
+- **One hub pays, its peers take** (2026-09-19; Livid: "do we really
+  have to let two hubs do two similar backfill work"). A translation is
+  a minute of a model's thought, and two hubs that pull from each other
+  were each paying it for the same posts. So translations ride
+  aggregation, the way posts do and by the same trust, the admin's
+  `peer.add`. A hub serves the translations it made itself, one hop like
+  `/v1/replicate`, as hub-signed pages of `GET /v1/translations?after=
+  &limit=&nonce=` (`{hub, nonce, next, translations: [{post, lang, text,
+  model, ts}]}`, signed under its own prefix, 403 without
+  `allow_replication`). The cursor is `rev`, a number the hub gives each
+  translation as it keeps it, one more than the last, so a redone one
+  comes up again and no clock is trusted. The puller asks each peer for
+  them after its messages, every round, with a cursor of its own in
+  `peer_state`; a peer from before this answers 404 and is left alone.
+- **What is taken.** Only a translation of a post this hub holds, into a
+  language it keeps posts in, that passes this hub's own `Check` against
+  its own copy of the post, after its own `FullWidth`: a peer can offer a
+  bad translation, as a model can, and never one the checks would have
+  refused. It is kept as the peer's (`origin`, the peer's `ts`) and not
+  served on. **The newest translation wins**, whoever made it: a taken
+  one replaces an older one, a hub's own included, so an editor's redo
+  on one hub (`-retranslate`, which is newer by being later) reaches the
+  other by itself; and what a hub has, from anyone, it does not owe, so
+  a translating hub makes only what no peer offered first. A landed one
+  goes out as `post.translation` like any other.
+- **Who pays** is config: two translating hubs would still race each
+  other newest-first, so one of a pair says `"translate": false` and
+  only takes. Livid's pair: the host hub translates, the public hub
+  takes; a post written on the public hub reaches the host within a
+  round, is translated there, and is back a round after it lands. The
+  public hub still names languages itself, a second a post, since the
+  pages join a translation to its post's language.
 - Not built: translations in the JSON API and the Hub app, search inside
-  translations, a Traditional Chinese target, and an aggregator taking
-  the origin hub's translation instead of paying for its own.
+  translations, a Traditional Chinese target, a hub with no model at all
+  taking its peers' languages along with their translations, and an
+  editor's note travelling with the post.
 - Tests: `internal/lang` (the prompt's target, the checks, tables folded,
-  broken and misaligned, a pass against a fake Ollama), `internal/store` (rows, the owed list, delete and
-  `Rebuild`), `internal/api` (who reads what, the page with and without
-  a translation, `?lang=orig`, the carried links, search).
+  broken and misaligned, the punctuation rule, a pass against a fake
+  Ollama), `internal/store` (rows, the owed list, delete and `Rebuild`,
+  notes, revs never given twice, the newest winning), `internal/api`
+  (who reads what, the page with and without a translation,
+  `?lang=orig`, the carried links, search, the signed translations
+  page), `internal/replicate` (a real serving hub's translations taken,
+  checked, a redo coming through, an old peer left alone, a page under
+  another key refused).

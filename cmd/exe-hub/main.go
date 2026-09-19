@@ -295,7 +295,7 @@ func serve(cfgPath, stateDir, pidPath string) error {
 
 	// Pull from curated peers (peer.add ops); the loop re-reads the peers
 	// table each pass, so curation applies without a restart.
-	go (&replicate.Puller{St: st, IPFS: ipfsc, Self: hub.ID}).Run()
+	go (&replicate.Puller{St: st, IPFS: ipfsc, Self: hub.ID, Bus: bus}).Run()
 
 	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil {
 		return err

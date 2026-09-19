@@ -3,12 +3,15 @@ package api
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"exehub/internal/config"
+	"exehub/internal/envelope"
 	"exehub/internal/identity"
 	"exehub/internal/store"
 )
@@ -191,5 +194,56 @@ func TestWebTrNote(t *testing.T) {
 		if got := c.rd.tr(store.Translation{Text: "x", From: c.from}).Note; got != c.want {
 			t.Errorf("%s for %s = %q, want %q", c.from, c.rd.Reader, got, c.want)
 		}
+	}
+}
+
+// TestTranslationsPage: /v1/translations is a hub-signed page of the
+// translations this hub made, under a prefix of its own, behind the
+// replication switch and a nonce like /v1/replicate.
+func TestTranslationsPage(t *testing.T) {
+	no := false
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	var err error
+	if s.Hub, err = identity.Load(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	id := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "hello there, everyone"})
+	s.St.SetLang(id, "en", "m", true)
+	s.St.SetTranslation(id, "zh-Hans", "大家好。", "glm", true)
+
+	code, body := get(t, h, "/v1/translations?nonce=00112233aabbccdd")
+	if code != http.StatusOK {
+		t.Fatalf("GET = %d %s", code, body)
+	}
+	var out struct {
+		Payload json.RawMessage `json:"payload"`
+		Sig     []byte          `json:"sig"`
+	}
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := base64.StdEncoding.DecodeString(s.Hub.PubKey())
+	if !ed25519.Verify(key, append([]byte(envelope.TranslationsPrefix), out.Payload...), out.Sig) {
+		t.Fatal("the page does not verify under the translations prefix")
+	}
+	if ed25519.Verify(key, append([]byte(envelope.ReplicatePrefix), out.Payload...), out.Sig) {
+		t.Fatal("the page verifies as a /v1/replicate page too")
+	}
+	var pl TranslationsPayload
+	if err := json.Unmarshal(out.Payload, &pl); err != nil || pl.Hub != s.Hub.ID || pl.Nonce != "00112233aabbccdd" ||
+		len(pl.Translations) != 1 || pl.Translations[0].Text != "大家好。" || pl.Translations[0].Post != id || pl.Next == 0 {
+		t.Fatalf("payload = %+v, %v", pl, err)
+	}
+	if code, _ := get(t, h, "/v1/translations?nonce=xyz"); code != http.StatusBadRequest {
+		t.Errorf("a bad nonce = %d", code)
+	}
+	if code, _ := get(t, h, "/v1/translations?nonce=00112233aabbccdd&after=soon"); code != http.StatusBadRequest {
+		t.Errorf("a bad cursor = %d", code)
+	}
+	s.Cfg.Set(&config.Config{Gate: config.Gate{Mode: "open"}, AllowReplication: &no})
+	if code, _ := get(t, h, "/v1/translations?nonce=00112233aabbccdd"); code != http.StatusForbidden {
+		t.Errorf("with replication off = %d", code)
 	}
 }

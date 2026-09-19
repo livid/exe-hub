@@ -256,6 +256,20 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 		// (see Feed: a reply bumps its thread in the home feed)
 		`ALTER TABLE posts ADD COLUMN activity INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE posts ADD COLUMN last_reply TEXT NOT NULL DEFAULT ''`,
+		// translations ride aggregation (PLAN.md, Translations — one hub
+		// pays): origin is '' for one this hub made, else the peer it was
+		// taken from; rev numbers the ones it made as it keeps them, the
+		// cursor peers page by (0 = not served: a taken one, a failed try)
+		`ALTER TABLE translations ADD COLUMN origin TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE translations ADD COLUMN rev INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS translations_rev ON translations(rev) WHERE rev > 0`,
+		// where the revs come from: AUTOINCREMENT never gives a number
+		// twice, even after its row is gone, and the table is kept empty.
+		// MAX(rev)+1 would: -retranslate deletes a row, and had it held
+		// the highest rev the redone one would take that number again,
+		// behind the cursor of a peer that had read that far
+		`CREATE TABLE IF NOT EXISTS translation_revs (rev INTEGER PRIMARY KEY AUTOINCREMENT)`,
+		`ALTER TABLE peer_state ADD COLUMN tr_cursor INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
@@ -273,6 +287,9 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 		}
 	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS posts_activity ON posts(activity) WHERE reply_to = ''`); err != nil {
+		return err
+	}
+	if err := s.numberTranslations(); err != nil {
 		return err
 	}
 	return s.initStats()
@@ -1312,11 +1329,149 @@ func (s *Store) SetTranslation(post, lang, text, model string, ok bool) error {
 	if !ok {
 		status, text = "failed", ""
 	}
-	_, err := s.db.Exec(`INSERT INTO translations (post, lang, text, model, status, tries, ts)
-		SELECT ?,?,?,?,?,1,? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// a kept one is this hub's own and takes the next rev, so peers
+	// paging by it see it, a redone one again; a failed try is not served
+	var rev int64
+	if ok {
+		if rev, err = nextRev(tx); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO translations (post, lang, text, model, status, tries, ts, origin, rev)
+		SELECT ?,?,?,?,?,1,?,'',? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
 		ON CONFLICT(post, lang) DO UPDATE SET text=excluded.text, model=excluded.model,
-		status=excluded.status, tries=translations.tries+1, ts=excluded.ts`,
-		post, lang, text, model, status, time.Now().UnixMilli(), post)
+		status=excluded.status, tries=translations.tries+1, ts=excluded.ts, origin='', rev=excluded.rev`,
+		post, lang, text, model, status, time.Now().UnixMilli(), rev, post); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// nextRev is the next number for a translation this hub keeps: one more
+// than any it ever gave, deleted ones included.
+func nextRev(tx *sql.Tx) (int64, error) {
+	res, err := tx.Exec(`INSERT INTO translation_revs DEFAULT VALUES`)
+	if err != nil {
+		return 0, err
+	}
+	rev, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	_, err = tx.Exec(`DELETE FROM translation_revs`) // sqlite_sequence remembers
+	return rev, err
+}
+
+// numberTranslations gives the translations this hub kept before they
+// were numbered their revs, in the order they were made. Every one kept
+// since has its own, so after the first start this finds nothing.
+func (s *Store) numberTranslations() error {
+	rows, err := s.db.Query(`SELECT post, lang FROM translations WHERE status = 'ok' AND origin = '' AND rev = 0 ORDER BY ts, post, lang`)
+	if err != nil {
+		return err
+	}
+	var keys [][2]string
+	for rows.Next() {
+		var k [2]string
+		if err := rows.Scan(&k[0], &k[1]); err != nil {
+			rows.Close()
+			return err
+		}
+		keys = append(keys, k)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil || len(keys) == 0 {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, k := range keys {
+		rev, err := nextRev(tx)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE translations SET rev = ? WHERE post = ? AND lang = ?`, rev, k[0], k[1]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// SharedTranslation is a translation as one hub serves it to its peers.
+type SharedTranslation struct {
+	Post  string `json:"post"`
+	Lang  string `json:"lang"`
+	Text  string `json:"text"`
+	Model string `json:"model"`
+	TS    int64  `json:"ts"` // when it was made, by the hub that made it: the newest wins
+}
+
+// TranslationsPage is the translations this hub made itself, in the
+// order it kept them, after the rev a peer holds as its cursor; next is
+// the cursor for the page after. One hop, like ReplicationPage: what was
+// taken from a peer is not served on.
+func (s *Store) TranslationsPage(after int64, limit int) (out []SharedTranslation, next int64, err error) {
+	rows, err := s.db.Query(`SELECT post, lang, text, model, ts, rev FROM translations
+		WHERE rev > ? AND origin = '' AND status = 'ok' ORDER BY rev LIMIT ?`, after, limit)
+	if err != nil {
+		return nil, after, err
+	}
+	defer rows.Close()
+	out, next = []SharedTranslation{}, after
+	for rows.Next() {
+		var t SharedTranslation
+		if err := rows.Scan(&t.Post, &t.Lang, &t.Text, &t.Model, &t.TS, &next); err != nil {
+			return nil, after, err
+		}
+		out = append(out, t)
+	}
+	return out, next, rows.Err()
+}
+
+// PostText is a post's words and the language they were named, for a
+// peer's translation to be checked against; ok is false for a post this
+// hub does not hold.
+func (s *Store) PostText(id string) (text, lang string, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT p.text, IFNULL((SELECT l.lang FROM langs l WHERE l.post = p.id AND l.status = 'ok'), '')
+		FROM posts p WHERE p.id = ?`, id).Scan(&text, &lang)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	return text, lang, err == nil, err
+}
+
+// AcceptTranslation keeps a translation taken from a peer, already
+// checked by the caller, when it is the newest this hub knows of: there
+// is none kept yet, or the one kept, whoever made it, is older. It is
+// kept as the peer's, with the peer's ts, and not served on. It says
+// whether it was kept.
+func (s *Store) AcceptTranslation(peer string, t SharedTranslation) (bool, error) {
+	res, err := s.db.Exec(`INSERT INTO translations (post, lang, text, model, status, tries, ts, origin, rev)
+		SELECT ?,?,?,?,'ok',0,?,?,0 WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+		ON CONFLICT(post, lang) DO UPDATE SET text=excluded.text, model=excluded.model, status='ok',
+		ts=excluded.ts, origin=excluded.origin, rev=0
+		WHERE translations.status <> 'ok' OR translations.ts < excluded.ts`,
+		t.Post, t.Lang, t.Text, t.Model, t.TS, peer, t.Post)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// SetPeerTranslationCursor records how far into a peer's translations
+// this hub has read.
+func (s *Store) SetPeerTranslationCursor(hub string, cursor int64) error {
+	_, err := s.db.Exec(`INSERT INTO peer_state (hub, tr_cursor) VALUES (?,?)
+		ON CONFLICT(hub) DO UPDATE SET tr_cursor=excluded.tr_cursor`, hub, cursor)
 	return err
 }
 
@@ -1992,10 +2147,13 @@ type Peer struct {
 	Addr   string `json:"addr"`
 	PubKey string `json:"pubkey,omitempty"` // cached; '' until first contact
 	Cursor int64  `json:"cursor"`
+	// how far into the peer's translations this hub has read (PLAN.md,
+	// Translations — one hub pays)
+	TrCursor int64 `json:"tr_cursor,omitempty"`
 }
 
 func (s *Store) Peers() ([]Peer, error) {
-	rows, err := s.db.Query(`SELECT p.hub, p.addr, IFNULL(ps.pubkey,''), IFNULL(ps.cursor,0)
+	rows, err := s.db.Query(`SELECT p.hub, p.addr, IFNULL(ps.pubkey,''), IFNULL(ps.cursor,0), IFNULL(ps.tr_cursor,0)
 		FROM peers p LEFT JOIN peer_state ps ON ps.hub = p.hub ORDER BY p.ts`)
 	if err != nil {
 		return nil, err
@@ -2004,7 +2162,7 @@ func (s *Store) Peers() ([]Peer, error) {
 	out := []Peer{}
 	for rows.Next() {
 		var p Peer
-		if err := rows.Scan(&p.Hub, &p.Addr, &p.PubKey, &p.Cursor); err != nil {
+		if err := rows.Scan(&p.Hub, &p.Addr, &p.PubKey, &p.Cursor, &p.TrCursor); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

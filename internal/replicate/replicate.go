@@ -18,14 +18,18 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"exehub/internal/api"
 	"exehub/internal/envelope"
+	"exehub/internal/events"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/lang"
 	"exehub/internal/media"
 	"exehub/internal/store"
 )
@@ -41,6 +45,11 @@ type Puller struct {
 	St   *store.Store
 	IPFS *ipfs.Client
 	Self string // own hub id; self-peering is refused at ingest but guard anyway
+	// Bus, when set, is told of each translation taken from a peer, so a
+	// live page brings it in like one made here
+	Bus *events.Broadcaster
+	// the peers that have no /v1/translations, said once each
+	noTranslations map[string]bool
 
 	client    *http.Client
 	healing   map[string]*healTry // CID → when its sources are asked next
@@ -79,6 +88,11 @@ func (p *Puller) Run() {
 				continue
 			}
 			up = append(up, peer)
+			// after its messages, so the posts a page's translations are
+			// of are already here
+			if err := p.pullTranslations(peer); err != nil {
+				log.Printf("replicate %s: translations: %v", peer.Hub, err)
+			}
 		}
 		p.heal(up)
 		time.Sleep(interval)
@@ -179,6 +193,136 @@ func (p *Puller) fetchPage(base string, pub ed25519.PublicKey, hub string, after
 		return nil, errors.New("bad page signature")
 	}
 	pl := &api.ReplicatePayload{}
+	if err := json.Unmarshal(out.Payload, pl); err != nil {
+		return nil, err
+	}
+	if pl.Nonce != nonce || pl.Hub != hub {
+		return nil, errors.New("page nonce/hub mismatch")
+	}
+	return pl, nil
+}
+
+// pullTranslations takes the translations a peer made itself (PLAN.md,
+// Translations — one hub pays, its peers take): its hub-signed pages
+// from this hub's cursor on, each translation kept only if this hub
+// holds the post, keeps posts in that language, and the words pass this
+// hub's own Check against its own copy of the post after its own
+// FullWidth — a peer can offer a bad translation, as a model can, never
+// one the checks would have refused — and only when it is newer than
+// what is kept. One refused is logged and passed over: the peer's list
+// only grows, so it would be refused on every later pass too. A peer
+// from before /v1/translations answers 404 and is left alone.
+func (p *Puller) pullTranslations(peer store.Peer) error {
+	base, err := envelope.ParseMultiaddr(peer.Addr)
+	if err != nil {
+		return err
+	}
+	pub, err := p.peerKey(peer, base)
+	if err != nil {
+		return err
+	}
+	cursor, taken := peer.TrCursor, 0
+	defer func() {
+		if taken > 0 {
+			log.Printf("replicate %s: took %d translations", peer.Hub, taken)
+		}
+	}()
+	for {
+		page, err := p.fetchTranslations(base, pub, peer.Hub, cursor)
+		if errors.Is(err, errNoTranslations) {
+			if !p.noTranslations[peer.Hub] {
+				if p.noTranslations == nil {
+					p.noTranslations = map[string]bool{}
+				}
+				p.noTranslations[peer.Hub] = true
+				log.Printf("replicate %s: serves no translations", peer.Hub)
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		for _, t := range page.Translations {
+			if p.take(peer.Hub, t) {
+				taken++
+			}
+		}
+		if page.Next <= cursor {
+			return nil // drained
+		}
+		cursor = page.Next
+		if err := p.St.SetPeerTranslationCursor(peer.Hub, cursor); err != nil {
+			return err
+		}
+	}
+}
+
+// translationMax bounds a translation's size: several times a post's,
+// since English runs to a few bytes for each of Chinese's.
+const translationMax = 8 * envelope.MaxText
+
+// take keeps one translation from a peer if it may be kept.
+func (p *Puller) take(hub string, t store.SharedTranslation) bool {
+	if !slices.Contains(lang.Targets, t.Lang) || t.Text == "" || len(t.Text) > translationMax || !utf8.ValidString(t.Text) {
+		return false
+	}
+	src, from, held, err := p.St.PostText(t.Post)
+	if err != nil || !held || from == t.Lang {
+		return false // not a post of ours, or one already in that language
+	}
+	if strings.HasPrefix(t.Lang, "zh") {
+		t.Text = lang.FullWidth(t.Text)
+	}
+	if err := lang.Check(src, t.Text, t.Lang); err != nil {
+		log.Printf("replicate %s: translation of %s to %s refused: %v", hub, t.Post, t.Lang, err)
+		return false
+	}
+	if len(t.Model) > 200 {
+		t.Model = t.Model[:200]
+	}
+	ok, err := p.St.AcceptTranslation(hub, t)
+	if err != nil {
+		log.Printf("replicate %s: translation of %s: %v", hub, t.Post, err)
+		return false
+	}
+	if ok && p.Bus != nil {
+		p.Bus.Emit(events.Event{Type: "post.translation", ID: t.Post})
+	}
+	return ok
+}
+
+var errNoTranslations = errors.New("peer has no /v1/translations")
+
+// fetchTranslations gets one /v1/translations page, verified like a
+// /v1/replicate one under its own prefix.
+func (p *Puller) fetchTranslations(base string, pub ed25519.PublicKey, hub string, after int64) (*api.TranslationsPayload, error) {
+	nb := make([]byte, 16)
+	rand.Read(nb)
+	nonce := hex.EncodeToString(nb)
+	resp, err := p.client.Get(base + "/v1/translations?after=" + strconv.FormatInt(after, 10) +
+		"&limit=" + strconv.Itoa(pageLimit) + "&nonce=" + nonce)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errNoTranslations
+	}
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("%s: %s", resp.Status, b)
+	}
+	var out struct {
+		Payload json.RawMessage `json:"payload"`
+		Sig     []byte          `json:"sig"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&out); err != nil {
+		return nil, err
+	}
+	if !ed25519.Verify(pub, append([]byte(envelope.TranslationsPrefix), out.Payload...), out.Sig) {
+		return nil, errors.New("bad page signature")
+	}
+	pl := &api.TranslationsPayload{}
 	if err := json.Unmarshal(out.Payload, pl); err != nil {
 		return nil, err
 	}

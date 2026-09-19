@@ -203,3 +203,114 @@ func TestTranslationRewriteAndDrop(t *testing.T) {
 		t.Fatal("a deleted post's note stayed")
 	}
 }
+
+// TestTranslationsShared: a hub serves the translations it made, in the
+// order it kept them, by a rev that is never given twice — a redone one
+// comes up again past a cursor that had read it — and never a failed try
+// or one it took from a peer. Of a peer's it keeps the newest: over
+// nothing, over a failed try, over an older one whoever made that, never
+// over a newer; what it has from anyone it does not owe.
+func TestTranslationsShared(t *testing.T) {
+	s := openTest(t)
+	a := newAuthor(t)
+	one := ingest(t, s, a, "post.create", map[string]any{"text": "one"})
+	two := ingest(t, s, a, "post.create", map[string]any{"text": "two"})
+	three := ingest(t, s, a, "post.create", map[string]any{"text": "three"})
+	for _, id := range []string{one, two, three} {
+		s.SetLang(id, "en", "m", true)
+	}
+	s.SetTranslation(one, "zh-Hans", "一", "m", true)
+	s.SetTranslation(two, "zh-Hans", "", "m", false)
+	s.SetTranslation(two, "zh-Hans", "二", "m", true)
+
+	page, next, err := s.TranslationsPage(0, 10)
+	if err != nil || len(page) != 2 || page[0].Post != one || page[1].Text != "二" || page[1].Model != "m" || page[1].TS == 0 {
+		t.Fatalf("page = %+v, next %d, %v", page, next, err)
+	}
+	if again, n, _ := s.TranslationsPage(next, 10); len(again) != 0 || n != next {
+		t.Fatalf("past the end: %+v, next %d, want nothing and the same cursor %d", again, n, next)
+	}
+	if first, n, _ := s.TranslationsPage(0, 1); len(first) != 1 || first[0].Post != one || n >= next {
+		t.Fatalf("a page of one: %+v, next %d", first, n)
+	}
+
+	// the newest, redone: it comes up again, past the cursor that had read it
+	if n, _ := s.DropTranslations(two, ""); n != 1 {
+		t.Fatal("drop")
+	}
+	s.SetTranslation(two, "zh-Hans", "二，重译", "m", true)
+	redone, next2, _ := s.TranslationsPage(next, 10)
+	if len(redone) != 1 || redone[0].Text != "二，重译" || next2 <= next {
+		t.Fatalf("after a redo: %+v, next %d after %d — the rev was given twice", redone, next2, next)
+	}
+
+	// a peer's translations
+	old, now := time.Now().Add(-time.Hour).UnixMilli(), time.Now().Add(time.Hour).UnixMilli()
+	take := func(post, text string, ts int64) bool {
+		ok, err := s.AcceptTranslation("peerhub", SharedTranslation{Post: post, Lang: "zh-Hans", Text: text, Model: "theirs", TS: ts})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !take(three, "三", old) {
+		t.Fatal("none kept yet: not taken")
+	}
+	if take(three, "三（同一条）", old) || take(one, "一（旧）", old) {
+		t.Fatal("took one no newer than what is kept")
+	}
+	if !take(one, "一（新）", now) {
+		t.Fatal("a newer one not taken over this hub's own")
+	}
+	if take("gone", "x", now) {
+		t.Fatal("took a translation of a post this hub does not hold")
+	}
+	s.SetTranslation(three, "en", "", "m", false) // a failed try is no translation: a peer's replaces it
+	if ok, _ := s.AcceptTranslation("peerhub", SharedTranslation{Post: three, Lang: "en", Text: "three", Model: "theirs", TS: old}); !ok {
+		t.Fatal("a peer's not taken over a failed try")
+	}
+	trs, _ := s.Translations([]string{one, two, three}, "zh-Hans")
+	if trs[one].Text != "一（新）" || trs[two].Text != "二，重译" || trs[three].Text != "三" {
+		t.Fatalf("kept = %+v", trs)
+	}
+	// taken ones are not served on, and nothing a hub has is owed
+	served, _, _ := s.TranslationsPage(0, 10)
+	if len(served) != 1 || served[0].Post != two {
+		t.Fatalf("served after taking = %+v, want only this hub's own", served)
+	}
+	if owed, _ := s.PostsToTranslate([]string{"zh-Hans"}, 3, 0, 10); len(owed) != 0 {
+		t.Fatalf("owed = %+v, want nothing: every post has one from someone", owed)
+	}
+
+	if text, lang, ok, err := s.PostText(one); err != nil || !ok || text != "one" || lang != "en" {
+		t.Fatalf("PostText = %q %q %v %v", text, lang, ok, err)
+	}
+	if _, _, ok, _ := s.PostText("gone"); ok {
+		t.Fatal("PostText of a post not held")
+	}
+}
+
+// TestTranslationsNumbered: translations kept before they had revs get
+// them at the next start, in the order they were made.
+func TestTranslationsNumbered(t *testing.T) {
+	s := openTest(t)
+	a := newAuthor(t)
+	x := ingest(t, s, a, "post.create", map[string]any{"text": "x"})
+	y := ingest(t, s, a, "post.create", map[string]any{"text": "y"})
+	for i, id := range []string{y, x} { // y was made first
+		if _, err := s.db.Exec(`INSERT INTO translations (post, lang, text, status, ts) VALUES (?, 'zh-Hans', '字', 'ok', ?)`, id, 100+i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.numberTranslations(); err != nil {
+		t.Fatal(err)
+	}
+	page, _, _ := s.TranslationsPage(0, 10)
+	if len(page) != 2 || page[0].Post != y || page[1].Post != x {
+		t.Fatalf("numbered = %+v, want y then x", page)
+	}
+	s.numberTranslations() // again: nothing to do, the numbers stand
+	if again, _, _ := s.TranslationsPage(0, 10); len(again) != 2 || again[0].Post != y {
+		t.Fatalf("numbered twice = %+v", again)
+	}
+}
