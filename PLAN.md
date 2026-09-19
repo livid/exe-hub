@@ -605,7 +605,19 @@ hub that carries the post.
   words; `w2`/`w3` make room for two and three digits. The Hub app reads
   lists with the same rules (`listAt`), and
   `internal/card/testdata/lists.json` holds the cases both parsers are
-  run against. Headings,
+  run against. Both composers — the pages' Post window and the Hub
+  app's — go on with a list by themselves (`listReturn`, the same
+  function in web.html and the app: change both): Return on an item
+  opens the next one, the same bullet or the number after it with its
+  own `.` or `)` and the marker's spaces, the words right of the caret
+  going down with it; Return on an item with no words yet ends the list
+  and leaves the line empty. It listens to `beforeinput`
+  (`insertLineBreak`), which every keyboard sends, a phone's too, steps
+  aside for Shift-Return, a caret inside the marker, a number past 999
+  and a Return that ends an input method's composition, and types its
+  change with `execCommand("insertText")`, so one Undo takes it back
+  (`~/tools/playwright/exe-hub-list-return-test.js`, `PAGE=1` for the
+  pages). Headings,
   code, the two links, bold, lists, tables: all of Markdown a
   post takes. Where a post's words show plain — excerpts, thread titles,
   preview pictures, stats labels, notifications — a Markdown link is put
