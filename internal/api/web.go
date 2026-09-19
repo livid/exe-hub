@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -501,6 +502,96 @@ func writePlain(b *strings.Builder, s string) {
 	b.WriteString(strings.ReplaceAll(html.EscapeString(s), "\n", "<br>\n"))
 }
 
+// webTag is one tag of renderText's own HTML. Every attribute value in
+// it is escaped, so no ">" sits inside one and a tag ends at the first.
+var webTag = regexp.MustCompile(`<[^>]*>`)
+
+// markHits lays the search's marks over a post's rendered text: every
+// stretch that holds one of the query's words goes into a <mark>, the
+// yellow the Hub app's Find puts on its results. It matches as the
+// search itself does (store.searchWhere: literal substrings, SQLite's
+// LIKE folding ASCII case and no other) — but over the words as they
+// show, one text node at a time: tags and their attributes pass through
+// untouched, so a word found only in an address ([words](url)) marks
+// nothing, and a node's text is unescaped before it is searched and
+// escaped again as it is written, so "amp" finds "camp" and never the
+// "&amp;" beside it. Stretches that touch or overlap join into one
+// mark. The Hub app's markHits does the same over its DOM, and
+// card/testdata/marks.json holds the cases both are run against.
+func markHits(page template.HTML, q string) template.HTML {
+	var words []string
+	for _, w := range strings.Fields(foldASCII(q)) {
+		if !slices.Contains(words, w) {
+			words = append(words, w)
+		}
+	}
+	if len(words) == 0 {
+		return page
+	}
+	src := string(page)
+	var b strings.Builder
+	last := 0
+	for _, m := range webTag.FindAllStringIndex(src, -1) {
+		writeMarked(&b, src[last:m[0]], words)
+		b.WriteString(src[m[0]:m[1]])
+		last = m[1]
+	}
+	writeMarked(&b, src[last:], words)
+	return template.HTML(b.String())
+}
+
+// writeMarked writes one text node, escaped as it came, with its found
+// stretches marked.
+func writeMarked(b *strings.Builder, escaped string, words []string) {
+	if escaped == "" {
+		return
+	}
+	text := html.UnescapeString(escaped)
+	low := foldASCII(text) // byte for byte as long as text: indexes hold
+	var runs [][2]int
+	for _, w := range words {
+		for at := 0; ; at++ {
+			i := strings.Index(low[at:], w)
+			if i < 0 {
+				break
+			}
+			at += i
+			runs = append(runs, [2]int{at, at + len(w)})
+		}
+	}
+	if len(runs) == 0 {
+		b.WriteString(escaped)
+		return
+	}
+	slices.SortFunc(runs, func(x, y [2]int) int { return cmp.Or(x[0]-y[0], x[1]-y[1]) })
+	at, from, to := 0, runs[0][0], runs[0][1]
+	flush := func() {
+		b.WriteString(html.EscapeString(text[at:from]))
+		b.WriteString("<mark>" + html.EscapeString(text[from:to]) + "</mark>")
+		at = to
+	}
+	for _, r := range runs[1:] {
+		if r[0] <= to {
+			to = max(to, r[1])
+		} else {
+			flush()
+			from, to = r[0], r[1]
+		}
+	}
+	flush()
+	b.WriteString(html.EscapeString(text[at:]))
+}
+
+// foldASCII lowers A–Z and nothing else: the case SQLite's LIKE folds.
+func foldASCII(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + 'a' - 'A'
+		}
+		return r
+	}, s)
+}
+
 // webWhen formats a post's own timestamp (kept for display, as PLAN.md
 // says; ordering uses receive time) as a fixed UTC stamp, and webStamp
 // as RFC 3339 for the <time> element's datetime.
@@ -930,6 +1021,9 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Posts, d.Prev, d.Next, d.Count = s.webPosts(pg.Posts), pg.Prev, pg.Next, count
+	for i := range d.Posts { // the found words on yellow
+		d.Posts[i].HTML = markHits(d.Posts[i].HTML, q)
+	}
 	s.webRender(w, r, http.StatusOK, d)
 }
 

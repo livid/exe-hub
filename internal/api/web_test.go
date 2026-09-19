@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"html/template"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -410,6 +411,56 @@ func TestRenderText(t *testing.T) {
 	}
 }
 
+// the cases the Hub app's markHits is run against too
+// (card/testdata/marks.json, read by ~/tools/playwright/exe-hub-find-test.js):
+// which stretches of a search result stand in a <mark>
+func TestMarkHits(t *testing.T) {
+	raw, err := os.ReadFile("../card/testdata/marks.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name, Text, Q string
+		Marks         []string
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	mark := regexp.MustCompile(`(?s)<mark>(.*?)</mark>`)
+	tags := regexp.MustCompile(`<[^>]*>`)
+	for _, c := range cases {
+		plain := string(renderText(c.Text))
+		page := string(markHits(template.HTML(plain), c.Q))
+		got := []string{}
+		for _, m := range mark.FindAllStringSubmatch(page, -1) {
+			got = append(got, html.UnescapeString(m[1]))
+		}
+		if !reflect.DeepEqual(got, c.Marks) {
+			t.Errorf("%s: marks %q, want %q\n%s", c.Name, got, c.Marks, page)
+		}
+		// the marks are all that is added: take them out and the page is as it was
+		if back := strings.NewReplacer("<mark>", "", "</mark>", "").Replace(page); back != plain {
+			t.Errorf("%s: more than marks changed\n got %s\nwant %s", c.Name, back, plain)
+		}
+		if strings.Contains(tags.ReplaceAllString(page, ""), "<") {
+			t.Errorf("%s: raw markup in the words\n%s", c.Name, page)
+		}
+	}
+	// the markup itself: tags and attributes pass through, entities stay whole
+	for _, c := range []struct{ in, q, want string }{
+		{"camp & tea", "amp", "c<mark>amp</mark> &amp; tea"},
+		{"[pie shop](https://x.y/pie)", "pie", `<a href="https://x.y/pie" title="https://x.y/pie" target="_blank" rel="noopener nofollow"><mark>pie</mark> shop</a>`},
+		{"a <b> pie", "<b>", "a <mark>&lt;b&gt;</mark> pie"},
+		{"see https://x.y/pie now", "pie", `see <a href="https://x.y/pie" target="_blank" rel="noopener nofollow">https://x.y/<mark>pie</mark></a> now`},
+		{"`pie()` and **Pie**", "PIE", "<code><mark>pie</mark>()</code> and <strong><mark>Pie</mark></strong>"},
+		{"target nofollow noopener", "target", "<mark>target</mark> nofollow noopener"},
+	} {
+		if got := string(markHits(renderText(c.in), c.q)); got != c.want {
+			t.Errorf("markHits(%q, %q)\n got %s\nwant %s", c.in, c.q, got, c.want)
+		}
+	}
+}
+
 // the cases the Hub app's formatText is run against too
 // (card/testdata/bold.json): which stretches come out bold, and which
 // words the links hold
@@ -590,7 +641,8 @@ func TestWebSearch(t *testing.T) {
 	}
 
 	code, body := get(t, h, "/search?q=apple")
-	if code != 200 || !strings.Contains(body, "apple pie<") || !strings.Contains(body, "Apple tart") || strings.Contains(body, "cherry") {
+	// the found word stands in a <mark>, capitals or not
+	if code != 200 || !strings.Contains(body, "<mark>apple</mark> pie<") || !strings.Contains(body, "<mark>Apple</mark> tart") || strings.Contains(body, "cherry") {
 		t.Errorf("apple: %d, hits wrong", code)
 	}
 	for _, want := range []string{
@@ -607,21 +659,21 @@ func TestWebSearch(t *testing.T) {
 
 	// every word must appear; whitespace is normalised into the field
 	_, body = get(t, h, "/search?q=+pie++APPLE+")
-	if !strings.Contains(body, strip+`pie APPLE"`) || !strings.Contains(body, "apple pie<") || strings.Contains(body, "cherry") || strings.Contains(body, "Apple tart") ||
+	if !strings.Contains(body, strip+`pie APPLE"`) || !strings.Contains(body, "<mark>apple</mark> <mark>pie</mark><") || strings.Contains(body, "cherry") || strings.Contains(body, "</mark> tart") ||
 		!strings.Contains(body, `<span class="stats">1 post matches</span>`) {
 		t.Error("two words: not the one post holding both")
 	}
 
 	// replies are found too, and shown as replies
 	_, body = get(t, h, "/search?q=pie")
-	if !strings.Contains(body, "pie again<") || !strings.Contains(body, `class="post reply"`) || !strings.Contains(body, `<span class="stats">3 posts match</span>`) {
+	if !strings.Contains(body, "<mark>pie</mark> again<") || !strings.Contains(body, `class="post reply"`) || !strings.Contains(body, `<span class="stats">3 posts match</span>`) {
 		t.Error("the reply is missing from the pie results")
 	}
 
 	// the query is escaped wherever it lands, and matched literally
 	_, body = get(t, h, "/search?q=%3Cb%3Ex")
 	if !strings.Contains(body, strip+`&lt;b&gt;x"`) || !strings.Contains(body, `<title>Search: &lt;b&gt;x · hub.example</title>`) ||
-		strings.Contains(body, "<b>x") || !strings.Contains(body, "Apple tart &lt;b&gt;x&lt;/b&gt;<") || !strings.Contains(body, "1 post matches") {
+		strings.Contains(body, "<b>x") || !strings.Contains(body, "Apple tart <mark>&lt;b&gt;x</mark>&lt;/b&gt;<") || !strings.Contains(body, "1 post matches") {
 		t.Errorf("markup in the query: %s", body)
 	}
 
@@ -668,7 +720,7 @@ func TestWebSearchPaging(t *testing.T) {
 		t.Errorf("a one-page search is headed by a pager: %q", topStrip(body))
 	}
 	_, body = get(t, h, "/search?q=hit+me&before="+oldestOnFirst)
-	if !strings.Contains(body, "hit me 2<") || !strings.Contains(body, "hit me 1<") || strings.Contains(body, "hit me 3<") ||
+	if !strings.Contains(body, "<mark>hit</mark> <mark>me</mark> 2<") || !strings.Contains(body, "<mark>hit</mark> <mark>me</mark> 1<") || strings.Contains(body, "</mark> 3<") ||
 		strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev back" href="/search?q=hit%20me&amp;after=`+ids[1]+`"><svg`) {
 		t.Errorf("last page: %q", statusLine(body))
 	}

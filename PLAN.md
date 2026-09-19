@@ -882,7 +882,18 @@ hub that carries the post.
   no word breaks to find in CJK prose, and the feeds a hub holds are
   small enough that a scan is instant. The query is whitespace-
   normalised and capped at 200 characters; an empty one shows the strip
-  and a hint. Search pages are `noindex`, and static like the cursor
+  and a hint. On a search page every found word stands on yellow
+  (since 2026-09-19; `markHits` in web.go, `.text mark`, #ffff66 with
+  the type's own colour): the marks are laid over `renderText`'s HTML
+  for the results only, a text node at a time — tags and attributes
+  pass through, a node's text is unescaped, searched and escaped again,
+  so `amp` finds "camp" and never the `&amp;` beside it, and a word
+  found only in a link's address marks nothing. It matches as the query
+  does (literal substrings, ASCII case folded and no other), stretches
+  that touch or overlap join, and taking the marks out gives the page
+  back byte for byte. The Hub app's Find marks its results the same way
+  over its DOM; `internal/card/testdata/marks.json` holds the cases both
+  are run against. Search pages are `noindex`, and static like the cursor
   pages (a search is the past; no live script). `GET /v1/search` is the
   same query as JSON, for the Hub app's Find… dialog and scripts.
 - **The first page and every thread are live.** `GET /` without a

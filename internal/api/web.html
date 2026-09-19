@@ -271,6 +271,11 @@ a { color: #333399; }
 .meta a:hover { text-decoration: underline; }
 .mono { font-family: Monaco, "Courier New", monospace; font-size: 11px; }
 .text { margin-top: 2px; overflow-wrap: anywhere; }
+/* a found word on a search page (web.go markHits): highlighter yellow
+   behind the type, which keeps its own colour — a link stays blue — its
+   weight and its width, so a marked post sets as it does in the feed.
+   The Hub app's Find carries the same yellow. */
+.text mark { background: #ffff66; color: inherit; }
 /* a heading line (#, ##, ###): bold, a step or two up, spaced by margins
    of its own — web.go absorbs a blank line beside it — with air above
    and a little below; .first opens the post, so no room above it. The

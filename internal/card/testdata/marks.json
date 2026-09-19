@@ -1,0 +1,18 @@
+[
+  {"name": "a word, capitals or not", "text": "Apple PIE and pie charts", "q": "pie", "marks": ["PIE", "pie"]},
+  {"name": "only ASCII capitals fold, as SQLite's LIKE does", "text": "Éclair éclair", "q": "éclair", "marks": ["éclair"]},
+  {"name": "part of a longer word, the ampersand beside it untouched", "text": "camp & tea", "q": "amp", "marks": ["amp"]},
+  {"name": "an entity's letters are not words", "text": "fish & chips <3 \"said\" 'so'", "q": "amp lt quot 34 39", "marks": []},
+  {"name": "a word found only in a link's address marks nothing", "text": "[Docs](https://example.org/amp)", "q": "amp", "marks": []},
+  {"name": "overlapping words make one mark", "text": "banana", "q": "ana nana", "marks": ["anana"]},
+  {"name": "touching stretches join", "text": "abcd", "q": "ab cd", "marks": ["abcd"]},
+  {"name": "every word of the query", "text": "Pieces of code", "q": "pie code", "marks": ["Pie", "code"]},
+  {"name": "in a bare link's address, which is its words", "text": "see https://example.com/pie-recipes now", "q": "pie", "marks": ["pie"]},
+  {"name": "in a heading, a link's words, code, bold and a table cell", "text": "# Pie day\n\n[pie shop](https://x.y/) and `pie()` and **pie**\n\n| Dish |\n| --- |\n| Pie |", "q": "pie", "marks": ["Pie", "pie", "pie", "pie", "Pie"]},
+  {"name": "markup in a query is words", "text": "a <b> pie", "q": "<b>", "marks": ["<b>"]},
+  {"name": "quotes are characters", "text": "say \"pie\" and 'pie'", "q": "\"pie\" 'pie'", "marks": ["\"pie\"", "'pie'"]},
+  {"name": "a stretch never spans two elements", "text": "**bo**ld", "q": "bold", "marks": []},
+  {"name": "a line break ends a stretch", "text": "pie\ncrust", "q": "pie crust", "marks": ["pie", "crust"]},
+  {"name": "CJK, flush against the words around it", "text": "派 pie 代码内容", "q": "代码", "marks": ["代码"]},
+  {"name": "no words, no marks", "text": "pie", "q": "   ", "marks": []}
+]
