@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -62,6 +63,18 @@ type Config struct {
 	// Stats is the pages' own analytics (PLAN.md, Stats): on unless
 	// enabled is false. Read at start only, like Media.
 	Stats *Stats `json:"stats,omitempty"`
+	// Ollama turns on naming each post's language by a model (PLAN.md,
+	// Post language). Absent leaves it off. Read at start only, like Media.
+	Ollama *Ollama `json:"ollama,omitempty"`
+}
+
+// Ollama is the model server the hub asks: a local Ollama, or
+// https://ollama.com with a key.
+type Ollama struct {
+	BaseURL string `json:"base_url,omitempty"` // default http://127.0.0.1:11434
+	APIKey  string `json:"api_key,omitempty"`
+	Model   string `json:"model,omitempty"`  // default glm-5.3:cloud
+	Effort  string `json:"effort,omitempty"` // Ollama's think level; default max
 }
 
 // Stats configures the public pages' analytics.
@@ -136,6 +149,17 @@ func Load(path string) (*Config, error) {
 		}
 		if m.MaxAudio <= 0 {
 			m.MaxAudio = 600
+		}
+	}
+	if o := c.Ollama; o != nil {
+		if o.BaseURL == "" {
+			o.BaseURL = "http://127.0.0.1:11434"
+		}
+		if o.Model == "" {
+			o.Model = "glm-5.3:cloud"
+		}
+		if o.Effort = strings.ToLower(strings.TrimSpace(o.Effort)); o.Effort == "" {
+			o.Effort = "max"
 		}
 	}
 	if c.Stats == nil {

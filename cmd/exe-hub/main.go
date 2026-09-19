@@ -27,6 +27,7 @@ import (
 	"exehub/internal/gate"
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
+	"exehub/internal/lang"
 	"exehub/internal/media"
 	"exehub/internal/push"
 	"exehub/internal/replicate"
@@ -117,12 +118,30 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	go cards.Run()
 	go cards.Backfill()
 	go cards.Sweep()
+	// Post language: with an ollama block in the config, a model names
+	// the language of every post (PLAN.md, Post language). The langs
+	// table is the worker's queue, so its first pass is the backfill, and
+	// an Ollama that is away only makes the posts wait.
+	var langs *lang.Worker
+	if o := cfg.Ollama; o != nil {
+		det := lang.NewDetector(o.BaseURL, o.APIKey, o.Model, o.Effort)
+		if err := det.Available(); err != nil {
+			log.Printf("lang: ollama %s unreachable (%v) — posts wait for their language until it answers", o.BaseURL, err)
+		} else {
+			log.Printf("lang: %s at %s names each post's language (think=%s)", o.Model, o.BaseURL, o.Effort)
+		}
+		langs = lang.NewWorker(st, det)
+		go langs.Run()
+	}
 	st.OnMessage = func(e *envelope.Envelope, op any, id string) {
 		switch o := op.(type) {
 		case *envelope.PostCreate:
 			bus.Emit(events.Event{Type: "post.create", ID: id, ReplyTo: o.ReplyTo, Author: e.ProfileID()})
 			// a card is for a bare link; a post already showing something needs none
 			cards.Enqueue(id, e.ProfileID(), o.Text, len(o.Embeds) == 0)
+			if langs != nil {
+				langs.Wake()
+			}
 		case *envelope.PostDelete:
 			bus.Emit(events.Event{Type: "post.delete", ID: o.Post, Author: e.ProfileID()})
 		case *envelope.ProfileSet:

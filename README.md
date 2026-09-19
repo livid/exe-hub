@@ -54,6 +54,13 @@ if it never appears, so the manager tries again.
 - **Text.** A post is plain text. URLs become links, `` `code` `` becomes
   code, a line of one to three `#` and a space is a heading, and that is
   all the Markdown a post takes. Nothing in a post can smuggle markup in.
+- **Language.** With an `"ollama"` block in the config (`base_url`, and
+  optionally `api_key`, `model`, `effort`), a model names the language
+  each post is written in, as a BCP 47 tag kept beside the post (`en`,
+  `zh-Hans`, `zxx` for no words). The default is `glm-5.3:cloud` thinking
+  at `max`. Every post without a language is the work list, so the posts
+  from before the block was added are named on the first pass. Nothing
+  shows the language yet.
 
 ## Who may post
 

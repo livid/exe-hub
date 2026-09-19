@@ -1486,3 +1486,44 @@ the page works without JavaScript (a small script keeps it current).
   ids and sessions), `internal/store` (the queries), `internal/api`
   (counting through the handlers, the page, the JSON, the spans).
 
+
+## Post language — each post's language, named by a model (built 2026-09-19)
+
+Every post the hub accepts gets the natural language it is written in,
+kept beside it for later use: a `lang` attribute so Han text draws in the
+right glyphs, a feed in one language, an offer to translate. Nothing
+shows it yet, and no read serves it. Asked by Livid 2026-09-19.
+
+- **Config**: `"ollama": {"base_url": "http://127.0.0.1:11434", "api_key",
+  "model": "glm-5.3:cloud", "effort": "max"}`. Absent leaves the feature
+  off; `base_url` alone is enough, the model and the effort default to
+  the two shown. Read at start like `media`. `effort` is Ollama's `think`
+  level and thinking is never turned off: a level the server refuses
+  steps down to plain `think: true`, then to no field.
+- **One tag.** The model is asked for one BCP 47 tag, the language most
+  of the post's prose is in, links, code, names and quoted terms aside:
+  a bare language (`en`, `ja`), with the script where one language is
+  written in several (`zh-Hans`, `zh-Hant`, `sr-Latn`). A region is
+  dropped (`en-US` is `en`, `zh-TW` is `zh-Hant`), so posts group by
+  language. `zxx` is a post with no words, `und` one the model could not
+  tell. The post is sent as data under a system prompt, its first 2000
+  characters, and the answer has to parse as a tag (`x/text/language`),
+  so the worst a post can do by talking to the model is be filed under
+  the wrong language. A post with no letters outside its links is `zxx`
+  without asking.
+- **Derived, never signed.** `langs` (`post`, `lang`, `model`, `status`,
+  `tries`, `ts`) sits beside `cards`, outside the envelope, every hub
+  naming its own posts, replicated ones included. Like `cards` it is not
+  rebuilt from the log: `Rebuild` keeps the rows of surviving posts and
+  drops orphans, and `post.delete` takes the row with the post.
+- **The table is the queue** (`internal/lang`). One goroutine; a new post
+  wakes it, and a pass pages through every post with no language, newest
+  first, until none is left, so the backfill of the posts from before
+  this feature is only the first pass, and nothing is dropped by a full
+  queue or a restart. An Ollama that does not answer writes nothing and
+  ends the pass, which comes again in five minutes; an answer that is no
+  tag is recorded as a failed try, and a post gets three, an hour apart.
+- Tests: `internal/lang` (the tag's normal form, the step down from a
+  refused think level, a pass against a fake Ollama: named, wordless,
+  unreachable, a bad answer), `internal/store` (the rows, the worklist,
+  delete and `Rebuild`).

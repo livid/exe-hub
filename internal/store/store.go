@@ -178,6 +178,19 @@ CREATE TABLE IF NOT EXISTS pictures (
   tries  INTEGER NOT NULL DEFAULT 0,
   ts     INTEGER NOT NULL,
   PRIMARY KEY (post, url)
+);
+
+-- A post's natural language (see PLAN.md, Post language), named by a
+-- model: derived like cards, so outside the envelope and not rebuilt
+-- from the log. A failed row counts the answers that were no tag; an
+-- Ollama that did not answer leaves no row at all.
+CREATE TABLE IF NOT EXISTS langs (
+  post   TEXT PRIMARY KEY,
+  lang   TEXT NOT NULL DEFAULT '',     -- BCP 47: en, ja, zh-Hans; zxx = no words, und = could not tell
+  model  TEXT NOT NULL DEFAULT '',     -- who named it; '' = nobody asked (a post without words)
+  status TEXT NOT NULL,                -- 'ok' | 'failed'
+  tries  INTEGER NOT NULL DEFAULT 0,
+  ts     INTEGER NOT NULL
 );`)
 	if err != nil {
 		return err
@@ -532,6 +545,10 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM pictures WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
+		// and the language it was named
+		if _, err := tx.Exec(`DELETE FROM langs WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
 		// the thread whose newest reply this was: after the delete its
 		// pointer moves back to the newest remaining reply in the tree
 		// (or clears, the root's own arrival becoming the activity
@@ -704,6 +721,10 @@ func (s *Store) Rebuild() error {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE pins SET refs = refs + (SELECT COUNT(*) FROM pictures WHERE pictures.cid = pins.cid AND pictures.status='ok')`); err != nil {
+		return err
+	}
+	// The posts' languages survive too, orphans dropped.
+	if _, err := tx.Exec(`DELETE FROM langs WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -1134,6 +1155,57 @@ func (s *Store) CardsToArchive(maxTries int, before int64, limit int) ([]CardPos
 	rows, err := s.db.Query(`SELECT p.id, p.author, c.url FROM cards c JOIN posts p ON p.id = c.post
 		WHERE c.status = 'ok' AND c.archive = '' AND c.archive_tries < ? AND c.archive_ts < ?
 		ORDER BY c.archive_ts, p.received DESC LIMIT ?`, maxTries, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ---- post language (see PLAN.md, Post language) ----
+
+// SetLang records what a post was named: its BCP 47 tag and the model
+// that said it (empty when nobody was asked), or, with ok false, one more
+// answer that was no tag. A post deleted meanwhile gets no row.
+func (s *Store) SetLang(post, lang, model string, ok bool) error {
+	status := "ok"
+	if !ok {
+		status, lang = "failed", ""
+	}
+	_, err := s.db.Exec(`INSERT INTO langs (post, lang, model, status, tries, ts)
+		SELECT ?,?,?,?,1,? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+		ON CONFLICT(post) DO UPDATE SET lang=excluded.lang, model=excluded.model,
+		status=excluded.status, tries=langs.tries+1, ts=excluded.ts`,
+		post, lang, model, status, time.Now().UnixMilli(), post)
+	return err
+}
+
+// PostLang is the post's language, empty while it has none.
+func (s *Store) PostLang(post string) (string, error) {
+	var lang string
+	err := s.db.QueryRow(`SELECT lang FROM langs WHERE post=? AND status='ok'`, post).Scan(&lang)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return lang, err
+}
+
+// PostsWithoutLang lists the posts still to name, newest first — the
+// language worker's worklist: never asked about, or answered with no tag,
+// tries left and the last one before (unix ms).
+func (s *Store) PostsWithoutLang(maxTries int, before int64, limit int) ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, p.text FROM posts p
+		LEFT JOIN langs l ON l.post = p.id
+		WHERE l.post IS NULL OR (l.status = 'failed' AND l.tries < ? AND l.ts < ?)
+		ORDER BY p.received DESC, p.id DESC LIMIT ?`, maxTries, before, limit)
 	if err != nil {
 		return nil, err
 	}

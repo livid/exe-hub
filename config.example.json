@@ -16,5 +16,6 @@
   "allow_replication": true,
   "cooldown": 60,
   "media": { "encoder": "auto", "max_mb": 256, "max_video_s": 180, "max_audio_s": 600 },
-  "stats": { "enabled": true, "timezone": "America/Los_Angeles" }
+  "stats": { "enabled": true, "timezone": "America/Los_Angeles" },
+  "ollama": { "base_url": "http://127.0.0.1:11434", "model": "glm-5.3:cloud", "effort": "max" }
 }
