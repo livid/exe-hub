@@ -1299,8 +1299,13 @@ document.addEventListener("click", e => {
   // is what the writer reads, and is remembered; when the post is sent
   // every remembered "@Name" goes out as "@" and the profile's id, the
   // one thing about a person that never changes, and the pages look the
-  // name up again each time they draw the post. A name typed in full and
-  // left with a space counts as a pick when just one profile has it. The
+  // name up again each time they draw the post. Only a row the writer
+  // chose is remembered: the id that is signed is one they saw and picked.
+  // A name typed by hand is words however well it matches — a list is an
+  // answer still on its way or one for a shorter word, so reading it at a
+  // keystroke made the same typing sign an id or not by the network's
+  // timing, and one match in a page of six is no proof a name is one
+  // person's (Codex's catch, 2026-09-19). The
   // arrows walk the list, Return or Tab picks, Escape puts it away; a
   // Return that ends an input method's composition is left alone. The
   // exe Hub app's composer does the same (sysapps/hub index.html):
@@ -1341,13 +1346,8 @@ document.addEventListener("click", e => {
     atMark();
   }
   async function atLook() {
-    const now = atQuery(), was = at, hits = atHits;
-    if (!now) {
-      // a name typed out and left: a pick, when one profile alone has it
-      if (was && was.q && /\s$/.test(text.value.slice(0, text.selectionStart))) {
-        const same = hits.filter(h => h.name.toLowerCase() === was.q.toLowerCase());
-        if (same.length === 1 && text.value.slice(was.from + 1, was.from + 1 + was.q.length) === was.q) picked.set(was.q, same[0].id);
-      }
+    const now = atQuery();
+    if (!now) { // the caret has left the word: a name typed out and left is words, whatever the list showed
       atShut = -1;
       return atClose();
     }

@@ -1361,9 +1361,24 @@ time, so what is saved must be the stable id under it.
   puts it away until another `@`, a press picks on a phone; the writer's
   own profile is not offered. A pick puts `@Name` in the field — what the
   writer reads — and remembers name → id; **the ids go in when the post is
-  sent** (`withIds`: longest names first, code spans left alone). A name
-  typed out in full and left with a space counts as a pick when exactly
-  one offered profile has it; any other hand-typed `@name` is words.
+  sent** (`withIds`: longest names first, code spans left alone).
+- **Only a row the writer chose becomes a mention.** Return, Tab or a
+  press on a row is the one way an id goes into a post: the writer saw
+  the picture, the name and the id, and picked — that is the "validated"
+  in what Livid asked for. A hand-typed `@name` is words, however well it
+  matches. (Until 2026-09-19 a name typed in full and left with a space
+  counted as a pick when one offered profile had it. Codex's catch: the
+  list read at that keystroke is whatever answer landed last, so the same
+  typing signed `@<id>` when the answer beat the space, plain `@Alex`
+  when it did not, and the id again off a stale answer for `@Ale`; and
+  one match in a page of six proves nothing about a name — with two
+  profiles named Alex and five more holding "alex", the page shows only
+  the Alex who posted last, which hands a typed mention to whoever last
+  posted under a name. A signed post cannot be edited and the field reads
+  the same either way. Resolving names at send time would be the same
+  guess made later, so nothing replaces it.) Both tests hold the
+  `/v1/profiles` answers and land them before the space, after it, and
+  stale: all must sign the plain name, and a Return on the row the id.
 - **Translations keep them.** The prompt says to copy an `@` id exactly,
   and `lang.Check` refuses a translation whose mentions differ from the
   post's, as it does for links and code spans; the page sets the names in
