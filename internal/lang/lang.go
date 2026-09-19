@@ -1,5 +1,6 @@
-// Package lang names the natural language each post is written in, by
-// asking a model on an Ollama server (see PLAN.md, Post language).
+// Package lang names the natural language each post is written in and
+// puts it into the languages the hub's readers read, by asking a model
+// on an Ollama server (see PLAN.md, Post language and Translations).
 package lang
 
 import (
@@ -47,22 +48,23 @@ Answer with one BCP 47 tag and nothing else: the language most of its prose is i
 
 Answer zxx when the post has no words in any natural language, and und when it has words but you cannot tell the language.`
 
-// Detector asks one model on one Ollama server.
-type Detector struct {
+// Model asks one model on one Ollama server. Every call carries its own
+// deadline: naming a language is seconds, a translation at full thought
+// minutes.
+type Model struct {
 	BaseURL string
 	APIKey  string
-	Model   string
+	Name    string
 	Effort  string // Ollama's think level; a refused one steps down, never off
 	client  *http.Client
 }
 
-func NewDetector(baseURL, apiKey, model, effort string) *Detector {
-	return &Detector{BaseURL: strings.TrimRight(baseURL, "/"), APIKey: apiKey, Model: model, Effort: effort,
-		client: &http.Client{Timeout: 3 * time.Minute}}
+func NewModel(baseURL, apiKey, name, effort string) *Model {
+	return &Model{BaseURL: strings.TrimRight(baseURL, "/"), APIKey: apiKey, Name: name, Effort: effort, client: &http.Client{}}
 }
 
 // Available says whether the server answers at all.
-func (d *Detector) Available() error {
+func (d *Model) Available() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.BaseURL+"/api/version", nil)
@@ -82,7 +84,7 @@ func (d *Detector) Available() error {
 	return nil
 }
 
-func (d *Detector) auth(req *http.Request) {
+func (d *Model) auth(req *http.Request) {
 	if d.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+d.APIKey)
 	}
@@ -116,11 +118,27 @@ type message struct {
 }
 
 // Detect names the text's language as a normal-form tag (see Normal).
-func (d *Detector) Detect(ctx context.Context, text string) (string, error) {
+func (d *Model) Detect(ctx context.Context, text string) (string, error) {
 	if r := []rune(text); len(r) > maxRunes {
 		text = string(r[:maxRunes])
 	}
-	creq := chatRequest{Model: d.Model, Messages: []message{{"system", prompt}, {"user", text}}}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	answer, err := d.ask(ctx, prompt, text)
+	if err != nil {
+		return "", err
+	}
+	tag, ok := Normal(answer)
+	if !ok {
+		return "", fmt.Errorf("%w: %.80q", ErrAnswer, answer)
+	}
+	return tag, nil
+}
+
+// ask is one question: the system prompt, the post as the user's
+// message, the model's answer.
+func (d *Model) ask(ctx context.Context, system, user string) (string, error) {
+	creq := chatRequest{Model: d.Name, Messages: []message{{"system", system}, {"user", user}}}
 	if d.Effort != "" {
 		creq.Think = d.Effort
 	}
@@ -139,7 +157,7 @@ func (d *Detector) Detect(ctx context.Context, text string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 		resp.Body.Close()
 		if err != nil {
 			return "", err
@@ -153,24 +171,20 @@ func (d *Detector) Detect(ctx context.Context, text string) (string, error) {
 			if _, level := creq.Think.(string); level {
 				next = true
 			}
-			log.Printf("lang: %s refused think=%v, asking with think=%v", d.Model, creq.Think, next)
+			log.Printf("lang: %s refused think=%v, asking with think=%v", d.Name, creq.Think, next)
 			creq.Think = next
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("ollama %s: HTTP %d: %.200s", d.Model, resp.StatusCode, raw)
+			return "", fmt.Errorf("ollama %s: HTTP %d: %.200s", d.Name, resp.StatusCode, raw)
 		}
 		var out struct {
 			Message message `json:"message"`
 		}
 		if err := json.Unmarshal(raw, &out); err != nil {
-			return "", fmt.Errorf("ollama %s: %w", d.Model, err)
+			return "", fmt.Errorf("ollama %s: %w", d.Name, err)
 		}
-		tag, ok := Normal(out.Message.Content)
-		if !ok {
-			return "", fmt.Errorf("%w: %.80q", ErrAnswer, out.Message.Content)
-		}
-		return tag, nil
+		return out.Message.Content, nil
 	}
 }
 

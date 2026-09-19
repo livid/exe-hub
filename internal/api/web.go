@@ -18,6 +18,7 @@ import (
 
 	"exehub/internal/card"
 	"exehub/internal/envelope"
+	"exehub/internal/lang"
 	"exehub/internal/preview"
 	"exehub/internal/store"
 )
@@ -166,6 +167,26 @@ type webPost struct {
 	// a root with replies: the thread's newest reply, on the foot line —
 	// the feed says what was said last instead of burying it
 	Latest *webLatest
+	// the post in the reader's language, when it is written in another
+	// and has been put into theirs (see PLAN.md, Translations)
+	Tr *webTr
+	// "?lang=…" when the request said its language: the post's own links
+	// carry it, so a look at the other language lasts past one click
+	Q string
+}
+
+// webTr is a post's translation as the page shows it: standing where
+// the text does, the post as written hidden under it, and a quiet line
+// below that swaps the two.
+type webTr struct {
+	HTML template.HTML // rendered like any post's text
+	Lang string        // the language it is in, its lang attribute
+	Note string        // "Translated from English", in the reader's language
+	// the control's words as the page opens and once pressed
+	Show, Back string
+	// the page opens on the post as written, the translation one press
+	// away: a search found the post by words only its original has
+	Orig bool
 }
 
 // webLatest is the newest reply in a post's thread, as the foot shows
@@ -269,7 +290,8 @@ type webData struct {
 	Posts          []webPost
 	Prev, Next     string // keyset cursors for the neighbouring pages, "" at either end
 	Live           bool   // the home page's first page and every thread: ships the live script
-	Lang           string // the home page's ?lang= ("zh" | "en" | ""), carried by its pager links
+	Lang           string // the request's ?lang=, when it said one: carried by the pager links and the find strip
+	Q              string // the same as "?lang=…", for a link with no query of its own
 	PushKey        string // the home page on a hub that pushes: the VAPID public key for the Notify box
 	Query          string // the search page's words, and what the find strip's field holds
 	Join           *webJoin
@@ -644,16 +666,31 @@ func webStamp(ms int64) string {
 	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
 }
 
-func (s *Server) webPosts(posts []store.FeedPost) []webPost {
+func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
+	ids := make([]string, 0, len(posts))
+	for _, p := range posts {
+		ids = append(ids, p.ID)
+		if p.LastReply != nil {
+			ids = append(ids, p.LastReply.ID)
+		}
+	}
+	trs := s.webTranslations(rd, ids)
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
-		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS)}
+		out[i] = webPost{FeedPost: p, HTML: renderText(p.Text), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
+		if t, ok := trs[p.ID]; ok && p.Text != "" {
+			out[i].Tr = rd.tr(t)
+		}
 		if p.LastReply != nil && p.ReplyTo == "" {
 			name := p.LastReply.AuthorName
 			if name == "" {
 				name = p.LastReply.Author
 			}
-			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(p.LastReply.Text, 90)}
+			said := p.LastReply.Text
+			if t, ok := trs[p.LastReply.ID]; ok {
+				said = t.Text
+			}
+			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(said, 90)}
 		}
 		for _, e := range p.Embeds {
 			switch {
@@ -681,18 +718,21 @@ func (s *Server) webPosts(posts []store.FeedPost) []webPost {
 // exchange rather than half a conversation. A run of replies under one
 // parent gets one head — the page never repeats it — and a parent this
 // hub does not hold leaves the plain "in reply to" link as it was.
-func (s *Server) webQuoted(posts []webPost) []webPost {
+func (s *Server) webQuoted(rd webReading, posts []webPost) []webPost {
 	parents := map[string]*store.FeedPost{}
+	var ids []string
 	for i := range posts {
 		id := posts[i].ReplyTo
-		if id == "" {
+		if _, seen := parents[id]; id == "" || seen {
 			continue
 		}
-		p, seen := parents[id]
-		if !seen {
-			p, _ = s.St.Post(id) // nil on any error: the plain link stands
-			parents[id] = p
-		}
+		parents[id], _ = s.St.Post(id) // nil on any error: the plain link stands
+		ids = append(ids, id)
+	}
+	trs := s.webTranslations(rd, ids) // the quote reads in the reader's language, like the reply under it
+	for i := range posts {
+		id := posts[i].ReplyTo
+		p := parents[id]
 		if p == nil {
 			continue
 		}
@@ -700,7 +740,11 @@ func (s *Server) webQuoted(posts []webPost) []webPost {
 			posts[i].QuoteRun = true
 			continue
 		}
-		posts[i].Quote = &webQuote{ID: p.ID, Name: authorLabel(*p), Text: excerpt(p.Text, 140)}
+		said := p.Text
+		if t, ok := trs[id]; ok {
+			said = t.Text
+		}
+		posts[i].Quote = &webQuote{ID: p.ID, Name: authorLabel(*p), Text: excerpt(said, 140)}
 	}
 	return posts
 }
@@ -823,6 +867,14 @@ func webChinese(r *http.Request) bool {
 	if l := webLang(r); l != "" {
 		return l == "zh"
 	}
+	best := webBrowserLang(r)
+	return best == "zh" || strings.HasPrefix(best, "zh-")
+}
+
+// webBrowserLang is the browser's first language, lower-cased: the
+// Accept-Language tag with the highest q, the earlier one on a tie, as
+// the browser ordered them; "" when the request names none.
+func webBrowserLang(r *http.Request) string {
 	best, bestQ := "", 0.0
 	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
 		tag, params, _ := strings.Cut(strings.TrimSpace(part), ";")
@@ -842,7 +894,109 @@ func webChinese(r *http.Request) bool {
 			best, bestQ = strings.ToLower(tag), q
 		}
 	}
-	return best == "zh" || strings.HasPrefix(best, "zh-")
+	return best
+}
+
+// webReading is how one request reads the posts (see PLAN.md,
+// Translations): whose language they are shown in.
+type webReading struct {
+	// Reader is the reader's own language in the form the hub keeps a
+	// post's (lang.Normal: en, ja, zh-Hans, zh-Hant), "" when the request
+	// names none — a crawler's — and "orig" when it asks for every post
+	// as written.
+	Reader string
+	// Target is the language they are given translations in: zh-Hans for
+	// a Chinese reader, en, the hub's second language, for every other,
+	// "" for none.
+	Target string
+	// Lang is the request's ?lang= when it said one the pages take, and Q
+	// the same as "?lang=…": the page's own links carry it.
+	Lang, Q string
+}
+
+// webReadingOf reads the request the way webChinese does: ?lang= when
+// it says — zh, en, a fuller tag, or orig — else the browser's first
+// language. Decided on the server, so a page never flashes from one
+// language to another and stands without script; every page with posts
+// says Vary: Accept-Language.
+func webReadingOf(r *http.Request) webReading {
+	var rd webReading
+	tag := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang")))
+	if tag != "" {
+		if rd.Reader = webReaderTag(tag); rd.Reader != "" {
+			rd.Lang, rd.Q = tag, "?lang="+url.QueryEscape(tag)
+		}
+	}
+	if rd.Reader == "" {
+		rd.Reader = webReaderTag(webBrowserLang(r))
+	}
+	switch {
+	case rd.Reader == "" || rd.Reader == "orig":
+	case strings.HasPrefix(rd.Reader, "zh-"):
+		rd.Target = "zh-Hans"
+	default:
+		rd.Target = "en"
+	}
+	return rd
+}
+
+// webReaderTag is a language as a request names it, in the hub's form:
+// a bare zh reads Simplified, as the join block has it.
+func webReaderTag(tag string) string {
+	switch tag {
+	case "orig":
+		return "orig"
+	case "zh":
+		return "zh-Hans"
+	}
+	norm, _ := lang.Normal(tag)
+	if norm == lang.Unknown || norm == lang.NoWords {
+		return ""
+	}
+	return norm
+}
+
+// shows says a post written in from is shown to this reader in their
+// Target: it is in neither their own language nor the one they read.
+func (rd webReading) shows(from string) bool {
+	return rd.Target != "" && from != rd.Reader && from != rd.Target
+}
+
+// tr dresses a translation for the page, the line under it in the
+// reader's language.
+func (rd webReading) tr(t store.Translation) *webTr {
+	tr := &webTr{HTML: renderText(t.Text), Lang: rd.Target}
+	// the language alone: its script tells only a Chinese reader
+	// something, Traditional from the Simplified they are reading
+	from, _, _ := strings.Cut(t.From, "-")
+	if rd.Target == "zh-Hans" {
+		if from == "zh" {
+			from = t.From
+		}
+		tr.Note, tr.Show, tr.Back = "译自"+lang.Chinese(from), "显示原文", "显示译文"
+	} else {
+		tr.Note, tr.Show, tr.Back = "Translated from "+lang.English(from), "Show Original", "Show Translation"
+	}
+	return tr
+}
+
+// webTranslations is the posts among ids this reader is shown
+// translated, by id. A store that cannot be read leaves every post as
+// written: the page stands.
+func (s *Server) webTranslations(rd webReading, ids []string) map[string]store.Translation {
+	if rd.Target == "" || len(ids) == 0 {
+		return nil
+	}
+	trs, err := s.St.Translations(ids, rd.Target)
+	if err != nil {
+		return nil
+	}
+	for id, t := range trs {
+		if !rd.shows(t.From) {
+			delete(trs, id)
+		}
+	}
+	return trs
 }
 
 func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *webData) {
@@ -861,6 +1015,11 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	switch d.Page {
+	case "home", "thread", "profile", "search":
+		// the join block's language, and the posts' (PLAN.md, Translations)
+		w.Header().Set("Vary", "Accept-Language")
+	}
 	w.WriteHeader(code)
 	if err := webTmpl.ExecuteTemplate(w, "page", d); err != nil {
 		// headers are out; the log is all that is left
@@ -983,20 +1142,16 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The feed could not be read.")
 		return
 	}
-	lang := webLang(r)
+	rd := webReadingOf(r)
 	if pg.Home {
-		home := "/"
-		if lang != "" {
-			home += "?lang=" + lang
-		}
-		http.Redirect(w, r, home, http.StatusFound)
+		http.Redirect(w, r, "/"+rd.Q, http.StatusFound)
 		return
 	}
 	members, count, _ := s.St.Counts()
 	d := &webData{
 		Page: "home", Desc: webDesc, Canonical: true,
 		Image: webBase(r) + "/v1/preview/home.png", ImageW: preview.W, ImageH: preview.H, ImageAlt: r.Host + ", " + webDesc,
-		Posts: s.webPosts(pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r), Lang: lang,
+		Posts: s.webPosts(rd, pg.Posts), Prev: pg.Prev, Next: pg.Next, Join: s.webJoinBlock(r), Lang: rd.Lang, Q: rd.Q,
 		Live:    s.Events != nil && q.Get("before") == "" && q.Get("after") == "",
 		Members: members, Count: count,
 	}
@@ -1009,7 +1164,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if s.Stats != nil {
 		d.StatsOn, d.Online = true, s.Stats.Online()
 	}
-	w.Header().Set("Vary", "Accept-Language") // the join block's language
 	s.webRender(w, r, http.StatusOK, d)
 }
 
@@ -1035,7 +1189,8 @@ func normQuery(q string) string {
 // strip and a hint. Static, and noindex: a search is the past.
 func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	q := normQuery(r.URL.Query().Get("q"))
-	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q}
+	rd := webReadingOf(r)
+	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q, Lang: rd.Lang, Q: rd.Q}
 	if q == "" {
 		s.webRender(w, r, http.StatusOK, d)
 		return
@@ -1053,7 +1208,11 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if pg.Home {
-		http.Redirect(w, r, "/search?q="+url.QueryEscape(q), http.StatusFound)
+		home := "/search?q=" + url.QueryEscape(q)
+		if rd.Lang != "" {
+			home += "&lang=" + url.QueryEscape(rd.Lang)
+		}
+		http.Redirect(w, r, home, http.StatusFound)
 		return
 	}
 	count, err := s.St.SearchCount(q)
@@ -1061,9 +1220,18 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The posts could not be searched.")
 		return
 	}
-	d.Posts, d.Prev, d.Next, d.Count = s.webPosts(pg.Posts), pg.Prev, pg.Next, count
+	d.Posts, d.Prev, d.Next, d.Count = s.webPosts(rd, pg.Posts), pg.Prev, pg.Next, count
 	for i := range d.Posts { // the found words on yellow
-		d.Posts[i].HTML = markHits(d.Posts[i].HTML, q)
+		p := &d.Posts[i]
+		own := markHits(p.HTML, q)
+		if p.Tr != nil {
+			// the search looks in the posts as written: one found only by
+			// its own words opens as written, where the yellow is
+			tr := markHits(p.Tr.HTML, q)
+			p.Tr.Orig = tr == p.Tr.HTML && own != p.HTML
+			p.Tr.HTML = tr
+		}
+		p.HTML = own
 	}
 	s.webRender(w, r, http.StatusOK, d)
 }
@@ -1084,9 +1252,10 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The thread could not be read.")
 		return
 	}
-	post := s.webPosts([]store.FeedPost{*p})[0]
+	rd := webReadingOf(r)
+	post := s.webPosts(rd, []store.FeedPost{*p})[0]
 	post.Replies = 0 // the replies are right below; no link to this same page
-	replies := s.webPosts(thread)
+	replies := s.webPosts(rd, thread)
 	names := map[string]string{p.ID: authorLabel(*p)}
 	for _, t := range thread {
 		names[t.ID] = authorLabel(t)
@@ -1099,7 +1268,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		Page: "thread", Title: threadTitle(*p, r.Host), Desc: excerpt(p.Text, 200),
 		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
-		Live: s.Events != nil,
+		Live: s.Events != nil, Lang: rd.Lang, Q: rd.Q,
 	}
 	if d.Desc == "" {
 		d.Desc = previewNoWords(*p) + " By " + authorLabel(*p) + " on " + r.Host + "."
@@ -1143,13 +1312,14 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "The posts could not be read.")
 		return
 	}
+	rd := webReadingOf(r)
 	if pg.Home {
-		http.Redirect(w, r, "/u/"+url.PathEscape(id), http.StatusFound)
+		http.Redirect(w, r, "/u/"+url.PathEscape(id)+rd.Q, http.StatusFound)
 		return
 	}
 	posts := pg.Posts
 	pr, err := s.St.Profile(id)
-	d := &webData{Page: "profile", Posts: s.webQuoted(s.webPosts(posts)), Prev: pg.Prev, Next: pg.Next}
+	d := &webData{Page: "profile", Posts: s.webQuoted(rd, s.webPosts(rd, posts)), Prev: pg.Prev, Next: pg.Next, Lang: rd.Lang, Q: rd.Q}
 	switch {
 	case err == nil:
 		d.Profile, d.Count = pr, pr.Posts

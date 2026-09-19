@@ -59,8 +59,17 @@ if it never appears, so the manager tries again.
   each post is written in, as a BCP 47 tag kept beside the post (`en`,
   `zh-Hans`, `zxx` for no words). The default is `glm-5.3:cloud` thinking
   at `max`. Every post without a language is the work list, so the posts
-  from before the block was added are named on the first pass. Nothing
-  shows the language yet.
+  from before the block was added are named on the first pass.
+- **Translations.** The same block has the model put every post into the
+  two languages the hub's readers read: Simplified Chinese, unless it is
+  written in it, and English, unless it is written in that. The pages
+  show a reader the one they read, by `?lang=zh` or `?lang=en` when the
+  address says, else by the browser's first language, with a quiet
+  "Translated from English · Show Original" under the post that swaps
+  in the post as written; `?lang=orig` shows every post as written. A
+  translation at `max` thinks for a minute or more, so a hub's history
+  takes hours, newest posts first. `"translate": false` in the block
+  keeps the languages and turns the translating off.
 
 ## Who may post
 

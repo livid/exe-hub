@@ -104,11 +104,11 @@ func (f *fakeOllama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"message": message{"assistant", content}})
 }
 
-func newFake(t *testing.T, f *fakeOllama) *Detector {
+func newFake(t *testing.T, f *fakeOllama) *Model {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	return NewDetector(srv.URL+"/", "", "glm-5.3:cloud", "max")
+	return NewModel(srv.URL+"/", "", "glm-5.3:cloud", "max")
 }
 
 // TestDetect: the post goes as the user's message under the system
@@ -259,10 +259,10 @@ func TestPassOllamaAway(t *testing.T) {
 }
 
 func TestTally(t *testing.T) {
-	if got := tally(map[string]int{"en": 7, "zh-Hans": 4, "ja": 1, "de": 1}); got != "13 posts named: en 7, zh-Hans 4, de 1, ja 1" {
+	if got := tally(map[string]int{"en": 7, "zh-Hans": 4, "ja": 1, "de": 1}, "post named", "posts named"); got != "13 posts named: en 7, zh-Hans 4, de 1, ja 1" {
 		t.Fatal(got)
 	}
-	if got := tally(map[string]int{"ja": 1}); got != "1 post named: ja 1" {
+	if got := tally(map[string]int{"ja": 1}, "post named", "posts named"); got != "1 post named: ja 1" {
 		t.Fatal(got)
 	}
 }

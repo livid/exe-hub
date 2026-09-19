@@ -75,7 +75,13 @@ type Ollama struct {
 	APIKey  string `json:"api_key,omitempty"`
 	Model   string `json:"model,omitempty"`  // default glm-5.3:cloud
 	Effort  string `json:"effort,omitempty"` // Ollama's think level; default max
+	// Translate false keeps the posts' languages and leaves the
+	// translating off (PLAN.md, Translations); absent is on.
+	Translate *bool `json:"translate,omitempty"`
 }
+
+// Translates says whether the hub puts posts into its readers' languages.
+func (o *Ollama) Translates() bool { return o.Translate == nil || *o.Translate }
 
 // Stats configures the public pages' analytics.
 type Stats struct {

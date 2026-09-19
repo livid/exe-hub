@@ -14,7 +14,7 @@ import "sync"
 // its link card, the card's archived copy, or a linked picture (none of
 // them signed) — so live pages refetch the post and draw it in.
 type Event struct {
-	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set" | "post.card"
+	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set" | "post.card" | "post.translation"
 	ID      string `json:"id"`                 // post id
 	ReplyTo string `json:"reply_to,omitempty"` // parent post id when the post is a reply
 	Author  string `json:"author"`             // author profile id

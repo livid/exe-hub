@@ -191,6 +191,21 @@ CREATE TABLE IF NOT EXISTS langs (
   status TEXT NOT NULL,                -- 'ok' | 'failed'
   tries  INTEGER NOT NULL DEFAULT 0,
   ts     INTEGER NOT NULL
+);
+
+-- A post put into a language its readers read (see PLAN.md,
+-- Translations), by the same model and kept the same way: beside the
+-- post, outside the envelope, not rebuilt from the log. lang is the
+-- language it was put into, never the post's own.
+CREATE TABLE IF NOT EXISTS translations (
+  post   TEXT NOT NULL,
+  lang   TEXT NOT NULL,                -- zh-Hans | en
+  text   TEXT NOT NULL DEFAULT '',
+  model  TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,                -- 'ok' | 'failed'
+  tries  INTEGER NOT NULL DEFAULT 0,
+  ts     INTEGER NOT NULL,
+  PRIMARY KEY (post, lang)
 );`)
 	if err != nil {
 		return err
@@ -545,8 +560,11 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM pictures WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
-		// and the language it was named
+		// and the language it was named, and what it was put into
 		if _, err := tx.Exec(`DELETE FROM langs WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`DELETE FROM translations WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
 		// the thread whose newest reply this was: after the delete its
@@ -723,8 +741,11 @@ func (s *Store) Rebuild() error {
 	if _, err := tx.Exec(`UPDATE pins SET refs = refs + (SELECT COUNT(*) FROM pictures WHERE pictures.cid = pins.cid AND pictures.status='ok')`); err != nil {
 		return err
 	}
-	// The posts' languages survive too, orphans dropped.
+	// The posts' languages and translations survive too, orphans dropped.
 	if _, err := tx.Exec(`DELETE FROM langs WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM translations WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -738,6 +759,7 @@ type FeedPost struct {
 	AuthorName string           `json:"author_name,omitempty"`
 	Avatar     string           `json:"avatar,omitempty"`
 	Text       string           `json:"text"`
+	Lang       string           `json:"lang,omitempty"` // the language it is written in, once named (see PLAN.md, Post language)
 	ReplyTo    string           `json:"reply_to,omitempty"`
 	TS         int64            `json:"ts"`
 	Received   int64            `json:"received"`
@@ -813,7 +835,8 @@ func (c Card) ArchiveDate() string {
 
 const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received, p.activity, p.last_reply,
   (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id),
-  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,''), IFNULL(cd.archive,'')`
+  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,''), IFNULL(cd.archive,''),
+  IFNULL((SELECT lg.lang FROM langs lg WHERE lg.post = p.id AND lg.status = 'ok'),'')`
 
 const feedQuery = `
 SELECT ` + feedCols + `
@@ -828,7 +851,7 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 		var c Card
 		var lr string
 		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Activity, &lr, &p.Replies,
-			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image, &c.Archive); err != nil {
+			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image, &c.Archive, &p.Lang); err != nil {
 			return nil, err
 		}
 		if c.URL != "" {
@@ -1217,6 +1240,96 @@ func (s *Store) PostsWithoutLang(maxTries int, before int64, limit int) ([]CardP
 			return nil, err
 		}
 		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ---- translations (see PLAN.md, Translations) ----
+
+// OwedTranslation is one piece of the translator's work: a post, the
+// language it is written in, and one it is still to be put into.
+type OwedTranslation struct{ ID, Author, Text, From, To string }
+
+// PostsToTranslate lists what the translator still owes, newest post
+// first: every post with words and a language, for each of targets it
+// is not written in, that has no translation yet — never tried, or an
+// answer that was none, tries left and the last one before (unix ms).
+func (s *Store) PostsToTranslate(targets []string, maxTries int, before int64, limit int) ([]OwedTranslation, error) {
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	args := make([]any, 0, len(targets)+3)
+	for _, t := range targets {
+		args = append(args, t)
+	}
+	args = append(args, maxTries, before, limit)
+	rows, err := s.db.Query(`WITH want(lang) AS (VALUES `+strings.TrimSuffix(strings.Repeat("(?),", len(targets)), ",")+`)
+		SELECT p.id, p.author, p.text, l.lang, w.lang FROM posts p
+		JOIN langs l ON l.post = p.id AND l.status = 'ok' AND l.lang NOT IN ('', 'zxx', 'und')
+		JOIN want w ON w.lang <> l.lang
+		LEFT JOIN translations t ON t.post = p.id AND t.lang = w.lang
+		WHERE t.post IS NULL OR (t.status = 'failed' AND t.tries < ? AND t.ts < ?)
+		ORDER BY p.received DESC, p.id DESC, w.lang LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OwedTranslation
+	for rows.Next() {
+		var o OwedTranslation
+		if err := rows.Scan(&o.ID, &o.Author, &o.Text, &o.From, &o.To); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// SetTranslation records a post put into lang, and the model that did
+// it, or, with ok false, one more answer that was none. A post deleted
+// meanwhile gets no row.
+func (s *Store) SetTranslation(post, lang, text, model string, ok bool) error {
+	status := "ok"
+	if !ok {
+		status, text = "failed", ""
+	}
+	_, err := s.db.Exec(`INSERT INTO translations (post, lang, text, model, status, tries, ts)
+		SELECT ?,?,?,?,?,1,? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+		ON CONFLICT(post, lang) DO UPDATE SET text=excluded.text, model=excluded.model,
+		status=excluded.status, tries=translations.tries+1, ts=excluded.ts`,
+		post, lang, text, model, status, time.Now().UnixMilli(), post)
+	return err
+}
+
+// Translation is a post as it reads in another language, and From the
+// language it was written in.
+type Translation struct{ Text, From string }
+
+// Translations is the posts among ids that have been put into lang, by
+// id — one read for a page of posts.
+func (s *Store) Translations(ids []string, lang string) (map[string]Translation, error) {
+	out := map[string]Translation{}
+	if len(ids) == 0 || lang == "" {
+		return out, nil
+	}
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, lang)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := s.db.Query(`SELECT t.post, t.text, l.lang FROM translations t JOIN langs l ON l.post = t.post
+		WHERE t.lang = ? AND t.status = 'ok' AND t.post IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var t Translation
+		if err := rows.Scan(&id, &t.Text, &t.From); err != nil {
+			return nil, err
+		}
+		out[id] = t
 	}
 	return out, rows.Err()
 }

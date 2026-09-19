@@ -118,19 +118,29 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	go cards.Run()
 	go cards.Backfill()
 	go cards.Sweep()
-	// Post language: with an ollama block in the config, a model names
-	// the language of every post (PLAN.md, Post language). The langs
-	// table is the worker's queue, so its first pass is the backfill, and
-	// an Ollama that is away only makes the posts wait.
+	// Post language and translations: with an ollama block in the config,
+	// a model names the language of every post and puts it into the two
+	// the hub's readers read (PLAN.md, Post language and Translations).
+	// Each table is its worker's queue, so a first pass is the backfill,
+	// and an Ollama that is away only makes the posts wait.
 	var langs *lang.Worker
 	if o := cfg.Ollama; o != nil {
-		det := lang.NewDetector(o.BaseURL, o.APIKey, o.Model, o.Effort)
-		if err := det.Available(); err != nil {
-			log.Printf("lang: ollama %s unreachable (%v) — posts wait for their language until it answers", o.BaseURL, err)
-		} else {
-			log.Printf("lang: %s at %s names each post's language (think=%s)", o.Model, o.BaseURL, o.Effort)
+		model := lang.NewModel(o.BaseURL, o.APIKey, o.Model, o.Effort)
+		does := "names each post's language"
+		if o.Translates() {
+			does += " and translates it into " + strings.Join(lang.Targets, " and ")
 		}
-		langs = lang.NewWorker(st, det)
+		if err := model.Available(); err != nil {
+			log.Printf("lang: ollama %s unreachable (%v) — posts wait for it", o.BaseURL, err)
+		} else {
+			log.Printf("lang: %s at %s %s (think=%s)", o.Model, o.BaseURL, does, o.Effort)
+		}
+		langs = lang.NewWorker(st, model)
+		if o.Translates() {
+			tr := lang.NewTranslator(st, model, bus)
+			langs.Named = tr.Wake
+			go tr.Run()
+		}
 		go langs.Run()
 	}
 	st.OnMessage = func(e *envelope.Envelope, op any, id string) {

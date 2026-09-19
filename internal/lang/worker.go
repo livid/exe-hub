@@ -9,21 +9,27 @@ import (
 	"strings"
 	"time"
 
+	"exehub/internal/events"
 	"exehub/internal/store"
 )
 
-// A post gets at most maxTries answers that are no tag, retryEvery apart.
-// A pass that could not reach Ollama comes again after downEvery; one
-// that did, after retryEvery or at the next post, whichever is first.
+// A post gets at most maxTries answers that are no answer, retryEvery
+// apart. A pass that could not reach Ollama comes again after downEvery;
+// one that did, after retryEvery or at the next wake, whichever is first.
 const (
 	maxTries   = 3
 	retryEvery = time.Hour
 	downEvery  = 5 * time.Minute
 	downAfter  = 3
-	page       = 64
+	// how much of its worklist a pass reads at a time. Naming is a second
+	// a post; a translation is a minute or more, and the list is newest
+	// first, so the translator reads it again every few: a post that
+	// arrives while history is being worked through is next but a few.
+	page   = 64
+	trPage = 4
 )
 
-// Posts is the worker's slice of the store.
+// Posts is the language worker's slice of the store.
 type Posts interface {
 	PostsWithoutLang(maxTries int, before int64, limit int) ([]store.CardPost, error)
 	SetLang(post, lang, model string, ok bool) error
@@ -36,88 +42,128 @@ type Posts interface {
 // while Ollama was away and the one just posted are all the same work,
 // and a restart loses none of it.
 type Worker struct {
-	St   Posts
-	D    *Detector
-	wake chan struct{}
+	St Posts
+	M  *Model
+	// Named, when set, is told each time a post got its language: the
+	// translator's wake.
+	Named func()
+	wake  chan struct{}
 }
 
-func NewWorker(st Posts, d *Detector) *Worker {
-	return &Worker{St: st, D: d, wake: make(chan struct{}, 1)}
+func NewWorker(st Posts, m *Model) *Worker {
+	return &Worker{St: st, M: m, wake: make(chan struct{}, 1)}
 }
 
 // Wake says a post has arrived. It never blocks; a wake during a pass
 // is kept for one more.
-func (w *Worker) Wake() {
+func (w *Worker) Wake() { wake(w.wake) }
+
+func (w *Worker) Run() { run(w.wake, 20*time.Second, w.pass) }
+
+func wake(c chan struct{}) {
 	select {
-	case w.wake <- struct{}{}:
+	case c <- struct{}{}:
 	default:
 	}
 }
 
-func (w *Worker) Run() {
-	time.Sleep(20 * time.Second) // let the daemon settle first
+// run is a worker's life: a pause for the daemon to settle, then a pass
+// at every wake, and without one after retryEvery — or downEvery, when
+// the last pass found Ollama away.
+func run(wake chan struct{}, settle time.Duration, pass func() bool) {
+	time.Sleep(settle)
 	for {
 		wait := retryEvery
-		if !w.pass() {
+		if !pass() {
 			wait = downEvery
 		}
 		select {
-		case <-w.wake:
+		case <-wake:
 		case <-time.After(wait):
 		}
 	}
 }
 
-// pass names every post still to name, a page at a time, newest first.
-// A post Ollama gave no answer for has nothing recorded against it and
-// is stepped over until the next pass, so one the server always refuses
-// cannot hold up the posts behind it; downAfter of them in a row is an
+// What became of one piece of a pass's work.
+type outcome int
+
+const (
+	wrote    outcome = iota // a row was written: an answer kept, or a try spent
+	noAnswer                // Ollama gave none: nothing recorded, stepped over
+	stop                    // the store failed: the pass ends
+)
+
+// drain is one pass over a worklist kept in the store: list is asked for
+// a page of what is still owed, newest first, until it has nothing new.
+// Work Ollama gave no answer for has nothing recorded against it and is
+// stepped over until the next pass, so a post the server always refuses
+// cannot hold up the ones behind it; downAfter of them in a row is an
 // Ollama that is away, and the pass ends, false, to come again soon.
-func (w *Worker) pass() (up bool) {
-	named := map[string]int{}
-	defer func() {
-		if len(named) > 0 {
-			log.Printf("lang: %s", tally(named))
-		}
-	}()
+func drain[T any](size int, list func(limit int) ([]T, error), key func(T) string, do func(T) outcome) (up bool) {
 	skip := map[string]bool{}
 	missed := 0
 	for {
-		posts, err := w.St.PostsWithoutLang(maxTries, time.Now().Add(-retryEvery).UnixMilli(), page+len(skip))
+		work, err := list(size + len(skip))
 		if err != nil {
 			log.Printf("lang: %v", err)
 			return true
 		}
-		wrote := false
-		for _, p := range posts {
-			if skip[p.ID] {
+		progress := false
+		for _, t := range work {
+			if skip[key(t)] {
 				continue
 			}
-			tag, model, err := w.name(p.Text)
-			if err != nil && !errors.Is(err, ErrAnswer) {
-				log.Printf("lang %s: %v", p.ID, err)
-				skip[p.ID] = true
+			switch do(t) {
+			case stop:
+				return true
+			case noAnswer:
+				skip[key(t)] = true
 				if missed++; missed >= downAfter {
 					return false
 				}
-				continue
+			default:
+				missed, progress = 0, true
 			}
-			missed = 0
-			if err != nil {
-				log.Printf("lang %s: %v", p.ID, err)
-			} else {
-				named[tag]++
-			}
-			if err := w.St.SetLang(p.ID, tag, model, err == nil); err != nil {
-				log.Printf("lang %s: store: %v", p.ID, err)
-				return true
-			}
-			wrote = true
 		}
-		if !wrote { // nothing left but what was stepped over
+		if !progress { // nothing left but what was stepped over
 			return true
 		}
 	}
+}
+
+// pass names every post still to name.
+func (w *Worker) pass() (up bool) {
+	named := map[string]int{}
+	defer func() {
+		if len(named) > 0 {
+			log.Printf("lang: %s", tally(named, "post named", "posts named"))
+		}
+	}()
+	return drain(page,
+		func(limit int) ([]store.CardPost, error) {
+			return w.St.PostsWithoutLang(maxTries, time.Now().Add(-retryEvery).UnixMilli(), limit)
+		},
+		func(p store.CardPost) string { return p.ID },
+		func(p store.CardPost) outcome {
+			tag, model, err := w.name(p.Text)
+			if err != nil {
+				log.Printf("lang %s: %v", p.ID, err)
+				if !errors.Is(err, ErrAnswer) {
+					return noAnswer
+				}
+			}
+			if err := w.St.SetLang(p.ID, tag, model, err == nil); err != nil {
+				log.Printf("lang %s: store: %v", p.ID, err)
+				return stop
+			}
+			if err == nil {
+				named[tag]++
+				if w.Named != nil {
+					w.Named()
+				}
+			}
+			return wrote
+		})
 }
 
 // name is the post's tag and who said it: the model, or nobody for a
@@ -126,33 +172,102 @@ func (w *Worker) name(text string) (tag, model string, err error) {
 	if Wordless(text) {
 		return NoWords, "", nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-	tag, err = w.D.Detect(ctx, text)
-	return tag, w.D.Model, err
+	tag, err = w.M.Detect(context.Background(), text)
+	return tag, w.M.Name, err
 }
 
-// tally is a pass's one log line: "12 posts named: en 7, zh-Hans 4, ja 1".
-func tally(named map[string]int) string {
-	tags := make([]string, 0, len(named))
+// Owed is the translator's slice of the store.
+type Owed interface {
+	PostsToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedTranslation, error)
+	SetTranslation(post, lang, text, model string, ok bool) error
+}
+
+// Translator puts every post into the languages the hub keeps it in
+// (see PLAN.md, Translations), the way Worker names them: the
+// translations table is its queue, a pass takes what is still owed,
+// newest first, so the posts on the first page are read in the reader's
+// language first and history follows. Worker wakes it as posts get
+// their languages. A translation at full thought is a minute or more,
+// so a hub's history is hours of passes; whatever lands is announced on
+// the bus as post.translation, so a live page brings it in.
+type Translator struct {
+	St   Owed
+	M    *Model
+	Bus  *events.Broadcaster
+	wake chan struct{}
+}
+
+func NewTranslator(st Owed, m *Model, bus *events.Broadcaster) *Translator {
+	return &Translator{St: st, M: m, Bus: bus, wake: make(chan struct{}, 1)}
+}
+
+func (t *Translator) Wake() { wake(t.wake) }
+
+func (t *Translator) Run() { run(t.wake, 40*time.Second, t.pass) } // after the languages' first pass has begun
+
+// logEvery is how many translations a long pass keeps between the lines
+// it logs: history's pass is hours, and says how far it is.
+const logEvery = 50
+
+func (t *Translator) pass() (up bool) {
+	kept, n := map[string]int{}, 0
+	say := func() {
+		if len(kept) > 0 {
+			log.Printf("translate: %s", tally(kept, "translation kept", "translations kept"))
+		}
+	}
+	defer say()
+	return drain(trPage,
+		func(limit int) ([]store.OwedTranslation, error) {
+			return t.St.PostsToTranslate(Targets, maxTries, time.Now().Add(-retryEvery).UnixMilli(), limit)
+		},
+		func(o store.OwedTranslation) string { return o.ID + " " + o.To },
+		func(o store.OwedTranslation) outcome {
+			out, err := t.M.Translate(context.Background(), o.Text, o.From, o.To)
+			if err != nil {
+				log.Printf("translate %s to %s: %v", o.ID, o.To, err)
+				if !errors.Is(err, ErrAnswer) {
+					return noAnswer
+				}
+			}
+			if err := t.St.SetTranslation(o.ID, o.To, out, t.M.Name, err == nil); err != nil {
+				log.Printf("translate %s to %s: store: %v", o.ID, o.To, err)
+				return stop
+			}
+			if err == nil {
+				kept[o.To]++
+				if n++; n%logEvery == 0 {
+					say()
+				}
+				if t.Bus != nil {
+					t.Bus.Emit(events.Event{Type: "post.translation", ID: o.ID, Author: o.Author})
+				}
+			}
+			return wrote
+		})
+}
+
+// tally is a pass's log line: "12 posts named: en 7, zh-Hans 4, ja 1".
+func tally(count map[string]int, one, many string) string {
+	tags := make([]string, 0, len(count))
 	n := 0
-	for t, c := range named {
+	for t, c := range count {
 		tags = append(tags, t)
 		n += c
 	}
 	sort.Slice(tags, func(i, j int) bool {
-		if named[tags[i]] != named[tags[j]] {
-			return named[tags[i]] > named[tags[j]]
+		if count[tags[i]] != count[tags[j]] {
+			return count[tags[i]] > count[tags[j]]
 		}
 		return tags[i] < tags[j]
 	})
 	parts := make([]string, len(tags))
 	for i, t := range tags {
-		parts[i] = fmt.Sprintf("%s %d", t, named[t])
+		parts[i] = fmt.Sprintf("%s %d", t, count[t])
 	}
-	s := "posts"
+	what := many
 	if n == 1 {
-		s = "post"
+		what = one
 	}
-	return fmt.Sprintf("%d %s named: %s", n, s, strings.Join(parts, ", "))
+	return fmt.Sprintf("%d %s: %s", n, what, strings.Join(parts, ", "))
 }

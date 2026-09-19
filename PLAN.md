@@ -1531,3 +1531,80 @@ shows it yet, and no read serves it. Asked by Livid 2026-09-19.
   refused think level, a pass against a fake Ollama: named, wordless,
   unreachable, a bad answer), `internal/store` (the rows, the worklist,
   delete and `Rebuild`).
+
+## Translations — a post in the reader's language (built 2026-09-19)
+
+With every post's language known, the hub keeps each post in the two
+languages its readers read, Simplified Chinese and English, and the
+pages show a reader the one they read, the original one press away.
+Asked by Livid 2026-09-19.
+
+- **What is translated.** A post not in `zh-Hans` gets a `zh-Hans`
+  translation and a post not in `en` an `en` one, so an English post has
+  one translation, a Chinese one the other, a Japanese one both
+  (`zh-Hant` is not `zh-Hans`: it gets both too). `zxx` and `und` posts
+  get none. The same `ollama` block turns it on, the same model at the
+  same `effort` does it; `"translate": false` in the block keeps the
+  languages and leaves the translating off.
+- **The prompt keeps the post's shape**: every line and blank line, the
+  Markdown a post takes (headings, list markers, a table's pipes, bold,
+  code, a link's address), and leaves alone URLs, code, paths, ids,
+  handles and proper names. The answer is checked before it is kept:
+  not empty, the same URLs (`card.URL`, the pages' own matcher) and the
+  same code spans (`card.Code`) as the post, as many lines give or take
+  a few, and not wildly longer or shorter. One that fails is a failed
+  try, three to a post and language, an hour apart, like `langs`. The
+  post is data under a system prompt, and the translation is drawn by
+  the same renderer as any post's text, so the worst a post can do by
+  talking to the model is mistranslate itself.
+- **Beside the post, never signed.** `translations` (`post`, `lang` the
+  language it was put into, `text`, `model`, `status`, `tries`, `ts`),
+  keyed by post and language, derived by every hub for itself like
+  `langs`: kept across `Rebuild` with orphans dropped, gone with its
+  post. `FeedPost` carries the post's own `lang` in every JSON read; no
+  read serves a translation yet, so the Hub app shows posts as written.
+- **The table is the queue again** (`internal/lang`, `Translator`): a
+  pass takes every post and language still owed, newest first, so the
+  newest posts, the ones on the first page, are translated first and
+  history follows; it reads the list again every four, so a post that
+  arrives while history is being worked through is next but a few. The language worker wakes it each time it names a
+  post. At `max` a translation thinks for a minute or more, where a
+  language took a second, so the backfill of a hub's history is hours,
+  one call at a time; it shares the step-over and the three-misses rule
+  with the language pass, so a busy or rate-limited Ollama only slows it.
+- **Who reads what** (`webReader`). The reader's language is `?lang=`
+  when the request says (`zh`, `en`, or a fuller tag; `orig` for every
+  post as written), else the browser's first language, the
+  Accept-Language tag with the highest q, as the join block already
+  reads it; a request with neither, a crawler's, gets every post as
+  written. A Chinese reader reads `zh-Hans` and everyone else `en`, the
+  hub's second language. A post is shown translated when it is in
+  neither the reader's own language nor the one they read, and its
+  translation is there: a `zh-TW` reader gets a `zh-Hant` post as
+  written and an English one in Simplified, a Japanese reader gets a
+  Japanese post as written and a Chinese one in English. Decided on the
+  server, so nothing flashes and the page stands without script; every
+  page with posts says `Vary: Accept-Language`.
+- **On the page.** The translation stands where the text does, with
+  `lang` set on it (and on every post's text now, so Han draws in the
+  glyphs of its own language), and a quiet line under it in the
+  reader's language: "Translated from English · Show Original", 11px
+  grey like the meta line, the language named alone ("from Chinese")
+  except to a Chinese reader, whom the script tells Traditional from
+  the Simplified they read ("译自繁体中文"). The original ships in the page, hidden; the
+  press swaps the two and the line reads "Show Translation". Without
+  script the same control is a link to the thread with `?lang=orig`.
+  A thread's newest-reply line on the feed and a profile's quoted parent
+  read in the reader's language too. On the search page, which looks in
+  the posts as written, a post found only by its original words opens as
+  written, the found words on yellow in whichever is showing. An
+  explicit `?lang=` is carried by the page's own links (posts, profiles,
+  pagers, the find strip), so a look at the other language lasts past
+  one click; titles, descriptions and preview pictures stay as written.
+- Not built: translations in the JSON API and the Hub app, search inside
+  translations, a Traditional Chinese target, and an aggregator taking
+  the origin hub's translation instead of paying for its own.
+- Tests: `internal/lang` (the prompt's target, the checks, a pass against
+  a fake Ollama), `internal/store` (rows, the owed list, delete and
+  `Rebuild`), `internal/api` (who reads what, the page with and without
+  a translation, `?lang=orig`, the carried links, search).
