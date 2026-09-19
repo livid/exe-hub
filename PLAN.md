@@ -506,7 +506,7 @@ previews below). Post ids are content hashes, so one link resolves on any
 hub that carries the post.
 
 - **A short id finds its post (built 2026-09-19).** `/p/` takes the
-  start of a post's id, twelve hex characters or more, and answers with
+  start of a post's id, eight hex characters or more, and answers with
   a redirect to the whole one, so a link cut short while being written
   or pasted still lands, and the page a reader arrives on, shares or a
   crawler keeps has one address, the full id. A prefix is a way to look
@@ -532,11 +532,19 @@ hub that carries the post.
   carries the `#fragment` itself. A whole id written in capitals is
   sent on to the lower-case one the same way: 63 shouted characters
   resolve, so 64 do. The lookup is a range on the log's primary key
-  (`id >= p AND id < p||'g'`), never a walk. Under twelve characters,
-  or anything not hex, is no short id and a 404 as before. Asked by
-  Livid 2026-09-19, after a link of mine cut to eight characters came
-  up 404; that link, `/p/9c2cd7cd`, and `/p/9c2cd7cdf0b6?lang=zh` are
-  the fixture (`TestWebShortIDFixture`), the first a 404 for good.
+  (`id >= p AND id < p||'g'`), never a walk. Under eight characters,
+  or anything not hex, is no short id and a 404 as before. Eight is
+  the length an id is written at in a post or a commit message, so it
+  is the length a link gets cut to. The floor was twelve for its first
+  hours, which left the very link that started this a 404, and Livid:
+  "i expect that 8 char short id can resolve too". The length was
+  never what made it safe: only a prefix exactly one post ever had
+  resolves, so a shorter floor cannot find the wrong post, it only
+  lets a given short link turn ambiguous, a 404, sooner as the hub
+  grows, about one link in 40,000 at 100,000 posts. Asked by Livid
+  2026-09-19, after a link of mine cut to eight characters came up
+  404; that link, `/p/9c2cd7cd`, and `/p/9c2cd7cdf0b6?lang=zh` are the
+  fixture (`TestWebShortIDFixture`), and both resolve.
 - **A reader, and a signed client when a wallet signs in.** Every write
   is still a signature made in the browser (see Posting from a wallet);
   the pages carry no session, cookie or state-changing form (the search

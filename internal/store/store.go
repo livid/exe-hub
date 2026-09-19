@@ -1588,9 +1588,15 @@ func (s *Store) SearchCount(q string) (int, error) {
 
 // Post returns one post; Replies its children oldest-first (thread order).
 // PostPrefixMin is the fewest characters of an id that may stand for the
-// whole: twelve hex, 48 bits, which no two posts share by chance at any
-// size this hub will see — and ResolvePrefix never trusts to chance.
-const PostPrefixMin = 12
+// whole: eight hex, the length an id is written at in a post or a commit
+// message and so the length a link gets cut to (Livid, 2026-09-19: "i
+// expect that 8 char short id can resolve too"; it was twelve for a few
+// hours). Safety never rested on the length: ResolvePrefix answers only
+// when exactly one post ever began that way. A shorter floor cannot find
+// the wrong post, it only lets a given short link turn ambiguous, a 404,
+// sooner as the hub grows: at 32 bits about one link in 40,000 on a hub
+// of 100,000 posts.
+const PostPrefixMin = 8
 
 // ResolvePrefix is the whole id of the post whose id begins with prefix
 // (lower-case hex, PostPrefixMin characters or more; see PLAN.md, Public

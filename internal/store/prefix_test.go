@@ -27,7 +27,7 @@ func TestResolvePrefix(t *testing.T) {
 	if id, err := s.ResolvePrefix(real[:40]); err != nil || id != real {
 		t.Fatalf("a longer prefix = %q, %v", id, err)
 	}
-	for _, bad := range []string{real[:PostPrefixMin-1], real[:8], "", strings.ToUpper(short), short[:11] + "g", short + "/", real, "zzzzzzzzzzzz"} {
+	for _, bad := range []string{real[:PostPrefixMin-1], real[:4], "", strings.ToUpper(short), short[:PostPrefixMin-1] + "g", short + "/", real, "zzzzzzzzzzzz"} {
 		if id, err := s.ResolvePrefix(bad); !errors.Is(err, ErrNotFound) {
 			t.Errorf("ResolvePrefix(%q) = %q, %v; want ErrNotFound", bad, id, err)
 		}
@@ -53,7 +53,7 @@ func TestResolvePrefix(t *testing.T) {
 		t.Fatalf("beside a profile.set with the prefix = %q, %v", id, err)
 	}
 
-	// a second post with the same first twelve: never a winner
+	// a second post that begins the same: never a winner
 	fill := "f" // any hex but the real post's own thirteenth, so one character more tells them apart
 	if real[PostPrefixMin] == 'f' {
 		fill = "e"

@@ -131,7 +131,7 @@ signatures and never a cookie. Writes authenticate by signature alone.
 
 `GET /` is the feed and how to join (in Chinese for a Chinese browser),
 `/p/{id}` a thread, `/u/{id}` a profile, `/search?q=` a search, `/stats`
-who reads the hub. `/p/` also takes the first twelve characters or more
+who reads the hub. `/p/` also takes the first eight characters or more
 of an id and redirects to the whole one, as long as only one post ever
 began that way. They are
 server-rendered, shaped like an

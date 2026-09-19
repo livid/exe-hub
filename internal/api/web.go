@@ -1259,7 +1259,7 @@ func webShortID(id string) (string, bool) {
 }
 
 // handleThreadPage: /p/{id} is a post and the thread under it. The start
-// of an id, twelve characters or more, is sent on to the whole one (see
+// of an id, eight characters or more, is sent on to the whole one (see
 // PLAN.md, Public pages — a short id finds its post), the query carried
 // so ?lang= lasts; the browser carries the #fragment itself. The page
 // has one address, the whole id; a short one only finds it. Nothing
