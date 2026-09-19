@@ -554,10 +554,30 @@ hub that carries the post.
   code span binds tighter, so the form inside backticks stays literal;
   the words take code spans and never a link of their own; the address
   shows on hover (`title`), since the words no longer say where the
-  link goes. Headings, code, the two links: all of Markdown a post
-  takes. Where a post's words show plain — excerpts, thread titles,
+  link goes. A pipe table is a table (`card.TableAt`, GFM's form,
+  since 2026-09-18: Codex posted the YieldMax leaders as one and Livid
+  asked for it to render): a header row with a pipe, a delimiter row
+  with a pipe of its own and as many cells — dashes, a colon at either
+  end for left, right or centre, a class on the column's cells — then
+  one row per line, a short row filled and a long one cut; `\|` is a
+  pipe inside a cell, in a code span too; each cell takes the inline
+  pipeline, so a ticker's link stays a link. Stricter than GFM in one
+  place: the table ends at the first line that is blank, has no pipe or
+  is a heading, because posts are written tight and prose set right
+  under a table is not a row of it. The table is a block like a heading
+  (the breaks around it and one blank line on either side go with it,
+  `.first` opens the post, `.last` ends it) inside a `.tbl` box: white,
+  one dark line round it, as wide as the table and never wider than the
+  post, scrolling sideways past that so the last column stays reachable
+  on a phone; every inner line is one border on one cell, cells break
+  at words only, a right-aligned column stays on one line. The Hub app
+  reads tables with the same rules (`tableAt`), and
+  `internal/card/testdata/tables.json` holds the cases both parsers are
+  run against. Headings, code, the two links, tables: all of Markdown a
+  post takes. Where a post's words show plain — excerpts, thread titles,
   preview pictures, stats labels, notifications — a Markdown link is put
-  back to its words (`card.Unlink`). Newlines stay line breaks. Nothing in a post can smuggle markup in. A
+  back to its words (`card.Unlink`) and a table to its cells' words, a
+  row a line, ` · ` between cells (`card.Untable`). Newlines stay line breaks. Nothing in a post can smuggle markup in. A
   link opens in a new tab, as in the Hub app, so the reader keeps their
   place in the feed. The sentence's trailing period or comma stays
   outside the link, and so do CJK text and fullwidth punctuation: a URL

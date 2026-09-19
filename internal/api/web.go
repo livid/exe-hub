@@ -296,8 +296,9 @@ var webURL = card.URL
 var webCode = regexp.MustCompile("`([^`\n]+)`")
 
 // webHeading is a heading line: one to three # and a space, then words
-// (Markdown's ATX form, three levels — with code spans and the
-// [words](url) link, card.Link, all of Markdown a post takes).
+// (Markdown's ATX form, three levels — with code spans, the
+// [words](url) link, card.Link, and the pipe table, card.TableAt, all
+// of Markdown a post takes).
 // webHeadingMark is the marker alone, for an excerpt to drop.
 var (
 	webHeading     = regexp.MustCompile(`^(#{1,3}) +(\S.*?) *$`)
@@ -311,46 +312,94 @@ var (
 // it, and so does one blank line on either side: the heading's own
 // margins space it, as in Markdown, and "## Title" reads the same with
 // or without a blank line beside it; the heading that opens a post is
-// marked .first, for no room above it — and elsewhere [words](url)
-// set as a link on its words, URLs outside code spans wrapped in
-// anchors that open in a new tab, code spans set in <code>, newlines
-// kept as line breaks.
+// marked .first, for no room above it — a table (card.TableAt, GFM's
+// pipe table) set as a block the same way, inside a .tbl box that
+// scrolls sideways when the table is wider than the post, its cells
+// through the inline pipeline and its columns aligned by class; .first
+// when it opens the post and .last when it ends it, for no room on
+// that side — and elsewhere [words](url) set as a link on its words,
+// URLs outside code spans wrapped in anchors that open in a new tab,
+// code spans set in <code>, newlines kept as line breaks.
 func renderText(text string) template.HTML {
 	var b strings.Builder
 	lines := strings.Split(text, "\n")
 	plain := ""
-	flush := func() {
+	// block closes the words before a block: the break before it and one
+	// blank line above it go with it
+	block := func() {
+		plain = strings.TrimSuffix(plain, "\n")
+		plain = strings.TrimSuffix(plain, "\n")
 		if plain != "" {
 			writeInline(&b, plain)
 			plain = ""
 		}
 	}
 	for i := 0; i < len(lines); i++ {
-		m := webHeading.FindStringSubmatch(lines[i])
-		if m == nil {
+		if m := webHeading.FindStringSubmatch(lines[i]); m != nil {
+			block()
+			tag := "h" + strconv.Itoa(len(m[1]))
+			if b.Len() == 0 {
+				b.WriteString("<" + tag + ` class="first">`)
+			} else {
+				b.WriteString("<" + tag + ">")
+			}
+			writeInline(&b, m[2])
+			b.WriteString("</" + tag + ">\n")
+		} else if t, n := card.TableAt(lines, i); t != nil {
+			block()
+			i += n - 1
+			writeTable(&b, t, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "")
+		} else {
 			plain += lines[i]
 			if i < len(lines)-1 {
 				plain += "\n"
 			}
 			continue
 		}
-		plain = strings.TrimSuffix(plain, "\n") // the break before the heading
-		plain = strings.TrimSuffix(plain, "\n") // one blank line above it
-		flush()
-		tag := "h" + strconv.Itoa(len(m[1]))
-		if b.Len() == 0 {
-			b.WriteString("<" + tag + ` class="first">`)
-		} else {
-			b.WriteString("<" + tag + ">")
-		}
-		writeInline(&b, m[2])
-		b.WriteString("</" + tag + ">\n")
 		if i+1 < len(lines) && lines[i+1] == "" {
-			i++ // one blank line below it
+			i++ // one blank line below the block
 		}
 	}
-	flush()
+	if plain != "" {
+		writeInline(&b, plain)
+	}
 	return template.HTML(b.String())
+}
+
+// writeTable sets a table: the box that scrolls, a head row, the rows
+// under it; a column's alignment is a class on each of its cells.
+func writeTable(b *strings.Builder, t *card.Table, first, last bool) {
+	class := "tbl"
+	if first {
+		class += " first"
+	}
+	if last {
+		class += " last"
+	}
+	b.WriteString(`<div class="` + class + `"><table><thead>`)
+	row := func(tag string, cells []string) {
+		b.WriteString("<tr>")
+		for k, c := range cells {
+			if t.Align[k] != "" {
+				b.WriteString("<" + tag + ` class="` + t.Align[k] + `">`)
+			} else {
+				b.WriteString("<" + tag + ">")
+			}
+			writeInline(b, c)
+			b.WriteString("</" + tag + ">")
+		}
+		b.WriteString("</tr>")
+	}
+	row("th", t.Head)
+	b.WriteString("</thead>")
+	if len(t.Rows) > 0 {
+		b.WriteString("<tbody>")
+		for _, r := range t.Rows {
+			row("td", r)
+		}
+		b.WriteString("</tbody>")
+	}
+	b.WriteString("</table></div>\n")
 }
 
 // writeInline sets a run of words: Markdown links first, then what lies
@@ -665,9 +714,9 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg 
 
 // webWords is a post's text as plain words, for where no markup shows —
 // an excerpt, a title, a preview picture: heading marks dropped, a
-// Markdown link put back to its words.
+// table put back to its cells' words, a Markdown link to its words.
 func webWords(text string) string {
-	return card.Unlink(webHeadingMark.ReplaceAllString(text, ""))
+	return card.Unlink(card.Untable(webHeadingMark.ReplaceAllString(text, "")))
 }
 
 // excerpt is a post's first n characters or so, for the OpenGraph

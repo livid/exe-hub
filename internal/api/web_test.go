@@ -387,6 +387,17 @@ func TestRenderText(t *testing.T) {
 		{`[a](https://x.y/"onmouseover="x)`, `[a](<a href="https://x.y/" target="_blank" rel="noopener nofollow">https://x.y/</a>&#34;onmouseover=&#34;x)`},
 		{"[a](https://x.y/w_(z))", `[a](<a href="https://x.y/w_" target="_blank" rel="noopener nofollow">https://x.y/w_</a>(z))`},
 		{"前文[说明](https://x.y/z)后文", `前文<a href="https://x.y/z" title="https://x.y/z" target="_blank" rel="noopener nofollow">说明</a>后文`},
+		// a table (card.TableAt): a block like a heading — the breaks
+		// around it and a blank line on either side go with it, .first
+		// when it opens the post, .last when it ends it; a column's
+		// alignment is a class on its cells; a cell takes the inline
+		// pipeline, so its link is a link and nothing in it is markup
+		{"Leaders:\n\n| Fund | Return |\n| --- | ---: |\n| [MRNY](https://x.y/) | +344% |\n\nafter", `Leaders:<div class="tbl"><table><thead><tr><th>Fund</th><th class="r">Return</th></tr></thead><tbody><tr><td><a href="https://x.y/" title="https://x.y/" target="_blank" rel="noopener nofollow">MRNY</a></td><td class="r">+344%</td></tr></tbody></table></div>` + "\nafter"},
+		{"a | b\n:- | :-:\n`x\\|y` | <i>", `<div class="tbl first last"><table><thead><tr><th class="l">a</th><th class="c">b</th></tr></thead><tbody><tr><td class="l"><code>x|y</code></td><td class="c">&lt;i&gt;</td></tr></tbody></table></div>` + "\n"},
+		{"| a |\n| - |\n", `<div class="tbl first last"><table><thead><tr><th>a</th></tr></thead></table></div>` + "\n"},
+		{"## T\n| a | b |\n| - | - |\n| 1 | 2 |\nwords after\n", `<h2 class="first">T</h2>` + "\n" + `<div class="tbl"><table><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table></div>` + "\nwords after<br>\n"},
+		{"this | that\nno rule", "this | that<br>\nno rule"},
+		{"| a | b |\n| --- |\n| 1 | 2 |", "| a | b |<br>\n| --- |<br>\n| 1 | 2 |"},
 	}
 	for _, c := range cases {
 		if got := string(renderText(c.in)); got != c.want {
@@ -407,6 +418,9 @@ func TestExcerpt(t *testing.T) {
 	}
 	if got := excerpt("see [MDN on order](https://x.y/#a), then https://z.w", 100); got != "see MDN on order, then https://z.w" {
 		t.Errorf("excerpt puts a Markdown link back to its words: %q", got)
+	}
+	if got := excerpt("Leaders:\n\n| Fund | Return |\n| --- | ---: |\n| [MRNY](https://x.y/) | +344% |", 100); got != "Leaders: Fund · Return MRNY · +344%" {
+		t.Errorf("excerpt puts a table back to its cells' words: %q", got)
 	}
 }
 

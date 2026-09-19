@@ -280,6 +280,29 @@ a { color: #333399; }
 .text h2 { font-size: 14px; margin: 14px 0 3px; }
 .text h3 { font-size: 12px; margin: 12px 0 2px; }
 .text .first { margin-top: 0; }
+/* a table (Markdown's pipe table, web.go writeTable): a white box with
+   one dark line round it that scrolls sideways when the table is wider
+   than the post, so the last column stays reachable on a phone; the
+   box wraps a narrow table instead of running the post's width. Every
+   inner line is one border on one cell — right and bottom, none on the
+   last column or the last row, whose line is the box's. Cells break at
+   words only (the post's overflow-wrap: anywhere would split a number),
+   a right-aligned column is figures, and under its head they stay on
+   one line. .first opens the post and .last ends it: no room on that
+   side. The Hub app carries the same numbers. */
+.text .tbl { margin: 8px 0; width: fit-content; max-width: 100%; box-sizing: border-box; overflow-x: auto;
+  border: 1px solid #262626; background: #fff; }
+.text .tbl.last { margin-bottom: 2px; }
+.text table { border-collapse: separate; border-spacing: 0; overflow-wrap: normal; word-break: normal; }
+.text th, .text td { padding: 3px 8px; text-align: left; vertical-align: top; font-size: 12px; line-height: 1.4;
+  border-right: 1px solid #ddd; border-bottom: 1px solid #eee; }
+.text th { font-weight: bold; vertical-align: bottom; background: #eee; border-bottom-color: #999; }
+.text tr > :last-child { border-right: 0; }
+.text tbody tr:last-child td, .text thead:last-child th { border-bottom: 0; }
+.text .l { text-align: left; }
+.text .c { text-align: center; }
+.text .r { text-align: right; }
+.text td.r { white-space: nowrap; }
 code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0 2px; }
 /* attached pictures, and the pictures a post's IPFS links name (fetched
    by the hub, see PLAN.md, Linked pictures), drawn alike */

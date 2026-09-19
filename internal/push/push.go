@@ -337,9 +337,10 @@ func message(p *store.FeedPost) Message {
 }
 
 // excerpt is the post's first n characters or so, cut at a space, never
-// inside a character; a Markdown link shows as its words.
+// inside a character; a Markdown link shows as its words, a table as
+// its cells' words.
 func excerpt(text string, n int) string {
-	text = strings.Join(strings.Fields(card.Unlink(text)), " ")
+	text = strings.Join(strings.Fields(card.Unlink(card.Untable(text))), " ")
 	r := []rune(text)
 	if len(r) <= n {
 		return text
