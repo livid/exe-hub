@@ -57,6 +57,61 @@ func Unlink(text string) string {
 	return Link.ReplaceAllString(text, "$1")
 }
 
+// Code is an inline `code` span: no newlines, no nesting. It binds
+// tighter than a link or bold, as in Markdown.
+var Code = regexp.MustCompile("`([^`\n]+)`")
+
+// Bold is Markdown's strong emphasis, **words**: two asterisks hard
+// against the first and the last of the words, on one line, the words
+// holding no asterisk of their own — so there is no nesting, and the
+// asterisks of ordinary writing ("2 ** 3", "** note **", a lone "**")
+// stay the characters they were. Submatch 1 is the words.
+var Bold = regexp.MustCompile(`\*\*([^\s*](?:[^*\n]*[^\s*])?)\*\*`)
+
+// Bolds are the bold stretches of a run of words, as Bold's submatch
+// indexes, less those a claimed span cuts into: a code span (codes, as
+// Code's match indexes) or a Markdown link (links, as Link's) that
+// overlaps the stretch without sitting wholly inside its words leaves
+// the asterisks literal. `**kwargs**` in backticks stays code, a link
+// keeps its words whole — and **[words](url)** is a bold link, since
+// the link lies inside. Bold within a link's words is the link's own
+// to set: pass its words with no links.
+func Bolds(text string, codes, links [][]int) [][]int {
+	var out [][]int
+	for _, m := range Bold.FindAllStringSubmatchIndex(text, -1) {
+		free := true
+		for _, c := range append(append([][]int{}, codes...), links...) {
+			if c[0] < m[1] && c[1] > m[0] && !(c[0] >= m[2] && c[1] <= m[3]) {
+				free = false
+				break
+			}
+		}
+		if free {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Unbold is text with every bold stretch put back to its words, for the
+// places that show a post's words plain — after Unlink, which has put
+// the links back to theirs. Asterisks inside a code span stay.
+func Unbold(text string) string {
+	ms := Bolds(text, Code.FindAllStringIndex(text, -1), nil)
+	if len(ms) == 0 {
+		return text
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range ms {
+		b.WriteString(text[last:m[0]])
+		b.WriteString(text[m[2]:m[3]])
+		last = m[1]
+	}
+	b.WriteString(text[last:])
+	return b.String()
+}
+
 // First is the link a post's card is derived from: the first URL in its
 // text, exactly as the linkifier would wrap it — skipping IPFS links,
 // which are the linked pictures' business (a gateway serves a file, not

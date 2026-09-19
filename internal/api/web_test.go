@@ -7,9 +7,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -403,6 +407,57 @@ func TestRenderText(t *testing.T) {
 		if got := string(renderText(c.in)); got != c.want {
 			t.Errorf("renderText(%q)\n got %s\nwant %s", c.in, got, c.want)
 		}
+	}
+}
+
+// the cases the Hub app's formatText is run against too
+// (card/testdata/bold.json): which stretches come out bold, and which
+// words the links hold
+func TestRenderTextBold(t *testing.T) {
+	raw, err := os.ReadFile("../card/testdata/bold.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name, Text    string
+		Strong, Links []string
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	tags := regexp.MustCompile(`<[^>]+>`)
+	words := func(page, tag string) []string {
+		out := []string{}
+		for _, m := range regexp.MustCompile(`(?s)<`+tag+`[ >].*?</`+tag+`>`).FindAllString(page, -1) {
+			out = append(out, html.UnescapeString(tags.ReplaceAllString(m, "")))
+		}
+		return out
+	}
+	for _, c := range cases {
+		page := string(renderText(c.Text))
+		if got := words(page, "strong"); !reflect.DeepEqual(got, c.Strong) {
+			t.Errorf("%s: bold %q, want %q\n%s", c.Name, got, c.Strong, page)
+		}
+		if got := words(page, "a"); c.Links != nil && !reflect.DeepEqual(got, c.Links) {
+			t.Errorf("%s: links %q, want %q\n%s", c.Name, got, c.Links, page)
+		}
+	}
+	// the markup itself, where the nesting matters
+	for _, c := range []struct{ in, want string }{
+		{"A **bold** word.", "A <strong>bold</strong> word."},
+		{"**[Docs](https://x.y)**", `<strong><a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">Docs</a></strong>`},
+		{"[**Docs** page](https://x.y)", `<a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow"><strong>Docs</strong> page</a>`},
+		{"**run `make`**", "<strong>run <code>make</code></strong>"},
+		{"`**kwargs**`", "<code>**kwargs**</code>"},
+		{"**<b>&amp;**", "<strong>&lt;b&gt;&amp;amp;</strong>"},
+		{"## The **new** bar", `<h2 class="first">The <strong>new</strong> bar</h2>` + "\n"},
+	} {
+		if got := string(renderText(c.in)); got != c.want {
+			t.Errorf("renderText(%q)\n got %s\nwant %s", c.in, got, c.want)
+		}
+	}
+	if got := excerpt("## Head\n**The bar:** a [field](https://x.y) and `**code**`", 100); got != "Head The bar: a field and `**code**`" {
+		t.Errorf("excerpt: %q", got)
 	}
 }
 

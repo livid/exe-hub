@@ -1,0 +1,21 @@
+[
+  {"name": "ordinary bold", "text": "A **bold** word.", "strong": ["bold"], "plain": "A bold word."},
+  {"name": "a label with its colon, the way a list line opens", "text": "- **The bar:** a \"Search posts\" field", "strong": ["The bar:"], "plain": "- The bar: a \"Search posts\" field"},
+  {"name": "two on a line", "text": "**a** and **b c**", "strong": ["a", "b c"], "plain": "a and b c"},
+  {"name": "bold round a link", "text": "**[Docs](https://example.org)** here", "strong": ["Docs"], "links": ["Docs"], "plain": "Docs here"},
+  {"name": "bold inside a link's words", "text": "[**Docs** page](https://example.org) here", "strong": ["Docs"], "links": ["Docs page"], "plain": "Docs page here"},
+  {"name": "bold holding a bare URL and words", "text": "**see https://example.org/x now**", "strong": ["see https://example.org/x now"], "links": ["https://example.org/x"], "plain": "see https://example.org/x now"},
+  {"name": "code inside bold", "text": "**run `make` first**", "strong": ["run make first"], "plain": "run `make` first"},
+  {"name": "asterisks in a code span stay", "text": "`**kwargs**` and **real**", "strong": ["real"], "plain": "`**kwargs**` and real"},
+  {"name": "a code span that cuts into the stretch claims it", "text": "**a `b** c`", "strong": [], "plain": "**a `b** c`"},
+  {"name": "a link that the stretch cuts into stays whole", "text": "**a [b** c](https://example.org)", "strong": [], "links": ["b** c"]},
+  {"name": "unmatched marks stay", "text": "2 ** 3 and **open", "strong": [], "plain": "2 ** 3 and **open"},
+  {"name": "spaces inside the marks are no bold", "text": "** not bold ** and **nor this **", "strong": [], "plain": "** not bold ** and **nor this **"},
+  {"name": "never across lines", "text": "**a\nb**", "strong": [], "plain": "**a b**"},
+  {"name": "one character", "text": "**x**", "strong": ["x"], "plain": "x"},
+  {"name": "three asterisks leave one each side", "text": "***x***", "strong": ["x"], "plain": "*x*"},
+  {"name": "CJK, flush against the words around it", "text": "这是**重点**内容", "strong": ["重点"], "plain": "这是重点内容"},
+  {"name": "in a table cell", "text": "| Fund | Note |\n| --- | --- |\n| **MRNY** | up |", "strong": ["MRNY"], "plain": "Fund · Note MRNY · up"},
+  {"name": "in a heading", "text": "## The **new** bar", "strong": ["new"]},
+  {"name": "markup in the words is words", "text": "**<b>&amp;**", "strong": ["<b>&amp;"], "plain": "<b>&amp;"}
+]

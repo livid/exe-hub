@@ -293,7 +293,7 @@ type webData struct {
 var webURL = card.URL
 
 // webCode is an inline `code` span: no newlines, no nesting.
-var webCode = regexp.MustCompile("`([^`\n]+)`")
+var webCode = card.Code
 
 // webHeading is a heading line: one to three # and a space, then words
 // (Markdown's ATX form, three levels — with code spans, the
@@ -402,17 +402,45 @@ func writeTable(b *strings.Builder, t *card.Table, first, last bool) {
 	b.WriteString("</table></div>\n")
 }
 
-// writeInline sets a run of words: Markdown links first, then what lies
-// between them. A link's words take code spans and nothing else — a URL
-// among them is words, never a link inside a link — and its address
-// shows on hover, since the words no longer say where it goes.
+// writeInline sets a run of words: **bold** first (card.Bolds), the
+// outermost layer, so a bold stretch may hold links, URLs and code —
+// **[words](url)** is a bold link — then the links and what lies
+// between them. A stretch that a code span or a link cuts into is no
+// bold: its asterisks stay.
 func writeInline(b *strings.Builder, text string) {
+	var links [][]int
+	for _, m := range webLinks(text) {
+		links = append(links, m[:2])
+	}
+	writeBold(b, text, links, writeLinks)
+}
+
+// writeBold sets the bold stretches of text in <strong> and hands the
+// words inside and between them to inner.
+func writeBold(b *strings.Builder, text string, links [][]int, inner func(*strings.Builder, string)) {
+	last := 0
+	for _, m := range card.Bolds(text, webCode.FindAllStringIndex(text, -1), links) {
+		inner(b, text[last:m[0]])
+		b.WriteString("<strong>")
+		inner(b, text[m[2]:m[3]])
+		b.WriteString("</strong>")
+		last = m[1]
+	}
+	inner(b, text[last:])
+}
+
+// writeLinks sets Markdown links, then what lies between them. A link's
+// words take bold and code spans and nothing else — a URL among them is
+// words, never a link inside a link — and its address shows on hover,
+// since the words no longer say where it goes.
+func writeLinks(b *strings.Builder, text string) {
+	words := func(b *strings.Builder, s string) { writeCoded(b, s, false) }
 	last := 0
 	for _, m := range webLinks(text) {
 		writeCoded(b, text[last:m[0]], true)
 		u := html.EscapeString(text[m[4]:m[5]])
 		b.WriteString(`<a href="` + u + `" title="` + u + `" target="_blank" rel="noopener nofollow">`)
-		writeCoded(b, text[m[2]:m[3]], false)
+		writeBold(b, text[m[2]:m[3]], nil, words)
 		b.WriteString(`</a>`)
 		last = m[1]
 	}
@@ -714,9 +742,10 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg 
 
 // webWords is a post's text as plain words, for where no markup shows —
 // an excerpt, a title, a preview picture: heading marks dropped, a
-// table put back to its cells' words, a Markdown link to its words.
+// table put back to its cells' words, a Markdown link and a bold
+// stretch to theirs.
 func webWords(text string) string {
-	return card.Unlink(card.Untable(webHeadingMark.ReplaceAllString(text, "")))
+	return card.Unbold(card.Unlink(card.Untable(webHeadingMark.ReplaceAllString(text, ""))))
 }
 
 // excerpt is a post's first n characters or so, for the OpenGraph

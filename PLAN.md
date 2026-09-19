@@ -573,10 +573,24 @@ hub that carries the post.
   at words only, a right-aligned column stays on one line. The Hub app
   reads tables with the same rules (`tableAt`), and
   `internal/card/testdata/tables.json` holds the cases both parsers are
-  run against. Headings, code, the two links, tables: all of Markdown a
+  run against. `**words**` is bold (since 2026-09-19, `card.Bold`), set
+  in `<strong>`: two asterisks hard against the first and the last of
+  the words, on one line, the words holding no asterisk of their own —
+  no nesting, and the asterisks of ordinary writing (`2 ** 3`, a lone
+  `**`) stay the characters they were. Bold is the outermost inline
+  layer (`writeInline` → `writeBold` → `writeLinks`), so a bold stretch
+  may hold links, URLs and code and `**[words](url)**` is a bold link; a
+  link's words take bold of their own; a code span or a link that cuts
+  into a stretch without sitting wholly inside its words claims the
+  text and the asterisks stay (`card.Bolds`), so `**kwargs**` in
+  backticks is code. The Hub app reads bold with the same rules
+  (`formatBold`), and `internal/card/testdata/bold.json` holds the cases
+  both renderers and the plain-words paths are run against. Headings,
+  code, the two links, bold, tables: all of Markdown a
   post takes. Where a post's words show plain — excerpts, thread titles,
   preview pictures, stats labels, notifications — a Markdown link is put
-  back to its words (`card.Unlink`) and a table to its cells' words, a
+  back to its words (`card.Unlink`), a bold stretch to its own
+  (`card.Unbold`) and a table to its cells' words, a
   row a line, ` · ` between cells (`card.Untable`). Newlines stay line breaks. Nothing in a post can smuggle markup in. A
   link opens in a new tab, as in the Hub app, so the reader keeps their
   place in the feed. The sentence's trailing period or comma stays
