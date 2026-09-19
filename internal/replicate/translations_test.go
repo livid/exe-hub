@@ -23,10 +23,12 @@ import (
 // servingHub is a real hub, its own store behind its own signing
 // /v1/translations, for a puller to take from.
 type servingHub struct {
-	st   *store.Store
-	id   *identity.Identity
-	srv  *httptest.Server
-	gone bool // answer 404, as a hub from before /v1/translations does
+	st    *store.Store
+	id    *identity.Identity
+	srv   *httptest.Server
+	gone  bool // answer 404, as a hub from before /v1/translations does
+	down  bool // answer nothing at all: a peer this hub cannot reach
+	asked int  // pages of messages and translations it was asked for
 }
 
 func newServingHub(t *testing.T) *servingHub {
@@ -44,6 +46,13 @@ func newServingHub(t *testing.T) *servingHub {
 	sh := &servingHub{st: st, id: id}
 	handler := (&api.Server{Cfg: h, St: st, Gate: gate.New(h), Hub: id}).Handler()
 	sh.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if sh.down {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path == "/v1/replicate" || r.URL.Path == "/v1/translations" {
+			sh.asked++
+		}
 		if sh.gone && r.URL.Path == "/v1/translations" {
 			http.NotFound(w, r)
 			return
@@ -209,4 +218,158 @@ func peerAdd(t *testing.T, r *rig, peer *servingHub) ([]byte, []byte, *envelope.
 		t.Fatal(err)
 	}
 	return raw, ed25519.Sign(r.priv, append([]byte(envelope.Prefix), raw...)), e, op
+}
+
+// signed is one post.create by the rig's author, as its bytes and
+// signature: the same post on every hub it is put into.
+func (r *rig) signed(text string) (raw, sig []byte, e *envelope.Envelope, op any) {
+	r.t.Helper()
+	r.seq++
+	raw, _ = json.Marshal(map[string]any{
+		"type": "post.create", "author": base64.StdEncoding.EncodeToString(r.pub), "seq": r.seq, "ts": 1756500000000,
+		"body": map[string]any{"text": text},
+	})
+	e, err := envelope.Parse(raw)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	op, _ = e.Op()
+	return raw, ed25519.Sign(r.priv, append([]byte(envelope.Prefix), raw...)), e, op
+}
+
+// TestTranslationBeforeItsPost is Codex's order (2026-09-19): a peer's
+// translation is fetched before this hub has the post, then the
+// identical signed post arrives, then an ordinary next pull. The first
+// cut passed the translation over, moved the cursor past it and never
+// saw it again; it has to be kept now, with the cursor left where it
+// was, and nothing left waiting.
+func TestTranslationBeforeItsPost(t *testing.T) {
+	r := newRig(t)
+	peer := newServingHub(t)
+	raw, sig, e, op := r.signed("Try `?lang=zh` on https://hub.example/ now.")
+	id, _, err := peer.st.IngestReplicated(raw, sig, e, op, "a-third-hub") // the peer holds it, and serves its words, never the post
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer.st.SetLang(id, "en", "m", true)
+	peer.st.SetTranslation(id, "zh-Hans", "现在在 https://hub.example/ 上试试 `?lang=zh`。", "glm", true)
+	r.st.Ingest(peerAdd(t, r, peer))
+
+	// the translation, before the post
+	if err := r.p.pullTranslations(peer.peer(0)); err != nil {
+		t.Fatal(err)
+	}
+	ps, _ := r.st.Peers()
+	if trs, _ := r.st.Translations([]string{id}, "zh-Hans"); len(trs) != 0 || len(ps) != 1 || ps[0].TrCursor != 1 {
+		t.Fatalf("before the post: kept %+v, cursor %+v — want nothing kept and the cursor past it, as Codex found", trs, ps)
+	}
+	if waiting, _ := r.st.PendingTranslations(id, 10); len(waiting) != 1 || waiting[0].Peer != peer.id.ID || waiting[0].Lang != "zh-Hans" {
+		t.Fatalf("set aside = %+v, want the one translation waiting for its post", waiting)
+	}
+
+	// the identical signed post arrives, by whatever way
+	if _, _, err := r.st.IngestReplicated(raw, sig, e, op, "a-third-hub"); err != nil {
+		t.Fatal(err)
+	}
+	r.st.SetLang(id, "en", "m", true)
+
+	// an ordinary next pull: the round, from the cursor it holds
+	r.p.round()
+	trs, _ := r.st.Translations([]string{id}, "zh-Hans")
+	if trs[id].Text != "现在在 https://hub.example/ 上试试 `?lang=zh`。" {
+		t.Fatalf("after the post and the next pull: kept %+v, want the peer's translation recovered", trs)
+	}
+	ps, _ = r.st.Peers()
+	if waiting, _ := r.st.PendingTranslations(id, 10); len(waiting) != 0 || ps[0].TrCursor != 1 {
+		t.Fatalf("after: %d still waiting, cursor %d — want none, and the cursor never reset", len(waiting), ps[0].TrCursor)
+	}
+}
+
+// TestTranslationFromOnePeerPostFromAnother is the way the gap opens
+// with a third hub. C wrote the post. A took it from C, translated it,
+// and serves the translation, never the post: /v1/replicate is one hop.
+// B pulls from both, and for one round cannot reach C: it gets the
+// words and not the post. The round C answers again, the post comes
+// through C's log, and the translation that waited is kept the moment
+// the post is — nothing asked of A twice.
+func TestTranslationFromOnePeerPostFromAnother(t *testing.T) {
+	r := newRig(t)
+	a, c := newServingHub(t), newServingHub(t)
+	raw, sig, e, op := r.signed("both hubs carry this post, only one wrote it down first")
+	id, _, err := c.st.Ingest(raw, sig, e, op) // written on C
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := a.st.IngestReplicated(raw, sig, e, op, c.id.ID); err != nil { // A took it from C
+		t.Fatal(err)
+	}
+	a.st.SetLang(id, "en", "m", true)
+	a.st.SetTranslation(id, "zh-Hans", "两个 hub 都有这条帖子，只有一个先把它写了下来", "glm", true)
+	r.st.Ingest(peerAdd(t, r, a))
+	r.st.Ingest(peerAdd(t, r, c))
+
+	c.down = true
+	r.p.round()
+	if _, _, held, _ := r.st.PostText(id); held {
+		t.Fatal("the post came with C down: A served it on, more than one hop")
+	}
+	if waiting, _ := r.st.PendingTranslations(id, 10); len(waiting) != 1 {
+		t.Fatalf("with C down: %d waiting, want A's translation set aside", len(waiting))
+	}
+
+	c.down = false
+	asked := a.asked
+	r.p.round()
+	r.st.SetLang(id, "en", "m", true) // the pages join a translation to its post's language
+	trs, _ := r.st.Translations([]string{id}, "zh-Hans")
+	if trs[id].Text != "两个 hub 都有这条帖子，只有一个先把它写了下来" {
+		t.Fatalf("with C back: kept %+v, want A's translation of C's post", trs)
+	}
+	if waiting, _ := r.st.PendingTranslations(id, 10); len(waiting) != 0 {
+		t.Fatalf("%d still waiting after they were taken", len(waiting))
+	}
+	if got := a.asked - asked; got > 2 { // its messages and its translations, from the cursors: nothing replayed
+		t.Errorf("A was asked %d times in the round the post came, want its two ordinary pages", got)
+	}
+}
+
+// TestWaitingTranslationIsTriedOnce: when its post comes, a translation
+// that waited is taken like any other, and what is decided then is
+// final. One out of shape is refused and gone, not tried again every
+// round; of two that waited for one post the newer is kept.
+func TestWaitingTranslationIsTriedOnce(t *testing.T) {
+	r := newRig(t)
+	raw, sig, e, op := r.signed("See https://hub.example/docs for the rest.")
+	id := envelope.MsgID(raw)
+	wait := func(peer, text string, ts int64) {
+		got := r.p.take(peer, store.SharedTranslation{Post: id, Lang: "zh-Hans", Text: text, Model: "glm", TS: ts})
+		if got != waits {
+			t.Fatalf("take before the post = %v, want it to wait", got)
+		}
+	}
+	wait("peer-one", "其余的见文档。", 300) // the newest, and its link is gone
+	wait("peer-two", "其余的,见 https://hub.example/docs 。", 200)
+	wait("peer-three", "其余内容请看 https://hub.example/docs 。", 100)
+	for _, bad := range []store.SharedTranslation{
+		{Post: id, Lang: "fr", Text: "le reste", TS: 1},         // no language this hub keeps
+		{Post: "not-an-id", Lang: "zh-Hans", Text: "文字", TS: 1}, // no post id
+		{Post: id, Lang: "zh-Hans", Text: "", TS: 1},            // no words
+		{Post: id, Lang: "zh-Hans", Text: "\xff\xfe", TS: 1},    // not text
+	} {
+		if got := r.p.take("peer-one", bad); got != passed {
+			t.Errorf("take(%+v) = %v, want it passed, never set aside", bad, got)
+		}
+	}
+	if _, _, err := r.st.IngestReplicated(raw, sig, e, op, "elsewhere"); err != nil {
+		t.Fatal(err)
+	}
+	r.st.SetLang(id, "en", "m", true)
+	r.p.settle(id)
+	trs, _ := r.st.Translations([]string{id}, "zh-Hans")
+	if trs[id].Text != "其余的，见 https://hub.example/docs 。" {
+		t.Fatalf("kept %+v, want the newest that passes the check, its punctuation set", trs)
+	}
+	if waiting, _ := r.st.PendingTranslations(id, 10); len(waiting) != 0 {
+		t.Fatalf("still waiting: %+v — the refused one would be tried every round", waiting)
+	}
 }

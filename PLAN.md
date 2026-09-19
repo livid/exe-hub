@@ -1715,6 +1715,26 @@ Asked by Livid 2026-09-19.
   other by itself; and what a hub has, from anyone, it does not owe, so
   a translating hub makes only what no peer offered first. A landed one
   goes out as `post.translation` like any other.
+- **A translation that comes before its post waits for it** (2026-09-19,
+  Codex's catch; Livid: "Fix it."). The cursor moves past whatever a
+  page held, and I had written that anything passed over "would be
+  refused on every later pass too". True of a translation that fails
+  `Check`; false of one whose post is not here yet, which the first cut
+  dropped without a line in the log, for good: on a hub that only takes,
+  the reader stays on the post as written until the peer happens to redo
+  it. Pulling a peer's messages first does not close it. `/v1/replicate`
+  is one hop, but a hub translates every post it holds, so hub A serves
+  its translation of a post it took from C and never the post; B, which
+  pulls from both, gets the words from A and the post only from C, and a
+  few minutes of not reaching C are enough. So a well-formed translation
+  of a post this hub does not hold is set aside in `pending_translations`
+  (peer, post, language; the newest per key), and tried the moment a
+  pulled `post.create` is kept, and again at the end of every round for
+  posts that came any other way. Tried means taken like any other: its
+  `Check` then is final, kept or refused, and the row goes either way.
+  It is bounded, since a peer can name posts that will never come: 2000
+  to a peer, the longest-waiting dropped first, and thirty days. Not
+  derived and not signed: it stays across `Rebuild`.
 - **Who pays** is config: two translating hubs would still race each
   other newest-first, so one of a pair says `"translate": false` and
   only takes. Livid's pair: the host hub translates, the public hub

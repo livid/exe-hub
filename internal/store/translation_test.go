@@ -314,3 +314,59 @@ func TestTranslationsNumbered(t *testing.T) {
 		t.Fatalf("numbered twice = %+v", again)
 	}
 }
+
+// TestPendingTranslations: a peer's translation of a post not held is
+// set aside, the newest per peer, post and language standing; it is
+// listed for its post from every peer, newest first, and with no post
+// named only once the post is held; a peer is kept to its cap, the
+// longest-waiting going first, and what waited too long goes unasked.
+func TestPendingTranslations(t *testing.T) {
+	s := openTest(t)
+	a := newAuthor(t)
+	held := ingest(t, s, a, "post.create", map[string]any{"text": "held"})
+	set := func(peer, post, text string, ts int64, max int) int64 {
+		n, err := s.SetPendingTranslation(peer, SharedTranslation{Post: post, Lang: "zh-Hans", Text: text, Model: "m", TS: ts}, max)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	set("one", "absent", "旧", 100, 10)
+	set("one", "absent", "新", 200, 10)
+	set("one", "absent", "更旧", 50, 10) // older than what waits: it stands
+	set("two", "absent", "别家的", 150, 10)
+	set("one", held, "已有的帖子", 100, 10)
+
+	got, err := s.PendingTranslations("absent", 10)
+	if err != nil || len(got) != 2 || got[0].Text != "新" || got[0].Peer != "one" || got[1].Peer != "two" || got[1].Model != "m" {
+		t.Fatalf("for the post = %+v, %v; want one's newest, then two's", got, err)
+	}
+	if got, _ = s.PendingTranslations("", 10); len(got) != 1 || got[0].Post != held {
+		t.Fatalf("for posts held by now = %+v, want only the held post's", got)
+	}
+	if err := s.DropPendingTranslation("one", held, "zh-Hans"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.PendingTranslations("", 10); len(got) != 0 {
+		t.Fatalf("after the drop = %+v", got)
+	}
+
+	// the cap is each peer's own: three more from "one" at a cap of 3 push out its longest-waiting
+	time.Sleep(2 * time.Millisecond)
+	for i, post := range []string{"p1", "p2", "p3"} {
+		if dropped := set("one", post, "字", 300, 3); (i == 2) != (dropped == 1) {
+			t.Fatalf("after %s: dropped %d", post, dropped)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if got, _ = s.PendingTranslations("absent", 10); len(got) != 1 || got[0].Peer != "two" {
+		t.Fatalf("after the cap = %+v, want one's longest-waiting gone and two's untouched", got)
+	}
+
+	if n, err := s.AgePendingTranslations(time.Now().Add(time.Hour).UnixMilli()); err != nil || n != 4 {
+		t.Fatalf("aged %d, %v; want all four", n, err)
+	}
+	if err := s.Rebuild(); err != nil { // not derived: Rebuild leaves the table alone
+		t.Fatal(err)
+	}
+}

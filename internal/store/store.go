@@ -269,6 +269,18 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 		// the highest rev the redone one would take that number again,
 		// behind the cursor of a peer that had read that far
 		`CREATE TABLE IF NOT EXISTS translation_revs (rev INTEGER PRIMARY KEY AUTOINCREMENT)`,
+		// a peer's translation of a post this hub does not hold yet, set
+		// aside until the post comes (PLAN.md, Translations — a translation
+		// that comes before its post waits for it). ts is the peer's, the
+		// newest per key standing; seen is when this hub first set it
+		// aside, what it is aged and capped by. Neither derived nor
+		// signed: it stays across Rebuild
+		`CREATE TABLE IF NOT EXISTS pending_translations (
+			peer TEXT NOT NULL, post TEXT NOT NULL, lang TEXT NOT NULL,
+			text TEXT NOT NULL, model TEXT NOT NULL DEFAULT '',
+			ts INTEGER NOT NULL, seen INTEGER NOT NULL,
+			PRIMARY KEY (peer, post, lang))`,
+		`CREATE INDEX IF NOT EXISTS pending_translations_post ON pending_translations(post)`,
 		`ALTER TABLE peer_state ADD COLUMN tr_cursor INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
@@ -1465,6 +1477,82 @@ func (s *Store) AcceptTranslation(peer string, t SharedTranslation) (bool, error
 	}
 	n, err := res.RowsAffected()
 	return n > 0, err
+}
+
+// PendingTranslation is a peer's translation waiting for its post.
+type PendingTranslation struct {
+	Peer string
+	SharedTranslation
+}
+
+// SetPendingTranslation sets a peer's translation aside for a post this
+// hub does not hold, the newest per peer, post and language standing,
+// and keeps the peer to max of them, the longest-waiting dropped first:
+// a peer can name posts that will never come. It says how many went.
+func (s *Store) SetPendingTranslation(peer string, t SharedTranslation, max int) (dropped int64, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO pending_translations (peer, post, lang, text, model, ts, seen) VALUES (?,?,?,?,?,?,?)
+		ON CONFLICT(peer, post, lang) DO UPDATE SET text=excluded.text, model=excluded.model, ts=excluded.ts
+		WHERE excluded.ts > pending_translations.ts`,
+		peer, t.Post, t.Lang, t.Text, t.Model, t.TS, time.Now().UnixMilli()); err != nil {
+		return 0, err
+	}
+	res, err := tx.Exec(`DELETE FROM pending_translations WHERE peer = ? AND rowid NOT IN (
+		SELECT rowid FROM pending_translations WHERE peer = ? ORDER BY seen DESC, rowid DESC LIMIT ?)`, peer, peer, max)
+	if err != nil {
+		return 0, err
+	}
+	if dropped, err = res.RowsAffected(); err != nil {
+		return 0, err
+	}
+	return dropped, tx.Commit()
+}
+
+// PendingTranslations is what is set aside for one post, from every
+// peer, the newest first; with post "" it is what is set aside for any
+// post this hub holds by now, however the post came.
+func (s *Store) PendingTranslations(post string, limit int) ([]PendingTranslation, error) {
+	q := `SELECT n.peer, n.post, n.lang, n.text, n.model, n.ts FROM pending_translations n WHERE n.post = ? ORDER BY n.ts DESC LIMIT ?`
+	args := []any{post, limit}
+	if post == "" {
+		q = `SELECT n.peer, n.post, n.lang, n.text, n.model, n.ts FROM pending_translations n
+			JOIN posts p ON p.id = n.post ORDER BY n.ts DESC LIMIT ?`
+		args = []any{limit}
+	}
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PendingTranslation
+	for rows.Next() {
+		var n PendingTranslation
+		if err := rows.Scan(&n.Peer, &n.Post, &n.Lang, &n.Text, &n.Model, &n.TS); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// DropPendingTranslation forgets one set aside: it was tried.
+func (s *Store) DropPendingTranslation(peer, post, lang string) error {
+	_, err := s.db.Exec(`DELETE FROM pending_translations WHERE peer = ? AND post = ? AND lang = ?`, peer, post, lang)
+	return err
+}
+
+// AgePendingTranslations forgets what was set aside before a time (unix
+// ms) and whose post never came, and says how many.
+func (s *Store) AgePendingTranslations(before int64) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM pending_translations WHERE seen < ?`, before)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // SetPeerTranslationCursor records how far into a peer's translations

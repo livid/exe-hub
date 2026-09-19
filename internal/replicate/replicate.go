@@ -74,29 +74,37 @@ type (
 func (p *Puller) Run() {
 	p.client = &http.Client{Timeout: 30 * time.Second}
 	for {
-		peers, err := p.St.Peers()
-		if err != nil {
-			log.Printf("replicate: peers: %v", err)
-		}
-		var up []store.Peer // the peers that answered this cycle: the ones heal may ask
-		for _, peer := range peers {
-			if peer.Hub == p.Self {
-				continue
-			}
-			if err := p.pull(peer); err != nil {
-				log.Printf("replicate %s: %v", peer.Hub, err)
-				continue
-			}
-			up = append(up, peer)
-			// after its messages, so the posts a page's translations are
-			// of are already here
-			if err := p.pullTranslations(peer); err != nil {
-				log.Printf("replicate %s: translations: %v", peer.Hub, err)
-			}
-		}
-		p.heal(up)
+		p.round()
 		time.Sleep(interval)
 	}
+}
+
+// round is one cycle: every peer's messages and then its translations,
+// the translations that were waiting for a post that has come by now,
+// and the files still to mirror.
+func (p *Puller) round() {
+	peers, err := p.St.Peers()
+	if err != nil {
+		log.Printf("replicate: peers: %v", err)
+	}
+	var up []store.Peer // the peers that answered this cycle: the ones heal may ask
+	for _, peer := range peers {
+		if peer.Hub == p.Self {
+			continue
+		}
+		if err := p.pull(peer); err != nil {
+			log.Printf("replicate %s: %v", peer.Hub, err)
+			continue
+		}
+		up = append(up, peer)
+		// after its messages, so the posts a page's translations are
+		// of are mostly here; the rest wait (see take)
+		if err := p.pullTranslations(peer); err != nil {
+			log.Printf("replicate %s: translations: %v", peer.Hub, err)
+		}
+	}
+	p.settle("")
+	p.heal(up)
 }
 
 // pull drains one peer: resolve+verify its pubkey once, then fetch pages
@@ -209,9 +217,13 @@ func (p *Puller) fetchPage(base string, pub ed25519.PublicKey, hub string, after
 // hub's own Check against its own copy of the post after its own
 // FullWidth — a peer can offer a bad translation, as a model can, never
 // one the checks would have refused — and only when it is newer than
-// what is kept. One refused is logged and passed over: the peer's list
-// only grows, so it would be refused on every later pass too. A peer
-// from before /v1/translations answers 404 and is left alone.
+// what is kept. The cursor moves past a page whatever became of what it
+// held, so what is passed over is passed for good, and that is right for
+// one the checks refuse: they would refuse it on every later pass too.
+// It is wrong for one whose post is not here yet, which the first cut
+// dropped the same way (Codex's catch): that one is set aside, and
+// taken when its post comes (see take, settle). A peer from before
+// /v1/translations answers 404 and is left alone.
 func (p *Puller) pullTranslations(peer store.Peer) error {
 	base, err := envelope.ParseMultiaddr(peer.Addr)
 	if err != nil {
@@ -221,10 +233,13 @@ func (p *Puller) pullTranslations(peer store.Peer) error {
 	if err != nil {
 		return err
 	}
-	cursor, taken := peer.TrCursor, 0
+	cursor, taken, aside := peer.TrCursor, 0, 0
 	defer func() {
 		if taken > 0 {
 			log.Printf("replicate %s: took %d translations", peer.Hub, taken)
+		}
+		if aside > 0 {
+			log.Printf("replicate %s: set %d translations aside for posts not here yet", peer.Hub, aside)
 		}
 	}()
 	for {
@@ -243,8 +258,11 @@ func (p *Puller) pullTranslations(peer store.Peer) error {
 			return err
 		}
 		for _, t := range page.Translations {
-			if p.take(peer.Hub, t) {
+			switch p.take(peer.Hub, t) {
+			case kept:
 				taken++
+			case waits:
+				aside++
 			}
 		}
 		if page.Next <= cursor {
@@ -261,34 +279,112 @@ func (p *Puller) pullTranslations(peer store.Peer) error {
 // since English runs to a few bytes for each of Chinese's.
 const translationMax = 8 * envelope.MaxText
 
-// take keeps one translation from a peer if it may be kept.
-func (p *Puller) take(hub string, t store.SharedTranslation) bool {
-	if !slices.Contains(lang.Targets, t.Lang) || t.Text == "" || len(t.Text) > translationMax || !utf8.ValidString(t.Text) {
-		return false
+// What became of one translation a peer offered.
+type taking int
+
+const (
+	kept   taking = iota // it is this hub's translation of the post now
+	passed               // not kept, for good: malformed, refused by Check, or no newer than what is kept
+	waits                // its post is not here yet: set aside until it is
+	failed               // the store failed: nothing is known, try again
+)
+
+// A peer can name posts that will never come — written on a hub this
+// one does not pull from, or deleted since — so what waits is bounded:
+// so many to a peer, the longest-waiting dropped first, and so long.
+const (
+	pendingMax = 2000
+	pendingAge = 30 * 24 * time.Hour
+)
+
+// take keeps one translation from a peer if it may be kept. One of a
+// post this hub does not hold is no refusal: the peer translates every
+// post it holds and serves only the posts written on it, so the words
+// can come from one peer and the post from another, or a round later. It
+// is set aside, well-formed, and settle takes it when the post is here.
+func (p *Puller) take(hub string, t store.SharedTranslation) taking {
+	if !slices.Contains(lang.Targets, t.Lang) || t.Text == "" || len(t.Text) > translationMax || !utf8.ValidString(t.Text) ||
+		len(t.Post) != 64 || strings.Trim(t.Post, "0123456789abcdef") != "" {
+		return passed
+	}
+	if len(t.Model) > 200 {
+		t.Model = t.Model[:200]
 	}
 	src, from, held, err := p.St.PostText(t.Post)
-	if err != nil || !held || from == t.Lang {
-		return false // not a post of ours, or one already in that language
+	if err != nil {
+		return failed
+	}
+	if !held {
+		dropped, err := p.St.SetPendingTranslation(hub, t, pendingMax)
+		if err != nil {
+			log.Printf("replicate %s: translation of %s set aside: %v", hub, t.Post, err)
+			return failed
+		}
+		if dropped > 0 {
+			log.Printf("replicate %s: %d translations waiting longest for their posts dropped: more than %d wait", hub, dropped, pendingMax)
+		}
+		return waits
+	}
+	if from == t.Lang {
+		return passed // the post is in that language already
 	}
 	if strings.HasPrefix(t.Lang, "zh") {
 		t.Text = lang.FullWidth(t.Text)
 	}
 	if err := lang.Check(src, t.Text, t.Lang); err != nil {
 		log.Printf("replicate %s: translation of %s to %s refused: %v", hub, t.Post, t.Lang, err)
-		return false
-	}
-	if len(t.Model) > 200 {
-		t.Model = t.Model[:200]
+		return passed
 	}
 	ok, err := p.St.AcceptTranslation(hub, t)
 	if err != nil {
 		log.Printf("replicate %s: translation of %s: %v", hub, t.Post, err)
-		return false
+		return failed
 	}
-	if ok && p.Bus != nil {
+	if !ok {
+		return passed
+	}
+	if p.Bus != nil {
 		p.Bus.Emit(events.Event{Type: "post.translation", ID: t.Post})
 	}
-	return ok
+	return kept
+}
+
+// settle tries the translations that were set aside for a post, now
+// that it is here: for one post, the moment a pulled post.create is
+// kept, or with "" for every post that has come by any way, at the end
+// of each round. Tried means taken like any other, and what take decides
+// then is final — kept, or passed for good — so the row goes either
+// way; only a store that failed leaves it for the next round. What has
+// waited longer than pendingAge goes unasked.
+func (p *Puller) settle(post string) {
+	if post == "" {
+		if n, err := p.St.AgePendingTranslations(time.Now().Add(-pendingAge).UnixMilli()); err != nil {
+			log.Printf("replicate: translations set aside: %v", err)
+		} else if n > 0 {
+			log.Printf("replicate: %d translations waited %s for posts that never came, dropped", n, pendingAge)
+		}
+	}
+	waiting, err := p.St.PendingTranslations(post, 500)
+	if err != nil {
+		log.Printf("replicate: translations set aside: %v", err)
+		return
+	}
+	n := 0
+	for _, w := range waiting { // the newest first, so an older one of the same post finds it kept and passes
+		got := p.take(w.Peer, w.SharedTranslation)
+		if got == failed || got == waits {
+			continue
+		}
+		if got == kept {
+			n++
+		}
+		if err := p.St.DropPendingTranslation(w.Peer, w.Post, w.Lang); err != nil {
+			log.Printf("replicate: translations set aside: %v", err)
+		}
+	}
+	if n > 0 {
+		log.Printf("replicate: took %d translations that had waited for their posts", n)
+	}
 }
 
 var errNoTranslations = errors.New("peer has no /v1/translations")
@@ -376,7 +472,10 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 		// rather than the peer's courtesy
 		return
 	}
-	_, unpin, err := p.St.IngestReplicated(m.Envelope, m.Sig, e, op, hub)
+	id, unpin, err := p.St.IngestReplicated(m.Envelope, m.Sig, e, op, hub)
+	if _, post := op.(*envelope.PostCreate); post && err == nil {
+		p.settle(id) // the translations that came before it, from any peer
+	}
 	switch {
 	case errors.Is(err, store.ErrDuplicate), errors.Is(err, store.ErrStaleSeq):
 		// duplicate: both hubs saw it (mutual peering, or a re-pull);
