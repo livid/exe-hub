@@ -193,6 +193,7 @@ a.mention { text-decoration: none; }
 .compose .who-wrap .who { flex: 1 1 0; min-width: 0; }
 .compose .me-av { flex: none; box-sizing: border-box; width: 20px; height: 20px; border: 1px solid #262626; background: #ddd; }
 .compose .me-av img { display: block; width: 18px; height: 18px; image-rendering: pixelated; }
+.compose .me-av img.idn { width: 10px; height: 10px; padding: 4px; }
 .compose .who b { font-size: 12px; color: #262626; }
 .compose button { font-family: inherit; cursor: default; margin: 0; }
 .compose .btn:disabled { color: #999; }
@@ -229,6 +230,7 @@ a.mention { text-decoration: none; }
 .compose .at-item { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 6px; line-height: 18px; white-space: nowrap; }
 .compose .at-item .av { flex: none; box-sizing: border-box; width: 18px; height: 18px; border: 1px solid #262626; background: #ccc; }
 .compose .at-item .av img { display: block; width: 16px; height: 16px; image-rendering: pixelated; }
+.compose .at-item .av img.idn { width: 10px; height: 10px; padding: 3px; }
 .compose .at-item .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .compose .at-item .mono { flex: none; font-size: 10px; color: #666; }
 .compose .at-item.on { background: #333399; color: #fff; }
@@ -254,6 +256,7 @@ a.mention { text-decoration: none; }
 .compose .ival.pic { display: flex; align-items: center; gap: 12px; }
 .compose .p-ava { flex: none; box-sizing: border-box; width: 48px; height: 48px; border: 1px solid #262626; background: #ccc; }
 .compose .p-ava img { display: block; width: 46px; height: 46px; }
+.compose .p-ava img.idn { width: 30px; height: 30px; padding: 8px; }
 .compose .ilab { width: 56px; flex: none; font-size: 11px; color: #555; text-align: right; }
 .compose .ival { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .compose .ival .line { display: block; }
@@ -292,11 +295,19 @@ a.mention { text-decoration: none; }
 .post.reply:has(+ .post.qrun) { border-bottom-color: #eee; }
 .av { width: 32px; height: 32px; border: 1px solid #262626; display: block; background: #ddd; box-sizing: border-box; }
 .av img { width: 30px; height: 30px; display: block; image-rendering: pixelated; }
+/* no picture of their own: the face the Hub app draws from the profile
+   id (/v1/identicon) — five cells a side, each a whole, even number of
+   pixels so it stays whole at 150 percent, standing about a cell clear
+   of the box on the pale ground that pads it out. Every box says its
+   own cell: 4px here, 2px on a reply, 8px on a profile. */
+img.idn { background: #e6e6f5; }
+.av img.idn { width: 20px; height: 20px; padding: 5px; }
 /* a reply wears a small avatar, as the Hub app draws its rows; the
    post heading a thread keeps the full size */
 .post.reply { grid-template-columns: 16px minmax(0, 1fr); }
 .post.reply .av { width: 16px; height: 16px; }
 .post.reply .av img { width: 14px; height: 14px; }
+.post.reply .av img.idn { width: 10px; height: 10px; padding: 2px; }
 .meta { color: #666; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta b { color: #262626; font-size: 12px; }
 .meta a { text-decoration: none; }
@@ -449,6 +460,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .profile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
 .profile .av { width: 64px; height: 64px; }
 .profile .av img { width: 62px; height: 62px; }
+.profile .av img.idn { width: 40px; height: 40px; padding: 11px; }
 .profile h1 { margin: 0; font-size: 14px; }
 .profile p { margin: 4px 0 0; overflow-wrap: anywhere; }
 .alert { padding: 16px 14px; }
@@ -527,7 +539,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
     <div class="profile">
-      <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{end}}</span>
+      <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Profile.ID}}.svg" alt="">{{end}}</span>
       <div>
         <h1>{{if .Profile.Name}}{{.Profile.Name}}{{else}}{{.Profile.ID}}{{end}}</h1>
         <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · since <time datetime="{{.SinceStamp}}" data-date>{{.Since}}</time>{{end}}</div>
@@ -1112,12 +1124,19 @@ document.addEventListener("click", e => {
     const p = await getJSON("/v1/profile/" + out.profile);
     return { author, v: out, profile: p.r.ok ? p.out : null };
   }
-  // the avatar beside the name, when the profile has one: like a post's,
-  // it links to the author's page
+  // a person's picture in an <img>: the avatar when the profile has one,
+  // else the face drawn from the id, as a post's row shows it (img.idn)
+  function face(img, cid, id) {
+    const src = cid ? "/v1/embed/" + cid : "/v1/identicon/" + id + ".svg";
+    if (img.getAttribute("src") !== src) img.src = src;
+    img.classList.toggle("idn", !cid);
+  }
+  // the avatar beside the name: like a post's, it links to the author's
+  // page
   function meAva(cid, id) {
     const box = q(".me-av"), img = box.querySelector("img");
-    if (cid && id) {
-      if (img.getAttribute("src") !== "/v1/embed/" + cid) img.src = "/v1/embed/" + cid;
+    if (id) {
+      face(img, cid, id);
       box.href = "/u/" + id;
       box.hidden = false;
     } else {
@@ -1335,8 +1354,9 @@ document.addEventListener("click", e => {
       const row = document.createElement("div");
       row.className = "at-item";
       row.setAttribute("role", "option");
-      const av = span("av", "");
-      if (h.avatar) av.append(Object.assign(document.createElement("img"), { src: "/v1/embed/" + h.avatar, alt: "" }));
+      const av = span("av", ""), img = Object.assign(document.createElement("img"), { alt: "" });
+      face(img, h.avatar, h.id);
+      av.append(img);
       row.append(av, span("nm", h.name), span("mono", h.id));
       row.addEventListener("pointermove", () => { if (atOn !== i) { atOn = i; atMark(); } });
       row.addEventListener("pointerdown", e => { e.preventDefault(); atPick(i); }); // the field keeps the caret
@@ -1492,8 +1512,9 @@ document.addEventListener("click", e => {
   }
   let pending = ""; // a picture uploaded while editing, not yet saved
   const showAva = cid => {
-    if (cid) { pAva.src = "/v1/embed/" + cid; pAva.hidden = false; }
-    else { pAva.removeAttribute("src"); pAva.hidden = true; }
+    const id = verdict && verdict.profile;
+    if (cid || id) face(pAva, cid, id);
+    pAva.hidden = !(cid || id);
   };
   const lock = on => { pChoose.disabled = pSave.disabled = pCancel.disabled = nameField.disabled = on; };
   function editMode(on) {
@@ -1690,7 +1711,7 @@ document.addEventListener("click", e => {
 
 {{define "post"}}<div class="post{{if .ReplyTo}} reply{{end}}{{if gt .Depth 1}} deep{{end}}{{if .Quote}} qhead{{end}}{{if .QuoteRun}} qrun{{end}}" id="{{.ID}}"{{if gt .Depth 1}} style="--d:{{.Depth}}"{{end}}>
   {{with .Quote}}<a class="quote" href="/p/{{.ID}}{{$.Q}}"><b>{{.Name}}</b>{{if .Text}} {{.Text}}{{end}}</a>{{end}}
-  <a class="av" href="/u/{{.Author}}{{.Q}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{end}}</a>
+  <a class="av" href="/u/{{.Author}}{{.Q}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Author}}.svg" alt="">{{end}}</a>
   <div>
     <div class="meta"><a href="/u/{{.Author}}{{.Q}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}{{.Q}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}}{{if not (or .Quote .QuoteRun)}} · <a href="/p/{{.ReplyTo}}{{.Q}}">in reply to</a>{{end}}{{end}}{{end}}</div>
     {{if .Text}}{{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text"{{if .Lang}} lang="{{.Lang}}"{{end}}{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>{{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.ID}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}{{end}}

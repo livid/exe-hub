@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"exehub/internal/identicon"
 	"exehub/internal/preview"
 	"exehub/internal/store"
 )
@@ -49,6 +50,20 @@ func (s *Server) picture(ctx context.Context, cid string) image.Image {
 		return nil
 	}
 	return img
+}
+
+// portrait is who a card is about: the avatar, or for a profile with no
+// picture (or one that can't be read just now) the face the pages draw
+// from the id — made at the card's size in whole cells, so it goes on
+// crisp.
+func (s *Server) portrait(ctx context.Context, cid, id string) (image.Image, bool) {
+	if img := s.picture(ctx, cid); img != nil {
+		return img, false
+	}
+	if !identicon.Valid(id) {
+		return nil, false
+	}
+	return identicon.Image(id, preview.Pic), true
 }
 
 // servePreview writes a card as PNG: public, cached ten minutes (a
@@ -104,8 +119,9 @@ func (s *Server) handlePreviewPost(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(body) == "" {
 		body = previewNoWords(*p)
 	}
+	pic, crisp := s.portrait(r.Context(), p.Avatar, p.Author)
 	servePreview(w, r, preview.Card{
-		Title: r.Host, Picture: s.picture(r.Context(), p.Avatar),
+		Title: r.Host, Picture: pic, Crisp: crisp,
 		Name: authorLabel(*p), Sub: previewWhen(p.TS), Body: body,
 		Foot: previewReplies(p.Replies),
 	})
@@ -146,7 +162,8 @@ func (s *Server) handlePreviewProfile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	c := preview.Card{Title: r.Host, Picture: s.picture(r.Context(), pr.Avatar), Name: profileName(pr), Body: pr.Bio}
+	pic, crisp := s.portrait(r.Context(), pr.Avatar, pr.ID)
+	c := preview.Card{Title: r.Host, Picture: pic, Crisp: crisp, Name: profileName(pr), Body: pr.Bio}
 	if pr.Created > 0 {
 		c.Sub = "since " + time.UnixMilli(pr.Created).UTC().Format("2 Jan 2006")
 		c.Foot = fmt.Sprintf("%d posts", pr.Posts)

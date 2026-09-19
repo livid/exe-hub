@@ -137,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /icon-192.png", servePNG(webIcon192))
 	mux.HandleFunc("GET /icon-512.png", servePNG(webIcon512))
 	mux.HandleFunc("GET /icon-maskable-512.png", servePNG(webIconMaskable))
+	mux.HandleFunc("GET /v1/identicon/{id}", s.handleIdenticon)
 	mux.HandleFunc("GET /v1/preview/post/{id}", s.handlePreviewPost)
 	mux.HandleFunc("GET /v1/preview/profile/{id}", s.handlePreviewProfile)
 	mux.HandleFunc("GET /v1/preview/home.png", s.handlePreviewHome)

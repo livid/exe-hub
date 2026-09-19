@@ -345,6 +345,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   avatar-flagged; `profile.set` rejects any other CID as an avatar.
 - `GET  /v1/profiles?q=&limit=` — the profiles a composer's `@` list
   offers (see Mentions).
+- `GET  /v1/identicon/{id}.svg` — the face of a profile with no picture,
+  drawn from its id (see Public pages, "A face for everyone"). Any
+  16-hex id has one, a profile row or not; anything else is 404.
 - `GET  /v1/hub` — hub info: id, pubkey, gate mode, allow_replication,
   and `stats` (live profile and post counts — the Hub app's info
   dialog; replicated content counts, deleted posts don't).
@@ -730,6 +733,30 @@ hub that carries the post.
   Latin the pages' dates have.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
+- **A face for everyone** (2026-09-19, Livid: the Hub app "has a nice
+  random avatar" for someone who uploaded none; the pages showed an empty
+  grey box). A profile without a picture wears the face the Hub app
+  draws from its id — 5×5 cells mirrored left to right, the id's first
+  byte picking one of four Platinum blues (`#333399 #6666cc #9999ff
+  #336699`) on a pale ground (`#e6e6f5`), its first fifteen hex digits,
+  the odd ones, filling the left three columns row by row. One person,
+  one face, in the app and on the pages: `internal/identicon` is the
+  twin of the app's `identicon()`, and its test must draw what
+  `testdata/identicon.json` holds — faces the app's own function drew
+  (`testdata/draw.js` runs the app's source). The pages show it as
+  `<img class="idn" src="/v1/identicon/{id}.svg">` wherever an avatar
+  would stand: a post's row, a reply, a profile's head, and in the
+  composer the who row, the `@` list and the Profile dialog's Picture —
+  so someone signed in sees the face others see until they choose a
+  picture. The SVG is the bare pattern; the stylesheet gives each box a
+  whole, even cell (whole at 150 percent too) about a seventh of the
+  box, and pads the rest with the ground so the pattern stands a cell
+  clear of the 1px line: 30px box 4px cells, 14px reply 2px, 62px
+  profile 8px, 18px who row 2px, 16px `@` row 2px, 46px dialog 6px.
+  The app draws it edge to edge in its 14px box; the pattern and the
+  colours are what is shared. A link-preview card without an avatar
+  carries the face too, made at the card's 96px in 12px cells
+  (`identicon.Image`), crisp.
 - **Video and sound are players** (2026-09-14). A video sits in a box of
   its final size before the file loads — `width` px and `aspect-ratio`
   from the embed's facts, 420 px tall at most like pictures, whole pixels
@@ -801,7 +828,8 @@ hub that carries the post.
   the home page's first page (the desk's main column, beside the join
   window when there is room), **Reply** over the thread on a thread
   page: signed out, **Sign in with Solana**;
-  signed in, the avatar (when the profile has one, 20px like the row's
+  signed in, the avatar (the profile's picture, or the face drawn from
+  the id when it has none; 20px like the row's
   buttons, 5px before the name, a link to the user's page as a post's
   avatar is), the name and profile id with
   **Profile…** and **Sign Out**,

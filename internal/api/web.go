@@ -18,6 +18,7 @@ import (
 
 	"exehub/internal/card"
 	"exehub/internal/envelope"
+	"exehub/internal/identicon"
 	"exehub/internal/lang"
 	"exehub/internal/mention"
 	"exehub/internal/preview"
@@ -82,6 +83,23 @@ func servePNG(png []byte) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(png)
 	}
+}
+
+// handleIdenticon: GET /v1/identicon/{id}.svg — the face of a profile
+// with no picture, drawn from its id (internal/identicon) as the Hub app
+// draws it. The pages show it wherever an avatar would stand. Any id has
+// a face, a profile row or not: a key that has only posted is a person
+// too.
+func (s *Server) handleIdenticon(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(r.PathValue("id"), ".svg")
+	if !identicon.Valid(id) {
+		writeErr(w, http.StatusNotFound, errors.New("no such profile id"))
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Write(identicon.SVG(id))
 }
 
 // webDesc is what the hub says it is: the home page's description, the

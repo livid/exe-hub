@@ -22,7 +22,9 @@ import (
 	"exehub/internal/config"
 	"exehub/internal/envelope"
 	"exehub/internal/events"
+	"exehub/internal/identicon"
 	"exehub/internal/identity"
+	"exehub/internal/preview"
 	"exehub/internal/push"
 	"exehub/internal/store"
 )
@@ -1291,6 +1293,88 @@ func TestWebPreview(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("picture post lacks %s", want)
+		}
+	}
+}
+
+// TestWebIdenticon: someone with no picture wears the face drawn from
+// their id — on a post's row, on their page, on their cards — and
+// someone with a picture wears that.
+func TestWebIdenticon(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	id := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "no picture yet"})
+	posts, _ := s.St.Feed("", 10, true)
+	author := posts[0].Author
+	face := `<img class="idn" src="/v1/identicon/` + author + `.svg" alt="">`
+	for _, path := range []string{"/", "/p/" + id, "/u/" + author} {
+		if _, body := get(t, h, path); strings.Count(body, face) == 0 {
+			t.Errorf("%s: no face for a key without a picture", path)
+		}
+	}
+	if _, body := get(t, h, "/u/"+author); !strings.Contains(body, `<span class="av">`+face+`</span>`) {
+		t.Error("the profile's head does not wear the face")
+	}
+
+	// the picture itself: the package's SVG, with or without the suffix
+	for _, path := range []string{"/v1/identicon/" + author + ".svg", "/v1/identicon/" + author} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example"+path, nil))
+		if w.Code != 200 || w.Header().Get("Content-Type") != "image/svg+xml" || w.Body.String() != string(identicon.SVG(author)) {
+			t.Errorf("%s: %d %s\n%s", path, w.Code, w.Header().Get("Content-Type"), w.Body.String())
+		}
+	}
+	for _, path := range []string{"/v1/identicon/nobody.svg", "/v1/identicon/" + strings.ToUpper(author) + ".svg", "/v1/identicon/" + author + "00.svg"} {
+		if code, _ := get(t, h, path); code != 404 {
+			t.Errorf("%s: %d, want 404", path, code)
+		}
+	}
+
+	// the cards: the face at the picture's size, in its own colours
+	for _, path := range []string{"/v1/preview/post/" + id + ".png", "/v1/preview/profile/" + author + ".png"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example"+path, nil))
+		img, err := png.Decode(w.Body)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		ink, _ := identicon.Face(author)
+		var ground, inked int
+		for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
+			for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
+				switch r, g, b, _ := img.At(x, y).RGBA(); [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)} {
+				case [3]uint8{identicon.Ground.R, identicon.Ground.G, identicon.Ground.B}:
+					ground++
+				case [3]uint8{ink.R, ink.G, ink.B}:
+					inked++
+				}
+			}
+		}
+		_, on := identicon.Face(author)
+		cells := 0
+		for _, row := range on {
+			for _, c := range row {
+				if c {
+					cells++
+				}
+			}
+		}
+		c := identicon.Cell(preview.Pic)
+		if ground != preview.Pic*preview.Pic-cells*c*c || inked != cells*c*c {
+			t.Errorf("%s: %d ground and %d ink pixels, want %d and %d", path, ground, inked, preview.Pic*preview.Pic-cells*c*c, cells*c*c)
+		}
+	}
+
+	// a picture of their own takes the face's place
+	cid := strings.Repeat("b", 59)
+	if err := s.St.AddPin(cid, 1000, "image/png", true); err != nil {
+		t.Fatal(err)
+	}
+	ingest(t, s, priv, pub, 2, "profile.set", map[string]any{"name": "Pictured", "avatar": cid})
+	for _, path := range []string{"/", "/u/" + author} {
+		if _, body := get(t, h, path); strings.Contains(body, face) || !strings.Contains(body, `<img src="/v1/embed/`+cid+`" alt="">`) {
+			t.Errorf("%s: a profile with a picture still wears the face", path)
 		}
 	}
 }

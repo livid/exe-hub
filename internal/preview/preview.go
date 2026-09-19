@@ -36,6 +36,10 @@ const W, H = 1200, 630
 //go:embed DroidSansFallback.ttf
 var droidTTF []byte
 
+// Pic is the side of a card's picture, before the 1px line around it: a
+// picture made at this size goes on untouched.
+const Pic = 96
+
 // Card is what one picture says.
 type Card struct {
 	Title   string      // the window's title: the host
@@ -349,7 +353,7 @@ func (c Card) draw(img *image.RGBA) {
 	const pad = 40
 	area := image.Rect(inner.Min.X+pad, inner.Min.Y+28, inner.Max.X-pad, status.Min.Y-24)
 	x := area.Min.X
-	const pic = 96
+	const pic = Pic
 	if c.Picture != nil {
 		dst := image.NewRGBA(image.Rect(0, 0, pic, pic))
 		var scaler xdraw.Scaler = xdraw.CatmullRom
