@@ -57,7 +57,12 @@ func TestWordless(t *testing.T) {
 		"🚀🚀 https://example.com/a/b?c=d": true,
 		"12:30 → 14:00":                  true,
 		"ok":                             false,
-		"看 https://example.com/":         false,
+		// prose flush against a link is still prose; the link alone is not
+		"https://example.com/，这个链接打不开":  false,
+		"https://example.com/ ，这个链接打不开": false,
+		"https://example.com/a/b?c=d":   true,
+		"详见https://x.y的说明":              false,
+		"看 https://example.com/":        false,
 	} {
 		if got := Wordless(text); got != want {
 			t.Errorf("Wordless(%q) = %v, want %v", text, got, want)

@@ -1510,7 +1510,8 @@ shows it yet, and no read serves it. Asked by Livid 2026-09-19.
   characters, and the answer has to parse as a tag (`x/text/language`),
   so the worst a post can do by talking to the model is be filed under
   the wrong language. A post with no letters outside its links is `zxx`
-  without asking. A bare `zh` says nothing of the script and is refused
+  without asking, a link ending where the pages end it (`card.URL`), so
+  Chinese set flush against one counts as the prose it is. A bare `zh` says nothing of the script and is refused
   as no answer: glm-5.3 gave one for 3 Chinese answers in 66 until the
   prompt said so in as many words, 1 in 132 since (measured 2026-09-19),
   and the next try an hour on gets the rest.

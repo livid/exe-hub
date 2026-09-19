@@ -11,10 +11,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
+
+	"exehub/internal/card"
 
 	"golang.org/x/text/language"
 )
@@ -87,12 +88,14 @@ func (d *Detector) auth(req *http.Request) {
 	}
 }
 
-var linkRE = regexp.MustCompile(`https?://\S+`)
-
 // Wordless says the text has no letter outside its links — nothing a
-// language could be read from, so nobody needs asking.
+// language could be read from, so nobody needs asking. A link ends
+// where the pages end it (card.URL): Chinese set flush against one,
+// "https://example.com/，这个链接打不开", is prose, and a looser matcher
+// that ran on to the next space took it for the link's tail and filed
+// the post under zxx unasked (Codex's catch, 2026-09-19).
 func Wordless(text string) bool {
-	for _, r := range linkRE.ReplaceAllString(text, " ") {
+	for _, r := range card.URL.ReplaceAllString(text, " ") {
 		if unicode.IsLetter(r) {
 			return false
 		}
