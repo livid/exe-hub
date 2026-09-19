@@ -167,3 +167,55 @@ func TestTranslatorPass(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckTables: a translation keeps the post's tables as the pages'
+// parser draws them. Codex's two cases — a Fund / Return table folded
+// into one column with every ticker, number and line still there, and a
+// delimiter row that no longer parses — and the ones beside them: a row
+// folded under a header that survived, an alignment lost, full-width
+// pipes, a table invented. The words in the cells are the translator's.
+func TestCheckTables(t *testing.T) {
+	const fund = "These are the one-year leaders:\n\n" +
+		"| Fund | Return |\n| :--- | ---: |\n| `TSLY` | 12.5% |\n| `NVDY` | 48.1% |\n|  | 3.0% |\n\nPrices from the issuer."
+	good := "以下是一年期的领先者：\n\n" +
+		"| 基金 | 回报 |\n| :--- | ---: |\n| `TSLY` | 12.5% |\n| `NVDY` | 48.1% |\n|  | 3.0% |\n\n价格来自发行方。"
+	if err := Check(fund, good, "zh-Hans"); err != nil {
+		t.Fatalf("a table translated cell by cell: %v", err)
+	}
+	// the frame pipes and the spacing are the writer's: the grid is what counts
+	if err := Check(fund, strings.NewReplacer("| 基金 | 回报 |", "基金|回报", "| :--- | ---: |", "|:-|-:|").Replace(good), "zh-Hans"); err != nil {
+		t.Fatalf("the same grid written tighter: %v", err)
+	}
+	for why, out := range map[string]string{
+		// Codex's: two columns folded into one, header and rows alike
+		"table 1 has 1 columns, the post's 2": strings.NewReplacer("| 基金 | 回报 |", "| 基金回报 |", "| :--- | ---: |", "| :--- |",
+			"| `TSLY` | 12.5% |", "| `TSLY` 12.5% |", "| `NVDY` | 48.1% |", "| `NVDY` 48.1% |", "|  | 3.0% |", "| 3.0% |").Replace(good),
+		// Codex's: a delimiter row that is one no more, so the pages would draw no table
+		"0 tables, the post has 1": strings.Replace(good, "| :--- | ---: |", "| :--- | --- : |", 1),
+		// the header survived and one row under it was folded
+		"table 1, row 2, column 2": strings.Replace(good, "| `NVDY` | 48.1% |", "| `NVDY` 48.1% |", 1),
+		// the figures' column no longer set to the right
+		`table 1 is aligned "l,", the post's "l,r"`: strings.Replace(good, "| :--- | ---: |", "| :--- | --- |", 1),
+		// a row dropped; the line count alone would let one line go
+		"table 1 has 2 rows, the post's 3": strings.Replace(good, "| `NVDY` | 48.1% |\n", "", 1) + "\n`NVDY`",
+		// Chinese typography reached for the full-width pipe
+		"0 tables, the post has 1 ": strings.ReplaceAll(good, "|", "｜"),
+		// a table the post never had
+		"2 tables, the post has 1": good + "\n\n| 甲 | 乙 |\n| --- | --- |\n| 1 | 2 |",
+	} {
+		err := Check(fund, out, "zh-Hans")
+		if err == nil || !strings.Contains(err.Error(), strings.TrimSpace(why)) {
+			t.Errorf("Check = %v, want %q for\n%s", err, strings.TrimSpace(why), out)
+		}
+	}
+
+	// found as the renderer finds them: pipes in prose, in a list and under a heading are no table
+	const prose = "## a | b\n- one | two\n- --- | ---\n\nuse `a | b` or a|b in a shell"
+	if got := tables(prose); len(got) != 0 {
+		t.Fatalf("tables(%q) = %d, want none", prose, len(got))
+	}
+	two := tables("| a | b |\n|---|---|\n| 1 | 2 |\n\ntext\n\n| c |\n|:-:|\n")
+	if len(two) != 2 || len(two[0].Head) != 2 || len(two[0].Rows) != 1 || len(two[1].Rows) != 0 || two[1].Align[0] != "c" {
+		t.Fatalf("tables = %+v", two)
+	}
+}

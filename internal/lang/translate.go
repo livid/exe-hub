@@ -84,8 +84,9 @@ func (d *Model) Translate(ctx context.Context, text, from, to string) (string, e
 // Check says why out is no translation of text to keep, or nil. It
 // cannot judge the words, only the shape, which is what a model that
 // wandered off loses: the same URLs and the same code spans, as the
-// pages' own matchers find them, about as many lines, words in
-// proportion to the post's, and in the language asked for.
+// pages' own matchers find them, the same tables as the pages' own
+// parser draws them, about as many lines, words in proportion to the
+// post's, and in the language asked for.
 func Check(text, out, to string) error {
 	if out == "" {
 		return fmt.Errorf("empty")
@@ -95,6 +96,9 @@ func Check(text, out, to string) error {
 	}
 	if a, b := found(card.Code.FindAllString(text, -1)), found(card.Code.FindAllString(out, -1)); a != b {
 		return fmt.Errorf("the code spans differ: %.120q, not %.120q", b, a)
+	}
+	if err := sameTables(tables(text), tables(out)); err != nil {
+		return err
 	}
 	la, lb := strings.Count(strings.TrimSpace(text), "\n"), strings.Count(out, "\n")
 	if d := la - lb; d > 2+la/10 || -d > 2+la/10 {
@@ -119,6 +123,63 @@ func Check(text, out, to string) error {
 		return fmt.Errorf("no Chinese in it")
 	case to == "en" && han*2 > letters:
 		return fmt.Errorf("mostly Chinese still")
+	}
+	return nil
+}
+
+// tables is the run of tables the pages would draw from text, found the
+// way the renderer finds them: line by line, a table before a list, each
+// taking its lines with it (api.renderText; a heading line is never a
+// table's first, which card.TableAt knows).
+func tables(text string) []*card.Table {
+	if !strings.Contains(text, "|") {
+		return nil
+	}
+	var out []*card.Table
+	lines := strings.Split(text, "\n")
+	for i := 0; i < len(lines); i++ {
+		if t, n := card.TableAt(lines, i); t != nil {
+			out = append(out, t)
+			i += n - 1
+		} else if l, n := card.ListAt(lines, i); l != nil {
+			i += n - 1
+		}
+	}
+	return out
+}
+
+// sameTables says how the translation's tables differ in shape from the
+// post's, or nil: as many tables, and each as wide, aligned the same,
+// with as many rows and the same cells empty. The words in a cell are
+// the translator's; the grid is the post's. A row is filled or cut to
+// the header's width as it is read, so a header folded into one cell
+// shows as a narrower table, a row folded under a header that survived
+// as a cell gone empty, and a delimiter row that no longer parses as a
+// table that is not there (Codex's catch, 2026-09-19: a Fund / Return
+// table came back as one column and nothing else Check looked at had
+// changed).
+func sameTables(post, tr []*card.Table) error {
+	if len(post) != len(tr) {
+		return fmt.Errorf("%d tables, the post has %d", len(tr), len(post))
+	}
+	for k, a := range post {
+		b := tr[k]
+		switch {
+		case len(a.Head) != len(b.Head):
+			return fmt.Errorf("table %d has %d columns, the post's %d", k+1, len(b.Head), len(a.Head))
+		case strings.Join(a.Align, ",") != strings.Join(b.Align, ","):
+			return fmt.Errorf("table %d is aligned %q, the post's %q", k+1, strings.Join(b.Align, ","), strings.Join(a.Align, ","))
+		case len(a.Rows) != len(b.Rows):
+			return fmt.Errorf("table %d has %d rows, the post's %d", k+1, len(b.Rows), len(a.Rows))
+		}
+		for r, row := range append([][]string{a.Head}, a.Rows...) {
+			other := append([][]string{b.Head}, b.Rows...)[r]
+			for c := range row {
+				if (row[c] == "") != (other[c] == "") {
+					return fmt.Errorf("table %d, row %d, column %d: a cell is empty in one and not the other", k+1, r, c+1)
+				}
+			}
+		}
 	}
 	return nil
 }

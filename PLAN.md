@@ -1551,8 +1551,17 @@ Asked by Livid 2026-09-19.
   code, a link's address), and leaves alone URLs, code, paths, ids,
   handles and proper names. The answer is checked before it is kept:
   not empty, the same URLs (`card.URL`, the pages' own matcher) and the
-  same code spans (`card.Code`) as the post, as many lines give or take
-  a few, and not wildly longer or shorter. One that fails is a failed
+  same code spans (`card.Code`) as the post, the same tables, as many
+  lines give or take a few, and not wildly longer or shorter. Tables are
+  found the way the renderer finds them (`card.TableAt`, a table before
+  a list) and compared as grids: as many tables, each as wide, aligned
+  the same, with as many rows and the same cells empty; the words in a
+  cell are the translator's. `TableAt` fills or cuts a row to the
+  header's width, so a folded header shows as a narrower table, a folded
+  row under a header that survived as a cell gone empty, and a delimiter
+  row that no longer parses, or full-width pipes, as a table that is not
+  there. (Codex's catch, 2026-09-19: a two-column table folded into one
+  passed everything else, its tickers, numbers and lines all in place.) One that fails is a failed
   try, three to a post and language, an hour apart, like `langs`. The
   post is data under a system prompt, and the translation is drawn by
   the same renderer as any post's text, so the worst a post can do by
@@ -1604,7 +1613,7 @@ Asked by Livid 2026-09-19.
 - Not built: translations in the JSON API and the Hub app, search inside
   translations, a Traditional Chinese target, and an aggregator taking
   the origin hub's translation instead of paying for its own.
-- Tests: `internal/lang` (the prompt's target, the checks, a pass against
-  a fake Ollama), `internal/store` (rows, the owed list, delete and
+- Tests: `internal/lang` (the prompt's target, the checks, tables folded,
+  broken and misaligned, a pass against a fake Ollama), `internal/store` (rows, the owed list, delete and
   `Rebuild`), `internal/api` (who reads what, the page with and without
   a translation, `?lang=orig`, the carried links, search).
