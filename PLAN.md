@@ -610,8 +610,10 @@ hub that carries the post.
   function in web.html and the app: change both): Return on an item
   opens the next one, the same bullet or the number after it with its
   own `.` or `)` and the marker's spaces, the words right of the caret
-  going down with it; Return on an item with no words yet ends the list
-  and leaves the line empty. It listens to `beforeinput`
+  going down with it; Return on an item with no words yet ends the list:
+  the marker goes and the Return still breaks the line, so the emptied
+  line stays as the blank line under the list and the caret stands on a
+  fresh one below it. It listens to `beforeinput`
   (`insertLineBreak`), which every keyboard sends, a phone's too, steps
   aside for Shift-Return, a caret inside the marker, a number past 999
   and a Return that ends an input method's composition, and types its
