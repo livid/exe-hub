@@ -59,7 +59,7 @@ func TestTranslate(t *testing.T) {
 		return 200, "Here is the translation you asked for, with some notes of mine about it that nobody wanted."
 	}}
 	m := newFake(t, f)
-	out, err := m.Translate(context.Background(), post, "en", "zh-Hans")
+	out, err := m.Translate(context.Background(), post, "en", "zh-Hans", "")
 	if err != nil || out != posted {
 		t.Fatalf("Translate = %q, %v", out, err)
 	}
@@ -72,16 +72,23 @@ func TestTranslate(t *testing.T) {
 	if strings.Contains(sys, "{") || f.asked[0].Think != "max" || f.asked[0].Messages[1].Content != post {
 		t.Fatalf("asked %+v", f.asked[0])
 	}
-	if _, err := m.Translate(context.Background(), "短", "zh-Hans", "en"); err != nil {
+	if _, err := m.Translate(context.Background(), "短", "zh-Hans", "en", " \"短\" is the word short, not a name "); err != nil {
 		t.Fatalf("a short post: %v", err) // too short to hold to a proportion
 	}
 	if sys := f.asked[1].Messages[0].Content; !strings.Contains(sys, "into English.") || strings.Contains(sys, "full-width") {
 		t.Errorf("the English prompt: %q", sys)
 	}
-	if _, err := m.Translate(context.Background(), post+" again", "en", "zh-Hans"); !errors.Is(err, ErrAnswer) {
+	// the editor's note rides at the end of the prompt, trimmed; a post without one gets no such line
+	if sys := f.asked[1].Messages[0].Content; !strings.HasSuffix(sys, `into the translation: "短" is the word short, not a name`) {
+		t.Errorf("the note: %q", sys[len(sys)-120:])
+	}
+	if strings.Contains(f.asked[0].Messages[0].Content, "editor") {
+		t.Error("a post without a note was given the note's line")
+	}
+	if _, err := m.Translate(context.Background(), post+" again", "en", "zh-Hans", ""); !errors.Is(err, ErrAnswer) {
 		t.Fatalf("a chatty answer: err = %v, want ErrAnswer", err)
 	}
-	if _, err := m.Translate(context.Background(), "refused", "en", "zh-Hans"); err == nil || errors.Is(err, ErrAnswer) {
+	if _, err := m.Translate(context.Background(), "refused", "en", "zh-Hans", ""); err == nil || errors.Is(err, ErrAnswer) {
 		t.Fatalf("HTTP 500: err = %v, want the line's error", err)
 	}
 }
@@ -105,8 +112,10 @@ func TestNames(t *testing.T) {
 
 // fakeOwed is the translator's slice of the store.
 type fakeOwed struct {
-	owed []store.OwedTranslation
-	rows map[string]fakeRow
+	owed    []store.OwedTranslation
+	rows    map[string]fakeRow
+	kept    []store.KeptTranslation
+	rewrote []string
 }
 
 func (o *fakeOwed) PostsToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedTranslation, error) {
@@ -117,6 +126,15 @@ func (o *fakeOwed) PostsToTranslate(targets []string, maxTries int, before int64
 		}
 	}
 	return out, nil
+}
+
+func (o *fakeOwed) KeptTranslations(lang string) ([]store.KeptTranslation, error) {
+	return o.kept, nil
+}
+
+func (o *fakeOwed) RewriteTranslation(post, lang, text string) error {
+	o.rewrote = append(o.rewrote, post+": "+text)
+	return nil
 }
 
 func (o *fakeOwed) SetTranslation(post, lang, text, model string, ok bool) error {
@@ -217,5 +235,37 @@ func TestCheckTables(t *testing.T) {
 	two := tables("| a | b |\n|---|---|\n| 1 | 2 |\n\ntext\n\n| c |\n|:-:|\n")
 	if len(two) != 2 || len(two[0].Head) != 2 || len(two[0].Rows) != 1 || len(two[1].Rows) != 0 || two[1].Align[0] != "c" {
 		t.Fatalf("tables = %+v", two)
+	}
+}
+
+// TestTranslateSetsPunctuation: a Chinese answer goes through FullWidth
+// before it is checked and kept; an English one is left as it came.
+func TestTranslateSetsPunctuation(t *testing.T) {
+	f := &fakeOllama{levels: true, answer: func(p string) (int, string) {
+		if p == "Say `zh`, then go; done." {
+			return 200, "先说 `zh`,再走;完成。"
+		}
+		return 200, "Say `zh`,then go."
+	}}
+	m := newFake(t, f)
+	if out, err := m.Translate(context.Background(), "Say `zh`, then go; done.", "en", "zh-Hans", ""); err != nil || out != "先说 `zh`，再走；完成。" {
+		t.Fatalf("to Chinese = %q, %v", out, err)
+	}
+	if out, err := m.Translate(context.Background(), "先说 `zh`，再走。", "zh-Hans", "en", ""); err != nil || out != "Say `zh`,then go." {
+		t.Fatalf("to English = %q, %v", out, err)
+	}
+}
+
+// TestTidy: at start the rule runs over what was kept before it, and
+// rewrites only a translation it changes that still passes Check.
+func TestTidy(t *testing.T) {
+	st := &fakeOwed{rows: map[string]fakeRow{}, kept: []store.KeptTranslation{
+		{Post: "a", Source: "Say `zh`, then go.", Text: "先说 `zh`,再走。"},
+		{Post: "b", Source: "Already fine, thanks.", Text: "已经没问题了，谢谢。"},
+		{Post: "c", Source: "A link https://a.example/x, then words.", Text: "一个链接,然后是文字。"}, // lost its link: not ours to bless
+	}}
+	NewTranslator(st, nil, nil).tidy()
+	if len(st.rewrote) != 1 || st.rewrote[0] != "a: 先说 `zh`，再走。" {
+		t.Fatalf("rewrote %q", st.rewrote)
 	}
 }

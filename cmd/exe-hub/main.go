@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -39,6 +40,9 @@ func main() {
 	cfgPath := flag.String("config", "config.json", "path to config.json")
 	stateDir := flag.String("state", "", "state directory (default ~/.exe-hub)")
 	sig := flag.String("s", "", `send a signal to the running daemon: "reload" re-reads config (nginx-style; editing the file alone changes nothing)`)
+	redo := flag.String("retranslate", "", "forget one post's kept translations so the running daemon makes them again: the post's id, or the first 12 characters or more of it")
+	redoTo := flag.String("to", "", "with -retranslate: only the translation into this language (zh-Hans, en)")
+	redoNote := flag.String("note", "", "with -retranslate: an editor's note on the post for its translator, kept with the post — what a terse or ambiguous line means")
 	flag.Parse()
 
 	if *stateDir == "" {
@@ -53,20 +57,27 @@ func main() {
 	}
 	pidPath := filepath.Join(*stateDir, "exe-hub.pid")
 
+	if *redo != "" {
+		if err := retranslate(filepath.Join(*stateDir, "hub.db"), *redo, *redoTo, *redoNote); err != nil {
+			log.Fatal(err)
+		}
+		// the reload signal also wakes the language workers; with no
+		// daemon up the translations are simply owed at its next start
+		if pid, err := signalDaemon(pidPath); err != nil {
+			fmt.Printf("no running daemon (%v): owed at its next start\n", err)
+		} else {
+			fmt.Printf("woke the daemon (SIGHUP to %d)\n", pid)
+		}
+		return
+	}
+
 	if *sig != "" {
 		if *sig != "reload" {
 			log.Fatalf("-s %q: only \"reload\" is supported", *sig)
 		}
-		b, err := os.ReadFile(pidPath)
+		pid, err := signalDaemon(pidPath)
 		if err != nil {
 			log.Fatalf("no running daemon? %v", err)
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-		if err != nil {
-			log.Fatalf("bad pidfile: %v", err)
-		}
-		if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
-			log.Fatalf("signal pid %d: %v", pid, err)
 		}
 		fmt.Printf("sent SIGHUP to %d\n", pid)
 		return
@@ -75,6 +86,75 @@ func main() {
 	if err := serve(*cfgPath, *stateDir, pidPath); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// signalDaemon sends the running daemon SIGHUP: re-read the config, and
+// look again at what the language workers owe.
+func signalDaemon(pidPath string) (int, error) {
+	b, err := os.ReadFile(pidPath)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		return 0, fmt.Errorf("bad pidfile: %w", err)
+	}
+	return pid, syscall.Kill(pid, syscall.SIGHUP)
+}
+
+// retranslate forgets what one post was put into — every language, or
+// the one named — so the translator owes it again (PLAN.md,
+// Translations: one translation again). The shape check cannot judge
+// words; this is for the translation a reader found wrong. A model that
+// misread a terse line is likely to misread it again, so the reader can
+// say what it means: the note is kept with the post and given to the
+// translator with it from then on. It opens the database beside the
+// running daemon, which SQLite allows, and until the new translation
+// lands the pages show the post as written.
+func retranslate(dbPath, post, to, note string) error {
+	if _, err := os.Stat(dbPath); err != nil {
+		return err
+	}
+	if to != "" && !slices.Contains(lang.Targets, to) {
+		return fmt.Errorf("-to %q: the hub translates into %s", to, strings.Join(lang.Targets, " and "))
+	}
+	st, err := store.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	id := strings.ToLower(strings.TrimSpace(post))
+	if len(id) != 64 {
+		if id, err = st.ResolvePrefix(id); err != nil {
+			return fmt.Errorf("%s: %w", post, err)
+		}
+	} else if _, err := st.Post(id); err != nil {
+		return fmt.Errorf("%s: %w", post, err)
+	}
+	if note = strings.TrimSpace(note); note != "" {
+		if len(note) > 1000 {
+			return errors.New("-note: a line or two, 1000 bytes at most")
+		}
+		if err := st.SetTranslationNote(id, note); err != nil {
+			return err
+		}
+	}
+	n, err := st.DropTranslations(id, to)
+	if err != nil {
+		return err
+	}
+	what, s := "every language", "s"
+	if to != "" {
+		what = to
+	}
+	if n == 1 {
+		s = ""
+	}
+	fmt.Printf("%s: forgot %d translation%s (%s)\n", id, n, s, what)
+	if note != "" {
+		fmt.Println("the translator will be given the note with this post")
+	}
+	return nil
 }
 
 func serve(cfgPath, stateDir, pidPath string) error {
@@ -124,6 +204,7 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Each table is its worker's queue, so a first pass is the backfill,
 	// and an Ollama that is away only makes the posts wait.
 	var langs *lang.Worker
+	wakeLangs := func() {} // what the reload signal also does: see below
 	if o := cfg.Ollama; o != nil {
 		model := lang.NewModel(o.BaseURL, o.APIKey, o.Model, o.Effort)
 		does := "names each post's language"
@@ -136,9 +217,11 @@ func serve(cfgPath, stateDir, pidPath string) error {
 			log.Printf("lang: %s at %s %s (think=%s)", o.Model, o.BaseURL, does, o.Effort)
 		}
 		langs = lang.NewWorker(st, model)
+		wakeLangs = langs.Wake
 		if o.Translates() {
 			tr := lang.NewTranslator(st, model, bus)
 			langs.Named = tr.Wake
+			wakeLangs = func() { langs.Wake(); tr.Wake() }
 			go tr.Run()
 		}
 		go langs.Run()
@@ -237,6 +320,9 @@ func serve(cfgPath, stateDir, pidPath string) error {
 			holder.Set(next)
 			log.Printf("reload: config applied (gate=%s, admins=%d, allow_replication=%v, cooldown=%ds)",
 				next.Gate.Mode, len(next.Admins), next.Replicable(), next.CooldownSec())
+			// what the language workers owe may have changed beside us
+			// (exe-hub -retranslate), so they look again
+			wakeLangs()
 		}
 	}()
 

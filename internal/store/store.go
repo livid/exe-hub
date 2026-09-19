@@ -207,6 +207,16 @@ CREATE TABLE IF NOT EXISTS translations (
   tries  INTEGER NOT NULL DEFAULT 0,
   ts     INTEGER NOT NULL,
   PRIMARY KEY (post, lang)
+);
+
+-- An editor's note on a post, for its translator (exe-hub -retranslate
+-- -note): what a terse or ambiguous line means. The hub's operator
+-- writes it, not the model and not the author, so it is neither derived
+-- nor signed; it stays with the post across Rebuild and goes with it.
+CREATE TABLE IF NOT EXISTS translation_notes (
+  post TEXT PRIMARY KEY,
+  note TEXT NOT NULL,
+  ts   INTEGER NOT NULL
 );`)
 	if err != nil {
 		return err
@@ -568,6 +578,9 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM translations WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
+		if _, err := tx.Exec(`DELETE FROM translation_notes WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
 		// the thread whose newest reply this was: after the delete its
 		// pointer moves back to the newest remaining reply in the tree
 		// (or clears, the root's own arrival becoming the activity
@@ -747,6 +760,9 @@ func (s *Store) Rebuild() error {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM translations WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM translation_notes WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -1248,8 +1264,9 @@ func (s *Store) PostsWithoutLang(maxTries int, before int64, limit int) ([]CardP
 // ---- translations (see PLAN.md, Translations) ----
 
 // OwedTranslation is one piece of the translator's work: a post, the
-// language it is written in, and one it is still to be put into.
-type OwedTranslation struct{ ID, Author, Text, From, To string }
+// language it is written in, one it is still to be put into, and the
+// editor's note on the post, if it has one.
+type OwedTranslation struct{ ID, Author, Text, From, To, Note string }
 
 // PostsToTranslate lists what the translator still owes, newest post
 // first: every post with words and a language, for each of targets it
@@ -1265,10 +1282,11 @@ func (s *Store) PostsToTranslate(targets []string, maxTries int, before int64, l
 	}
 	args = append(args, maxTries, before, limit)
 	rows, err := s.db.Query(`WITH want(lang) AS (VALUES `+strings.TrimSuffix(strings.Repeat("(?),", len(targets)), ",")+`)
-		SELECT p.id, p.author, p.text, l.lang, w.lang FROM posts p
+		SELECT p.id, p.author, p.text, l.lang, w.lang, IFNULL(n.note, '') FROM posts p
 		JOIN langs l ON l.post = p.id AND l.status = 'ok' AND l.lang NOT IN ('', 'zxx', 'und')
 		JOIN want w ON w.lang <> l.lang
 		LEFT JOIN translations t ON t.post = p.id AND t.lang = w.lang
+		LEFT JOIN translation_notes n ON n.post = p.id
 		WHERE t.post IS NULL OR (t.status = 'failed' AND t.tries < ? AND t.ts < ?)
 		ORDER BY p.received DESC, p.id DESC, w.lang LIMIT ?`, args...)
 	if err != nil {
@@ -1278,7 +1296,7 @@ func (s *Store) PostsToTranslate(targets []string, maxTries int, before int64, l
 	var out []OwedTranslation
 	for rows.Next() {
 		var o OwedTranslation
-		if err := rows.Scan(&o.ID, &o.Author, &o.Text, &o.From, &o.To); err != nil {
+		if err := rows.Scan(&o.ID, &o.Author, &o.Text, &o.From, &o.To, &o.Note); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -1300,6 +1318,58 @@ func (s *Store) SetTranslation(post, lang, text, model string, ok bool) error {
 		status=excluded.status, tries=translations.tries+1, ts=excluded.ts`,
 		post, lang, text, model, status, time.Now().UnixMilli(), post)
 	return err
+}
+
+// KeptTranslation is a translation with the post it is of, for a rule
+// run over what was kept before it (lang.FullWidth).
+type KeptTranslation struct{ Post, Source, Text string }
+
+// KeptTranslations is every kept translation into lang.
+func (s *Store) KeptTranslations(lang string) ([]KeptTranslation, error) {
+	rows, err := s.db.Query(`SELECT t.post, p.text, t.text FROM translations t JOIN posts p ON p.id = t.post
+		WHERE t.lang = ? AND t.status = 'ok'`, lang)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KeptTranslation
+	for rows.Next() {
+		var k KeptTranslation
+		if err := rows.Scan(&k.Post, &k.Source, &k.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+// RewriteTranslation replaces a kept translation's words and nothing
+// else about it: who made it, when, and its tries stand.
+func (s *Store) RewriteTranslation(post, lang, text string) error {
+	_, err := s.db.Exec(`UPDATE translations SET text = ? WHERE post = ? AND lang = ? AND status = 'ok'`, text, post, lang)
+	return err
+}
+
+// SetTranslationNote keeps the editor's note on a post, replacing the
+// one before; the translator is given it with the post from then on. A
+// post that is not there gets none.
+func (s *Store) SetTranslationNote(post, note string) error {
+	_, err := s.db.Exec(`INSERT INTO translation_notes (post, note, ts)
+		SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+		ON CONFLICT(post) DO UPDATE SET note=excluded.note, ts=excluded.ts`,
+		post, note, time.Now().UnixMilli(), post)
+	return err
+}
+
+// DropTranslations forgets what a post was put into, every language or
+// the one named, tries and all, so the translator owes it again
+// (exe-hub -retranslate). It says how many rows went.
+func (s *Store) DropTranslations(post, lang string) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM translations WHERE post = ? AND (? = '' OR lang = ?)`, post, lang, lang)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // Translation is a post as it reads in another language, and From the

@@ -124,3 +124,82 @@ func joined(s []string) string {
 	}
 	return out
 }
+
+// TestTranslationRewriteAndDrop: a rule run over kept translations
+// reads them with their posts and rewrites the words alone; dropping a
+// post's translations, one language or all, makes them owed again with
+// their tries forgotten.
+func TestTranslationRewriteAndDrop(t *testing.T) {
+	s := openTest(t)
+	a := newAuthor(t)
+	ja := ingest(t, s, a, "post.create", map[string]any{"text": "こんにちは"})
+	s.SetLang(ja, "ja", "m", true)
+	s.SetTranslation(ja, "zh-Hans", "你好,世界", "m", true)
+	s.SetTranslation(ja, "en", "", "m", false)
+	s.SetTranslation(ja, "en", "", "m", false)
+	s.SetTranslation(ja, "en", "", "m", false) // out of tries
+
+	kept, err := s.KeptTranslations("zh-Hans")
+	if err != nil || len(kept) != 1 || kept[0] != (KeptTranslation{ja, "こんにちは", "你好,世界"}) {
+		t.Fatalf("KeptTranslations = %+v, %v", kept, err)
+	}
+	if kept, _ = s.KeptTranslations("en"); len(kept) != 0 {
+		t.Fatalf("a failed try listed as kept: %+v", kept)
+	}
+	if err := s.RewriteTranslation(ja, "zh-Hans", "你好，世界"); err != nil {
+		t.Fatal(err)
+	}
+	s.RewriteTranslation(ja, "en", "never kept") // no ok row: nothing to rewrite
+	var text, model string
+	var tries int
+	if err := s.db.QueryRow(`SELECT text, model, tries FROM translations WHERE post=? AND lang='zh-Hans'`, ja).Scan(&text, &model, &tries); err != nil ||
+		text != "你好，世界" || model != "m" || tries != 1 {
+		t.Fatalf("after rewrite: %q %q %d, %v", text, model, tries, err)
+	}
+	if trs, _ := s.Translations([]string{ja}, "en"); len(trs) != 0 {
+		t.Fatal("a rewrite made a translation of a failed try")
+	}
+
+	targets, soon := []string{"zh-Hans", "en"}, time.Now().Add(time.Hour).UnixMilli()
+	if owed, _ := s.PostsToTranslate(targets, 3, soon, 10); len(owed) != 0 {
+		t.Fatalf("owed before any drop: %+v", owed)
+	}
+	if n, err := s.DropTranslations(ja, "en"); err != nil || n != 1 {
+		t.Fatalf("drop en = %d, %v", n, err)
+	}
+	if owed, _ := s.PostsToTranslate(targets, 3, 0, 10); len(owed) != 1 || owed[0].To != "en" {
+		t.Fatalf("owed after dropping en = %+v, want it owed at once, tries forgotten", owed)
+	}
+	if n, err := s.DropTranslations(ja, ""); err != nil || n != 1 {
+		t.Fatalf("drop all = %d, %v", n, err)
+	}
+	if owed, _ := s.PostsToTranslate(targets, 3, 0, 10); len(owed) != 2 {
+		t.Fatalf("owed after dropping all = %+v", owed)
+	}
+	if n, _ := s.DropTranslations("nothing", ""); n != 0 {
+		t.Fatal("dropped rows of a post that has none")
+	}
+
+	// an editor's note rides with what is owed, the latest one standing,
+	// survives Rebuild, and goes with its post
+	s.SetTranslationNote(ja, "first")
+	if err := s.SetTranslationNote(ja, "it is a greeting"); err != nil {
+		t.Fatal(err)
+	}
+	s.SetTranslationNote("gone", "no such post")
+	owed, _ := s.PostsToTranslate(targets, 3, 0, 10)
+	if len(owed) != 2 || owed[0].Note != "it is a greeting" || owed[1].Note != "it is a greeting" {
+		t.Fatalf("owed with a note = %+v", owed)
+	}
+	notes := func() (n int) {
+		s.db.QueryRow(`SELECT COUNT(*) FROM translation_notes`).Scan(&n)
+		return n
+	}
+	if err := s.Rebuild(); err != nil || notes() != 1 {
+		t.Fatalf("after Rebuild: %d notes, %v", notes(), err)
+	}
+	ingest(t, s, a, "post.delete", map[string]any{"post": ja})
+	if notes() != 0 {
+		t.Fatal("a deleted post's note stayed")
+	}
+}

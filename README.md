@@ -17,6 +17,7 @@ go build -o exe-hub ./cmd/exe-hub
 cp config.example.json config.json      # edit: listen, ipfs_api, gate, admins
 ./exe-hub -config config.json           # state in ~/.exe-hub (-state to move it)
 ./exe-hub -s reload                     # re-read config.json (SIGHUP; editing alone changes nothing)
+./exe-hub -retranslate 9c2cd7cdf0b6     # make one post's translations again (its id, or the start of it)
 ```
 
 Pictures need a [kubo](https://github.com/ipfs/kubo) node whose RPC the
@@ -69,7 +70,13 @@ if it never appears, so the manager tries again.
   in the post as written; `?lang=orig` shows every post as written. A
   translation at `max` thinks for a minute or more, so a hub's history
   takes hours, newest posts first. `"translate": false` in the block
-  keeps the languages and turns the translating off.
+  keeps the languages and turns the translating off. A Chinese
+  translation's punctuation is set full-width by rule where the model
+  leaves it ASCII. The hub checks a translation's shape, not its words:
+  when a reader finds one wrong, `./exe-hub -retranslate <post id, or
+  its first 12 characters> [-to zh-Hans|en] [-note "what the line
+  means"]` forgets it and the running daemon makes it again, the note
+  given to the translator with the post from then on.
 
 ## Who may post
 

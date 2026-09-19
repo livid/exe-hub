@@ -61,20 +61,34 @@ var translateExtra = map[string]string{
 	"zh-Hans": ` In Chinese, put a space between Chinese characters and Latin letters or digits ("用 Go 写的 770 个帖子"), and use full-width Chinese punctuation.`,
 }
 
-func translateSystem(from, to string) string {
-	return strings.NewReplacer("{TARGET}", English(to), "{SOURCE}", English(from), "{EXTRA}", translateExtra[to]).Replace(translatePrompt)
+// An editor's note rides under the rest: the hub's operator wrote it
+// (exe-hub -retranslate -note), so unlike the post it is to be followed.
+const translateNote = `
+
+The hub's editor left a note on this post, to help you read it right. Follow it, and do not put the note itself into the translation: `
+
+func translateSystem(from, to, note string) string {
+	sys := strings.NewReplacer("{TARGET}", English(to), "{SOURCE}", English(from), "{EXTRA}", translateExtra[to]).Replace(translatePrompt)
+	if note = strings.TrimSpace(note); note != "" {
+		sys += translateNote + note
+	}
+	return sys
 }
 
-// Translate puts text, written in from, into to. An answer that fails
-// Check is ErrAnswer, a spent try; any other error is the line.
-func (d *Model) Translate(ctx context.Context, text, from, to string) (string, error) {
+// Translate puts text, written in from, into to, with the editor's note
+// on the post when it has one. An answer that fails Check is ErrAnswer,
+// a spent try; any other error is the line.
+func (d *Model) Translate(ctx context.Context, text, from, to, note string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	answer, err := d.ask(ctx, translateSystem(from, to), text)
+	answer, err := d.ask(ctx, translateSystem(from, to, note), text)
 	if err != nil {
 		return "", err
 	}
 	out := strings.TrimSpace(answer)
+	if strings.HasPrefix(to, "zh") {
+		out = FullWidth(out) // the model's one habit, set right by rule
+	}
 	if err := Check(text, out, to); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrAnswer, err)
 	}

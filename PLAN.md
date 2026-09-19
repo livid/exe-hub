@@ -1642,6 +1642,46 @@ Asked by Livid 2026-09-19.
   explicit `?lang=` is carried by the page's own links (posts, profiles,
   pagers, the find strip), so a look at the other language lasts past
   one click; titles, descriptions and preview pictures stay as written.
+- **Chinese punctuation, set by rule** (`lang.FullWidth`, 2026-09-19).
+  A manual read of the longest translations found the model's one
+  habit: straight after a code span, a link or a Latin word it stays in
+  ASCII for one more character, "`zh`,66 次", "true;在中文前", where
+  Chinese wants "，" and "；". So a half-width `, ; : ! ?` is set
+  full-width when a Han character stands directly before it, directly
+  after it, or after the one space it needed, and a `,` or `;` jammed
+  between a code span or a link and whatever follows is too, since
+  English never sets one so; the space after a mark that turns goes
+  with it. Code spans and links, as `card.Code` and `card.URL` find
+  them, are never touched, and a mark with no Chinese against it is left
+  alone: `10,000`, `3:30`, a table's `:---`, a `:)`, `a,b` between Latin
+  words, which may be a literal, and the punctuation of an English
+  phrase quoted inside the post. It runs on every `zh` translation
+  before `Check`, and once at start over the ones already kept,
+  rewriting only what it changes that still passes `Check`; after the
+  first start it finds nothing. On a copy of the host hub that was 28
+  marks in 11 of 49 kept translations, each read and right.
+- **One translation again** (`exe-hub -retranslate <post> [-to <lang>]
+  [-note "…"]`). The shape check cannot judge words, and a read found
+  one clause put wrong: "six columns, five set right, five rows", five
+  columns aligned right, as "five alignments set correctly". The
+  command takes a post's id or the start of it (`ResolvePrefix`), drops
+  its kept translations, or the one `-to` names, tries and all, and
+  sends the daemon the reload signal, which now also wakes the language
+  workers, since what is owed may have changed; the translator makes
+  them again within a pass, the page showing the post as written
+  meanwhile. SIGHUP and not a signal of its own: a daemon from before
+  this would die of one it does not know.
+- **An editor's note.** Asked again with nothing new, the model misread
+  that clause again, two times in three: the English is terse, and only
+  someone who knows it is about table columns reads it right. So the
+  reader who found the mistake can say what the line means: `-note` is
+  kept in `translation_notes` (one per post, the latest standing) and
+  given to the translator with the post from then on, under the rest of
+  the prompt and marked as the editor's, to be followed and not
+  translated. With it the clause came back right the first time, and
+  nothing of the note in the text. The hub's operator writes it, not the
+  model and not the author, so it is neither derived nor signed; it
+  stays across `Rebuild` and goes with its post.
 - Not built: translations in the JSON API and the Hub app, search inside
   translations, a Traditional Chinese target, and an aggregator taking
   the origin hub's translation instead of paying for its own.

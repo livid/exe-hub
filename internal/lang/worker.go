@@ -180,6 +180,8 @@ func (w *Worker) name(text string) (tag, model string, err error) {
 type Owed interface {
 	PostsToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedTranslation, error)
 	SetTranslation(post, lang, text, model string, ok bool) error
+	KeptTranslations(lang string) ([]store.KeptTranslation, error)
+	RewriteTranslation(post, lang, text string) error
 }
 
 // Translator puts every post into the languages the hub keeps it in
@@ -203,7 +205,42 @@ func NewTranslator(st Owed, m *Model, bus *events.Broadcaster) *Translator {
 
 func (t *Translator) Wake() { wake(t.wake) }
 
-func (t *Translator) Run() { run(t.wake, 40*time.Second, t.pass) } // after the languages' first pass has begun
+func (t *Translator) Run() {
+	t.tidy()
+	run(t.wake, 40*time.Second, t.pass) // after the languages' first pass has begun
+}
+
+// tidy runs the punctuation rule (FullWidth) over the Chinese
+// translations kept before it, once at start: a translation is
+// rewritten only when the rule changes it and it still passes Check, so
+// after the first start this finds nothing to do.
+func (t *Translator) tidy() {
+	n := 0
+	for _, to := range Targets {
+		if !strings.HasPrefix(to, "zh") {
+			continue
+		}
+		kept, err := t.St.KeptTranslations(to)
+		if err != nil {
+			log.Printf("translate: tidy: %v", err)
+			return
+		}
+		for _, k := range kept {
+			set := FullWidth(k.Text)
+			if set == k.Text || Check(k.Source, set, to) != nil {
+				continue
+			}
+			if err := t.St.RewriteTranslation(k.Post, to, set); err != nil {
+				log.Printf("translate: tidy %s: %v", k.Post, err)
+				return
+			}
+			n++
+		}
+	}
+	if n > 0 {
+		log.Printf("translate: punctuation set full-width in %d kept translations", n)
+	}
+}
 
 // logEvery is how many translations a long pass keeps between the lines
 // it logs: history's pass is hours, and says how far it is.
@@ -223,7 +260,7 @@ func (t *Translator) pass() (up bool) {
 		},
 		func(o store.OwedTranslation) string { return o.ID + " " + o.To },
 		func(o store.OwedTranslation) outcome {
-			out, err := t.M.Translate(context.Background(), o.Text, o.From, o.To)
+			out, err := t.M.Translate(context.Background(), o.Text, o.From, o.To, o.Note)
 			if err != nil {
 				log.Printf("translate %s to %s: %v", o.ID, o.To, err)
 				if !errors.Is(err, ErrAnswer) {
