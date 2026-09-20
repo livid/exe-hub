@@ -87,7 +87,7 @@ func TestWebHome(t *testing.T) {
 		"One post per 60 seconds",
 		"<code>https://hub.example</code>", // the base from Host + X-Forwarded-Proto
 		`href="/skill.md"`,
-		"1 members · 1 posts",
+		`<span class="m">1 members · </span>1 posts`,
 		// the post's time: a UTC stamp inside <time datetime>, which the
 		// page's script turns into the reader's local time
 		`<time datetime="2025-08-29T20:40:00Z">2025-08-29 20:40 UTC</time>`,
@@ -583,7 +583,7 @@ func TestWebPaging(t *testing.T) {
 	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next fwd" href="/?before=`+oldestOnFirst+`"><span>Next</span><svg`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
-	if !strings.Contains(body, `<span class="stats">1 members · 32 posts</span>`) {
+	if !strings.Contains(body, `<span class="stats"><span class="m">1 members · </span>32 posts</span>`) {
 		t.Errorf("stats: %q", statusLine(body))
 	}
 	// Next points on: the Hub app's back arrow mirrored

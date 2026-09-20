@@ -87,12 +87,36 @@ a.mention { text-decoration: none; }
    right — each button only when that page exists, the empty cell
    keeping the counts centred. Push buttons as the exe desktop draws
    them: 20px high, 58px minimum, 12px from the frame edge. */
-.pager { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 8px 12px;
+.pager { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+  column-gap: 8px; align-items: center; padding: 8px 12px;
   border-top: 1px solid #262626; background: #ddd; font-size: 11px; color: #333;
   box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }
 .pager .prev { grid-column: 1; justify-self: start; }
-.pager .stats { grid-column: 2; text-align: center; white-space: nowrap; }
+.pager .stats { grid-column: 2; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pager .next { grid-column: 3; justify-self: end; }
+/* a phone: the words will not fit beside the counts (an iPhone sets the
+   strip in Verdana, a wide face), so Prev and Next shrink to their
+   arrows, as the Hub app's buttons do on a phone — 8px either side of
+   the glyph, the word still there for a screen reader. Feed, alone on a
+   thread's strip, has the room and keeps its word. Narrower than any
+   current phone, the counts let the members go first; and whatever the
+   face or the numbers, the buttons keep their size (the outer columns
+   never go under their button) and the counts give way, ellipsized,
+   8px clear of either button — nothing on the strip can overlap. */
+@media (max-width: 480px) {
+  .pager .btn:not(:only-child) { min-width: 0; padding: 2px 8px; }
+  .pager .btn:not(:only-child) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+@media (max-width: 359px) { .pager .stats .m { display: none; } }
+/* under a finger a 20px button is a small mark: each of the strip's
+   buttons answers a touch over the whole height of the strip and out
+   to the frame's edge, 4px toward the counts. Nothing is drawn. */
+.pager .btn { position: relative; }
+@media (pointer: coarse) {
+  .pager .btn::after { content: ""; box-sizing: border-box; position: absolute; top: -9px; bottom: -9px; }
+  .pager .prev::after { left: -13px; right: -5px; }
+  .pager .next::after { left: -5px; right: -13px; }
+}
 /* the same strip heads a list that runs past one page, so the buttons
    are at hand at either end, and a thread page, where its one button
    leads back to the feed. Its rule is along its bottom, against the
@@ -1666,7 +1690,7 @@ document.addEventListener("click", e => {
 
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}{{.Members}} members · {{.Count}} posts{{if .StatsOn}} · <a href="/stats" title="Who reads this hub">{{.Online}} online</a>{{end}}{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}<span class="m">{{.Members}} members · </span>{{.Count}} posts{{if .StatsOn}} · <a href="/stats" title="Who reads this hub">{{.Online}} online</a>{{end}}{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}

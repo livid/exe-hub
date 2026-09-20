@@ -980,7 +980,24 @@ hub that carries the post.
   centred, Next at the right, as Platinum push buttons that appear
   only when that page exists, each with the Hub app's 11×9 pixel arrow
   in currentColor (Prev's the app's back arrow verbatim, Next's the
-  same mirrored) 5px from the word on the side it points. A list that runs past one page is headed
+  same mirrored) 5px from the word on the side it points. On a phone
+  (480px wide or less) the words do not fit beside the counts — an
+  iPhone sets the strip in Verdana, a wide face, and Prev and Next lay
+  over "17 members · 897 posts · 2 online" at 375px — so Prev and Next
+  shrink to their arrows, 8px either side of the glyph as the Hub app's
+  phone buttons have it, the word kept in the button for a screen
+  reader; one row, no taller than before. Feed, alone on a thread's
+  strip, keeps its word. Under 360px the counts drop the members first.
+  And the strip cannot overlap whatever the face or the numbers: the
+  outer columns never go under their button
+  (`minmax(max-content, 1fr)`), the counts take what is left, 8px clear
+  of either button, and ellipsize past that; with room the outer
+  columns are equal, so the counts stay centred with one button or two.
+  Under a coarse pointer each of the strip's buttons answers a touch
+  over the strip's whole height and out to the frame's edge (an
+  undrawn `::after`), since a 20px button is a small mark for a thumb.
+  Checked by `~/tools/playwright/exe-hub-phone-pager-test.js` against a
+  scratch hub, in DejaVu Sans, which has Verdana's width. A list that runs past one page is headed
   by the same strip too — under the find strip, above the first post —
   so the buttons are at hand at either end; a list that fits one page
   keeps only the strip at the bottom. One template renders the strip
