@@ -453,7 +453,11 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
    reply's own page, whose window answers it. */
 .foot.re { display: none; }
 .wallet .foot.re { display: flex; }
-.pad { padding: 12px 14px; }
+/* a word too long for the line breaks where it must rather than
+   pushing the page sideways; the gate's mint, 44 characters of code and
+   too long for any phone, carries a <wbr> at its middle and breaks
+   there */
+.pad { padding: 12px 14px; overflow-wrap: anywhere; }
 .pad p { margin: 0 0 8px; }
 .join ol { margin: 6px 0 0; padding-left: 20px; }
 .join li { margin-bottom: 6px; }
@@ -499,7 +503,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"><div class="pad">
     <p>这里是一个 <b>exe-hub</b>：一个小型的公开信息流。没有注册，也没有密码，一把 ed25519 密钥就是一个账号。任何人都可以阅读；发帖要满足下面的条件。</p>
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
-    <div class="gate">{{if .Join.Token}}<b>发帖条件：</b>你的密钥对应的 Solana 地址需要持有至少 {{range $i, $m := .Join.Mints}}{{if $i}}或 {{end}}<b>{{$m.Amount}}</b> 个{{if $m.Raw}}最小单位{{else}}代币{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="在 jup.ag 用 SOL 购买"><code>{{$m.Mint}}</code></a>）{{end}}。持仓由 RPC 查询，你不需要签署任何交易。{{else}}<b>发帖条件：</b>没有限制，任何密钥都可以发帖。{{end}}{{if .Join.Cooldown}}每 {{.Join.Cooldown}} 秒最多发一帖。{{end}}</div>
+    <div class="gate">{{if .Join.Token}}<b>发帖条件：</b>你的密钥对应的 Solana 地址需要持有至少 {{range $i, $m := .Join.Mints}}{{if $i}}或 {{end}}<b>{{$m.Amount}}</b> 个{{if $m.Raw}}最小单位{{else}}代币{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="在 jup.ag 用 SOL 购买"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>）{{end}}。持仓由 RPC 查询，你不需要签署任何交易。{{else}}<b>发帖条件：</b>没有限制，任何密钥都可以发帖。{{end}}{{if .Join.Cooldown}}每 {{.Join.Cooldown}} 秒最多发一帖。{{end}}</div>
     <ol>
       <li><b>用 Solana 钱包：</b>点信息流上方 Post 窗口里的 Sign in with Solana。每发一帖，钱包会请你签一次名——签的是一段消息，不是交易；发帖条件查的就是这个钱包的地址。</li>
       <li><b>从 exe 桌面：</b>打开 Hub 应用，点击状态栏里的地址，选择 Connect…，填入 <code>{{.Join.Base}}</code>。帖子会用你节点自己的密钥签名，不需要安装任何东西。</li>
@@ -514,7 +518,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"><div class="pad">
     <p>This is an <b>exe-hub</b>: a small public feed where an ed25519 key is the account — no registration, no passwords. Reading is open to everyone; posting needs a key that passes this hub's gate.</p>
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
-    <div class="gate">{{if .Join.Token}}<b>Gate:</b> the Solana address derived from your key must hold at least {{range $i, $m := .Join.Mints}}{{if $i}} or {{end}}<b>{{$m.Amount}} {{if $m.Raw}}raw base units{{else}}tokens{{end}}</b> of mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="Buy with SOL on jup.ag"><code>{{$m.Mint}}</code></a>{{end}}. Holding is checked by RPC; you never sign a transaction.{{else}}<b>Gate:</b> open — any key may post.{{end}}{{if .Join.Cooldown}} One post per {{.Join.Cooldown}} seconds.{{end}}</div>
+    <div class="gate">{{if .Join.Token}}<b>Gate:</b> the Solana address derived from your key must hold at least {{range $i, $m := .Join.Mints}}{{if $i}} or {{end}}<b>{{$m.Amount}} {{if $m.Raw}}raw base units{{else}}tokens{{end}}</b> of mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="Buy with SOL on jup.ag"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>{{end}}. Holding is checked by RPC; you never sign a transaction.{{else}}<b>Gate:</b> open — any key may post.{{end}}{{if .Join.Cooldown}} One post per {{.Join.Cooldown}} seconds.{{end}}</div>
     <ol>
       <li><b>From a Solana wallet:</b> choose Sign in with Solana in the Post window above the feed. Each post is one signature in your wallet, a message and never a transaction, and the gate checks that wallet's address.</li>
       <li><b>From an exe desktop:</b> open the Hub app, click the address in its status line, choose Connect… and enter <code>{{.Join.Base}}</code>. Posts are signed by your node's own key; there is nothing to install.</li>

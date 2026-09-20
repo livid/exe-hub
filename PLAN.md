@@ -997,7 +997,13 @@ hub that carries the post.
   over the strip's whole height and out to the frame's edge (an
   undrawn `::after`), since a 20px button is a small mark for a thumb.
   Checked by `~/tools/playwright/exe-hub-phone-pager-test.js` against a
-  scratch hub, in DejaVu Sans, which has Verdana's width. A list that runs past one page is headed
+  scratch hub, in DejaVu Sans, which has Verdana's width. No public page
+  scrolls sideways on a phone, 320px included: the join window's prose
+  breaks a word too long for its line (`overflow-wrap: anywhere`), and
+  the gate's mint — 44 characters of code, wider than any phone's line,
+  which stuck out of the yellow box at 360px and pushed the page
+  sideways at 320px — carries a `<wbr>` at its middle, so it breaks
+  into two halves and never one letter from its end. A list that runs past one page is headed
   by the same strip too — under the find strip, above the first post —
   so the buttons are at hand at either end; a list that fits one page
   keeps only the strip at the bottom. One template renders the strip

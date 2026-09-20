@@ -284,6 +284,13 @@ func (m webMint) Buy() string {
 	return "https://jup.ag/swap?sell=" + wSOL + "&buy=" + url.QueryEscape(m.Mint)
 }
 
+// Head and Tail are the mint's two halves, which the join block sets
+// either side of a <wbr>: 44 characters of code do not fit a phone's
+// line, and a mint that must break breaks in the middle, not one letter
+// from its end. Copied, it is the mint whole.
+func (m webMint) Head() string { return m.Mint[:len(m.Mint)/2] }
+func (m webMint) Tail() string { return m.Mint[len(m.Mint)/2:] }
+
 // webCompose is the strip that posts from a Solana wallet (see PLAN.md,
 // Posting from a wallet): a new post on the home page, a reply to the
 // post a thread page shows.
