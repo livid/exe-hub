@@ -32,18 +32,22 @@
 {{end}}{{if .Profile}}<meta property="profile:username" content="{{.Profile.Name}}">
 {{end}}{{if eq .Page "search"}}<meta name="robots" content="noindex">{{end}}
 <style>
+/* The Platinum chrome — the window with its striped bar, hard shadow and
+   close box, the sunken frame, the status strip and the push button —
+   is github.com/livid/exe-stats' chrome.css, the same file the exe site
+   serves and the stats desk is drawn in, so the three wear one chrome
+   and it is written once. It follows the exe desktop, which defines the
+   look. What this page adds to it is below. */
+{{chrome}}
+
 /* Mac OS 9 Platinum, the exe desktop's chrome reduced to what a page
    needs: a window with a striped title bar and a hard shadow, a sunken
    white frame, a statusbar strip. No assets; two small scripts at the
    end of the page. */
-body { margin: 0; padding: 24px 12px 48px; background: #ccc; color: #262626;
-  font: 12px/1.45 "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; }
 a { color: #333399; }
 /* a mention: a person's name as it is today, linked to their page; a
    name, so it is not underlined the way an address is */
 a.mention { text-decoration: none; }
-.window { max-width: 640px; margin: 0 auto 22px; background: #ccc; border: 1px solid #262626;
-  box-shadow: 2px 2px 0 #262626, inset 1px 1px 0 #fff, inset -1px -1px 0 #999; }
 /* the home page is a desk: the join window, then a column of the post
    window over the feed. Stacked, join first, on a narrow screen; side
    by side once there is room, the join window at the left staying put
@@ -63,23 +67,11 @@ a.mention { text-decoration: none; }
 @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
   .desk .join { display: none; }
 }
-.titlebar { display: flex; align-items: center; gap: 4px; padding: 2px 4px; }
-.tbox { position: relative; width: 9px; height: 9px; border: 1px solid #262626; background: #ddd; flex: none;
-  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #888; }
-.tbox a { display: block; width: 100%; height: 100%; }
-.stripe { flex: 1; height: 12px; min-width: 8px; background-color: #ddd;
-  background-image: linear-gradient(#fff, #fff 50%, #777 50%, #777); background-size: 100% 2px; }
-.title { font-weight: bold; line-height: 13px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title a { color: inherit; text-decoration: none; }
-.frame { margin: 0 4px 4px; border: 1px solid #262626; background: #fff;
-  box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
 /* the exe desktop's status line, inside the frame along its bottom: a
    15px platinum strip under a black rule, 11px text — the thread page's
    reply count. Text only; the way back to the feed is the push button
    on the strip heading the page. */
-.statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 15px; padding: 0 8px;
-  border-top: 1px solid #262626; background: #ddd; font-size: 11px; color: #333;
-  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; white-space: nowrap; overflow: hidden; }
 .statusbar a { font-weight: bold; text-decoration: none; }
 .statusbar a:hover { text-decoration: underline; }
 /* the feed's pager, inside the frame along its bottom on the same
@@ -123,13 +115,6 @@ a.mention { text-decoration: none; }
    first post; above it the find strip's rule or the frame's own edge
    already draws the seam, so no line of its own there. */
 .pager.top { border-top: 0; border-bottom: 1px solid #262626; }
-.btn { display: inline-block; box-sizing: border-box; min-width: 58px; height: 20px; padding: 2px 13px;
-  background: #ddd; color: #262626; text-decoration: none; text-align: center;
-  font-size: 12px; line-height: 14px; font-weight: bold; white-space: nowrap;
-  border: 1px solid #262626; border-radius: 3px;
-  box-shadow: inset 1px 1px 0 #ddd, inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
-.btn:active { background: #666; color: #fff;
-  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
 /* Prev, Next and the thread page's Feed button carry the Hub app's
    arrow: the same 11×9 pixel glyph in currentColor (a text triangle
    is an emoji on an iPhone), 5px from the word — before it on a button
@@ -470,7 +455,6 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .viewer { position: fixed; left: 0; top: 0; margin: 0; max-width: none; z-index: 100; visibility: hidden; }
 .viewer .titlebar { cursor: default; user-select: none; touch-action: none; }
 .viewer .tbox.close { cursor: default; }
-.viewer .tbox.close:active { background: #888; box-shadow: inset 1px 1px 0 #666, inset -1px -1px 0 #aaa; }
 .viewer img { display: block; max-width: calc(100svw - 40px); max-height: calc(100svh - 90px); }
 /* the page window: the same chrome around a sandboxed frame, sized to
    the viewport; its zoom box fills the viewport and back */
@@ -479,12 +463,11 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .viewer.pageview .statusbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .viewer.pageview.dragging iframe { pointer-events: none; }
 .viewer.pageview .tbox.zoom { cursor: default; }
-/* the zoom glyph, as the desktop draws it: a small square in the box's
-   top-left whose top and left edges are the box's own frame (so its
-   right and bottom edges show). The box is positioned (.tbox) so the
-   square lands in it, not at the window's corner over the close box. */
-.viewer.pageview .tbox.zoom::after { content: ""; position: absolute; left: -1px; top: -1px; width: 7px; height: 7px;
-  box-sizing: border-box; border: 1px solid #262626; }
+/* the zoom glyph, as the desktop draws it: a 7px square a pixel inside
+   the tile's black ring. The tile is positioned (.tbox) so the square
+   lands in it, not at the window's corner over the close box. */
+.viewer.pageview .tbox.zoom::before { content: ""; position: absolute; top: 1px; left: 1px; width: 7px; height: 7px;
+  z-index: 2; box-sizing: border-box; box-shadow: inset 0 0 0 1px var(--black); }
 .profile { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
 .profile .av { width: 64px; height: 64px; }
 .profile .av img { width: 62px; height: 62px; }
@@ -544,7 +527,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{else if eq .Page "thread"}}
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
-  <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread"{{end}}>
     <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>Feed</span></a></div>
     {{template "post" .Post}}
@@ -554,7 +537,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{else if eq .Page "search"}}
 <div class="window">
-  <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">Search</span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title">Search</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
@@ -564,7 +547,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{else if eq .Page "profile"}}
 <div class="window">
-  <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
     <div class="profile">
       <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Profile.ID}}.svg" alt="">{{end}}</span>
@@ -585,7 +568,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{template "stats" .StatsPage}}
 {{else}}
 <div class="window">
-  <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
   <div class="frame"><div class="alert">{{.Message}} <a href="/">Back to the feed.</a></div></div>
 </div>
 {{end}}

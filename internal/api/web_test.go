@@ -1,6 +1,8 @@
 package api
 
 import (
+	stats "github.com/livid/exe-stats"
+
 	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -931,7 +933,13 @@ func TestWebPage(t *testing.T) {
 	}
 	// the zoom glyph is positioned inside its box, not at the window's
 	// corner over the close box
-	for _, want := range []string{`.tbox { position: relative;`, `.viewer.pageview .tbox.zoom::after { content: ""; position: absolute; left: -1px; top: -1px; width: 7px; height: 7px;`, `box-sizing: border-box; border: 1px solid #262626; }`} {
+	if i := strings.Index(body, ".tbox {"); i < 0 || !strings.Contains(body[i:min(i+400, len(body))], "position: relative") {
+		t.Error("the close tile is not a positioning context, so the zoom glyph would land at the window's corner")
+	}
+	for _, want := range []string{
+		`.viewer.pageview .tbox.zoom::before { content: ""; position: absolute; top: 1px; left: 1px; width: 7px; height: 7px;`,
+		`box-shadow: inset 0 0 0 1px var(--black); }`,
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page window CSS lacks %q", want)
 		}
@@ -1408,5 +1416,35 @@ func TestOpening(t *testing.T) {
 	}
 	if got := excerpt("one two three", 8); got != "one two…" {
 		t.Errorf("excerpt at a word: %q", got)
+	}
+}
+
+// The public pages wear the chrome exe-stats ships — the same file the
+// exe site serves and the stats desk is drawn in — so the three look
+// like one thing. What the hub adds to it is its own; what the chrome
+// says, it does not say twice.
+func TestWebChromeIsShared(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	_, body := get(t, s.Handler(), "/")
+	chrome := stats.ChromeCSS()
+	if !strings.Contains(body, chrome) {
+		t.Fatal("the page does not carry the shared chrome")
+	}
+	// the tile the desktop draws: 13px with its black ring, not a copy
+	if !strings.Contains(body, "width: 13px; height: 13px") {
+		t.Error("the close tile is not the desktop's")
+	}
+	css := body[strings.Index(body, "<style>"):strings.Index(body, "</style>")]
+	after := css[strings.Index(css, chrome)+len(chrome):]
+	for _, dup := range []string{"\n.window {", "\n.titlebar {", "\n.tbox {", "\n.frame {", "\n.btn {", "\n.statusbar {"} {
+		if strings.Contains(after, dup) {
+			t.Errorf("the page writes %s again after the shared chrome", strings.TrimSpace(dup))
+		}
+	}
+	// and a tile that leads somewhere is the link itself, so it can be
+	// pressed at all (the feed's own tile leads nowhere, being the feed)
+	_, search := get(t, s.Handler(), "/search?q=hello")
+	if !strings.Contains(search, `<a class="tbox" href="/"`) {
+		t.Error("the tile back to the feed is not a link")
 	}
 }
