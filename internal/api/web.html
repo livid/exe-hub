@@ -309,7 +309,9 @@ a.mention { text-decoration: none; }
    pixels so it stays whole at 150 percent, standing about a cell clear
    of the box on the pale ground that pads it out. Every box says its
    own cell: 4px here, 2px on a reply, 8px on a profile. */
-img.idn { background: #e6e6f5; }
+/* The dimensions below describe the pattern; padding fills its avatar
+   box, independent of the shared chrome's border-box reset. */
+img.idn { box-sizing: content-box; background: #e6e6f5; }
 .av img.idn { width: 20px; height: 20px; padding: 5px; }
 /* a reply wears a small avatar, as the Hub app draws its rows; the
    post heading a thread keeps the full size */

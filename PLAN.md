@@ -753,6 +753,10 @@ hub that carries the post.
   box, and pads the rest with the ground so the pattern stands a cell
   clear of the 1px line: 30px box 4px cells, 14px reply 2px, 62px
   profile 8px, 18px who row 2px, 16px `@` row 2px, 46px dialog 6px.
+  Identicon images explicitly use `content-box`: these dimensions are
+  the pattern alone, with padding added outside it, even under the shared
+  chrome's `border-box` reset (2026-09-20: fixed the 30px image inside
+  the Profile dialog's 48px frame, and the other padded fallback faces).
   The app draws it edge to edge in its 14px box; the pattern and the
   colours are what is shared. A link-preview card without an avatar
   carries the face too, made at the card's 96px in 12px cells
