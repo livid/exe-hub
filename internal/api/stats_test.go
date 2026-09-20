@@ -5,49 +5,45 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"exehub/internal/config"
 	"exehub/internal/identity"
-	"exehub/internal/stats"
-	"exehub/internal/store"
+	stats "github.com/livid/exe-stats"
 )
 
 func testStats(t *testing.T) *Server {
 	t.Helper()
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
-	c, err := stats.New(s.St, time.UTC)
+	an, err := stats.New(s.St.DB(), stats.Options{Location: time.UTC, PathLabel: s.StatsPathLabel,
+		AnyClientKinds: []string{"skill"}, HomeURL: "/", HomeLabel: "Back to the feed",
+		Log: func(string, ...any) {}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Log = func(string, ...any) {}
-	s.Stats = c
+	s.Stats = an
 	return s
 }
 
-// drain takes the queued hits through the collector's session step and
-// into the store, what Run does once a second.
+// statsHits writes hits straight into the hub's database, as the
+// collector's writer would, and lets the next report see them.
+func statsHits(t *testing.T, s *Server, hits []stats.Hit) {
+	t.Helper()
+	if err := statsDB(t, s).Add(hits); err != nil {
+		t.Fatal(err)
+	}
+	s.Stats.ResetCache()
+}
+
+// drain writes what the collector has queued, as its writer does once
+// a second, and lets the next report see it.
 func drain(t *testing.T, s *Server) {
 	t.Helper()
-	var batch []store.Hit
-	for {
-		h, ok := s.Stats.TakeForTest()
-		if !ok {
-			break
-		}
-		batch = append(batch, h)
+	if err := s.Stats.Flush(); err != nil {
+		t.Fatal(err)
 	}
-	if len(batch) > 0 {
-		if err := s.St.StatsAdd(batch); err != nil {
-			t.Fatal(err)
-		}
-	}
-	s.statsMu.Lock()
-	s.statsCache = nil
-	s.statsMu.Unlock()
 }
 
 // TestStatsCounting: a browser's navigation to a page is a page view,
@@ -76,21 +72,21 @@ func TestStatsCounting(t *testing.T) {
 	get(t, h, "/skill.md", "User-Agent", "curl/8.5.0", "Accept", "*/*")
 	get(t, h, "/stats", "User-Agent", browser, "Sec-Fetch-Dest", "document", "Accept", "text/html")
 	drain(t, s)
-	sum, err := s.St.StatsSummary(store.StatsFilter{From: 0, To: time.Now().UnixMilli() + 1000})
+	sum, err := statsDB(t, s).Summary(stats.Filter{From: 0, To: time.Now().UnixMilli() + 1000})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if sum.Pageviews != 5 {
 		t.Errorf("page views = %d, want 5 (four pages and the skill; the crawler apart)", sum.Pageviews)
 	}
-	bots, _ := s.St.StatsTop(store.StatsFilter{To: time.Now().UnixMilli() + 1000}, "crawler")
+	bots, _ := statsDB(t, s).Top(stats.Filter{To: time.Now().UnixMilli() + 1000}, "crawler")
 	if len(bots) != 1 || bots[0].Key != "Googlebot" || bots[0].N != 1 {
 		t.Errorf("crawlers %v, want Googlebot 1", bots)
 	}
 	if sum.Visitors != 2 || sum.Sessions != 2 {
 		t.Errorf("visitors %d sessions %d, want 2 and 2 (the browser, and curl)", sum.Visitors, sum.Sessions)
 	}
-	rows, _ := s.St.StatsTop(store.StatsFilter{To: time.Now().UnixMilli() + 1000}, "path")
+	rows, _ := statsDB(t, s).Top(stats.Filter{To: time.Now().UnixMilli() + 1000}, "path")
 	paths := map[string]int{}
 	for _, r := range rows {
 		paths[r.Key] = r.N
@@ -109,15 +105,13 @@ func TestStatsPage(t *testing.T) {
 	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
 	id := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "# A heading\nthe words of the post"})
 	now := time.Now().UnixMilli()
-	if err := s.St.StatsAdd([]store.Hit{
+	statsHits(t, s, []stats.Hit{
 		{TS: now - 60_000, VID: "aaaa", SID: "s1", Entry: true, Path: "/", Kind: "home", Ref: "Google", Channel: "search", Country: "JP", Device: "desktop", Browser: "Chrome", OS: "Windows", Lang: "ja"},
 		{TS: now - 30_000, VID: "aaaa", SID: "s1", Path: "/p/" + id, Kind: "thread", Ref: "Google", Channel: "search", Country: "JP", Device: "desktop", Browser: "Chrome", OS: "Windows", Lang: "ja"},
 		{TS: now - 20_000, VID: "bbbb", SID: "s2", Entry: true, Path: "/u/" + pub2id(pub), Kind: "profile", Channel: "direct", Country: "CN", Device: "mobile", Browser: "Safari", OS: "iOS", Lang: "zh-CN"},
 		{TS: now - 26*3600_000, VID: "cccc", SID: "s3", Entry: true, Path: "/", Kind: "home", Channel: "direct", Country: "US", Device: "desktop"},
 		{TS: now - 10_000, VID: "gggg", SID: "g1", Entry: true, Path: "/p/" + id, Kind: "thread", Channel: "direct", Country: "US", Device: "bot", Browser: "Googlebot", Bot: true},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 	h := s.Handler()
 	code, body := get(t, h, "/stats?range=7d")
 	if code != 200 {
@@ -248,92 +242,36 @@ func TestStatsPage(t *testing.T) {
 	}
 }
 
-// TestStatsLanes: the list windows stand in two lanes that are a cut of
-// the reading order — the first few left, the rest right, cut where the
-// heights come closest, the left lane the taller on a tie — so the
-// markup's order is the eye's at every width.
-func TestStatsLanes(t *testing.T) {
-	for _, c := range []struct {
-		rows []int
-		want string
-	}{
-		{[]int{10, 12, 12, 4, 9}, "0 1|2 3 4"},   // 668 beside 842: a third window left would be 1022 beside 488
-		{[]int{7, 12, 12, 4, 12}, "0 1|2 3 4"},   // the public hub's page on the day this was written
-		{[]int{12, 12, 12, 12, 12}, "0 1 2|3 4"}, // a tie: the left lane is the taller
-		{[]int{12, 0, 0, 0, 12}, "0 1 2|3 4"},    // 626 beside 490 either way round: the tie goes left
-		{[]int{0, 0, 0, 0, 0}, "0 1 2|3 4"},
-		{[]int{3}, "0|"},
-		{[]int{0, 12}, "0|1"}, // two windows never share a lane
-	} {
-		var lists []statsList
-		for i, n := range c.rows {
-			lists = append(lists, statsList{Anchor: strconv.Itoa(i), Rows: make([]statsRowView, n)})
-		}
-		var got []string
-		for _, lane := range statsLanes(lists) {
-			var ids []string
-			for _, l := range lane {
-				ids = append(ids, l.Anchor)
-			}
-			got = append(got, strings.Join(ids, " "))
-		}
-		if g := strings.Join(got, "|"); g != c.want {
-			t.Errorf("rows %v stand as %q, want %q", c.rows, g, c.want)
-		}
-	}
-}
-
-// TestStatsSpan: the ranges' bounds and buckets in a zone.
-func TestStatsSpan(t *testing.T) {
-	loc, _ := time.LoadLocation("America/Los_Angeles")
-	now := time.Date(2026, 9, 16, 14, 30, 0, 0, loc)
-	for _, c := range []struct {
-		key        string
-		from, prev string
-		buckets    int
-		step       string
-	}{
-		{"today", "2026-09-16T00:00", "2026-09-15T00:00", 24, "hour"},
-		{"yesterday", "2026-09-15T00:00", "2026-09-14T00:00", 24, "hour"},
-		{"24h", "2026-09-15T14:30", "2026-09-14T14:30", 25, "hour"},
-		{"7d", "2026-09-10T00:00", "2026-09-03T00:00", 7, "day"},
-		{"30d", "2026-08-18T00:00", "2026-07-19T00:00", 30, "day"},
-		{"3m", "2026-07-01T00:00", "2026-04-01T00:00", 78, "day"},
-		{"6m", "2026-04-01T00:00", "2025-10-01T00:00", 6, "month"},
-		{"12m", "2025-10-01T00:00", "2024-10-01T00:00", 12, "month"},
-		{"bogus", "2026-09-10T00:00", "2026-09-03T00:00", 7, "day"},
-	} {
-		sp := statsSpanOf(c.key, now, loc)
-		if got := sp.From.Format("2006-01-02T15:04"); got != c.from {
-			t.Errorf("%s from %s, want %s", c.key, got, c.from)
-		}
-		if got := sp.PrevFrom.Format("2006-01-02T15:04"); got != c.prev {
-			t.Errorf("%s prev from %s, want %s", c.key, got, c.prev)
-		}
-		if len(sp.Buckets) != c.buckets || sp.Step != c.step {
-			t.Errorf("%s: %d %s buckets, want %d %s", c.key, len(sp.Buckets), sp.Step, c.buckets, c.step)
-		}
-		if !sp.PrevTo.Equal(sp.From) && c.key != "today" {
-			t.Errorf("%s: the span before ends where this begins", c.key)
-		}
-		if sp.IncompleteLast == (c.key == "yesterday") {
-			t.Errorf("%s: incomplete %v", c.key, sp.IncompleteLast)
-		}
-	}
-	if statsCeil(3) != 4 || statsCeil(37) != 40 || statsCeil(130) != 160 || statsCeil(1000) != 1200 {
-		t.Error("ceilings")
-	}
-	if statsNum(1234567) != "1,234,567" || statsNum(999) != "999" {
-		t.Error("numbers")
-	}
-	if statsDur(75.4) != "1m 15s" || statsDur(9) != "9s" {
-		t.Error("durations")
-	}
-	if statsSigned(12.34, "%") != "+12.3%" || statsSigned(-5, "%") != "−5.0%" || statsSigned(0, " pp") != "±0 pp" {
-		t.Error("signed")
-	}
-}
-
 func pub2id(pub ed25519.PublicKey) string { return identity.Fingerprint(pub) }
 
 var _ = http.StatusOK
+
+// statsDB is the hits tables of this test's hub.
+func statsDB(t *testing.T, s *Server) *stats.DB {
+	t.Helper()
+	d, err := stats.Open(s.St.DB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// The hits are the hub's own record of its readers, not derived from
+// the log: a Rebuild replays every post and leaves them where they are.
+func TestStatsSurviveRebuild(t *testing.T) {
+	s := testStats(t)
+	now := time.Now().UnixMilli()
+	statsHits(t, s, []stats.Hit{
+		{TS: now - 1000, VID: "aaaa", SID: "s1", Entry: true, Path: "/", Kind: "home", Country: "JP", Device: "desktop"},
+	})
+	if err := s.St.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := statsDB(t, s).Summary(stats.Filter{To: now + 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Pageviews != 1 || sum.Visitors != 1 {
+		t.Errorf("the hits did not survive a rebuild: %+v", sum)
+	}
+}

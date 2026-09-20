@@ -1,6 +1,8 @@
 package api
 
 import (
+	stats "github.com/livid/exe-stats"
+
 	"cmp"
 	_ "embed"
 	"encoding/json"
@@ -149,10 +151,10 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var webTmpl = template.Must(template.Must(template.New("web").Funcs(template.FuncMap{
-	"mul": func(a, b int) int { return a * b },
-	"pct": func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
-}).Parse(webHTML)).Parse(statsHTML))
+// The stats desk's blocks come from the package that draws it; the hub
+// parses them into its own set so the desk renders inside its chrome.
+var webTmpl = template.Must(template.Must(template.New("web").
+	Funcs(stats.Funcs()).Parse(webHTML)).Parse(stats.TemplateHTML()))
 
 // webPage is the page size of the feed and profile pages; the next page
 // is a plain link carrying the last post's id as the keyset cursor.
@@ -333,7 +335,7 @@ type webData struct {
 	// on a hub that counts, and /stats itself carries its page
 	StatsOn   bool
 	Online    int
-	StatsPage *statsPage
+	StatsPage *stats.Page
 }
 
 // webURL is the Hub app's URL matcher; it lives in the card package now,

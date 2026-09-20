@@ -582,7 +582,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   </div>
 </div>
 {{else if eq .Page "stats"}}
-{{template "stats" .}}
+{{template "stats" .StatsPage}}
 {{else}}
 <div class="window">
   <div class="titlebar"><span class="tbox"><a href="/" title="Back to the feed"></a></span><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>

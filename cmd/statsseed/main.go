@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"exehub/internal/store"
+
+	stats "github.com/livid/exe-stats"
 )
 
 func pick[T any](r *rand.Rand, w []struct {
@@ -46,6 +48,10 @@ func main() {
 		log.Fatal(err)
 	}
 	defer st.Close()
+	hitsDB, err := stats.Open(st.DB())
+	if err != nil {
+		log.Fatal(err)
+	}
 	posts, _ := st.Feed("", 20, false)
 	var paths []string
 	paths = append(paths, "/", "/", "/", "/", "/")
@@ -64,7 +70,7 @@ func main() {
 	r := rand.New(rand.NewSource(7))
 	loc, _ := time.LoadLocation("America/Los_Angeles")
 	now := time.Now().In(loc)
-	var hits []store.Hit
+	var hits []stats.Hit
 	id := func() string {
 		b := make([]byte, 12)
 		r.Read(b)
@@ -133,7 +139,7 @@ func main() {
 				case path == "/skill.md":
 					kind = "skill"
 				}
-				hits = append(hits, store.Hit{TS: t.UnixMilli(), VID: vid, SID: sid, Entry: p == 0, Path: path, Kind: kind,
+				hits = append(hits, stats.Hit{TS: t.UnixMilli(), VID: vid, SID: sid, Entry: p == 0, Path: path, Kind: kind,
 					Ref: src, Channel: channel[src], Country: c, Device: dev, Browser: browser, OS: os, Lang: langOf[c]})
 				t = t.Add(time.Duration(20+r.Intn(200)) * time.Second)
 				if t.After(now) {
@@ -156,7 +162,7 @@ func main() {
 			if name == "PetalBot" || name == "Bytespider" {
 				c = "SG"
 			}
-			hits = append(hits, store.Hit{TS: t.UnixMilli(), VID: id(), SID: id(), Entry: true, Path: paths[r.Intn(len(paths))], Kind: "thread",
+			hits = append(hits, stats.Hit{TS: t.UnixMilli(), VID: id(), SID: id(), Entry: true, Path: paths[r.Intn(len(paths))], Kind: "thread",
 				Channel: "direct", Country: c, Device: "bot", Browser: name, Bot: true})
 		}
 	}
@@ -164,10 +170,10 @@ func main() {
 	for i := 0; i < 5; i++ {
 		t := now.Add(-time.Duration(r.Intn(280)) * time.Second)
 		c := pick(r, countries)
-		hits = append(hits, store.Hit{TS: t.UnixMilli(), VID: id(), SID: id(), Entry: true, Path: paths[r.Intn(len(paths))], Kind: "thread",
+		hits = append(hits, stats.Hit{TS: t.UnixMilli(), VID: id(), SID: id(), Entry: true, Path: paths[r.Intn(len(paths))], Kind: "thread",
 			Channel: "direct", Country: c, Device: "desktop", Browser: "Chrome", OS: "macOS", Lang: langOf[c]})
 	}
-	if err := st.StatsAdd(hits); err != nil {
+	if err := hitsDB.Add(hits); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("seeded", len(hits), "page views")

@@ -45,6 +45,11 @@ type Store struct {
 	PageAuthor func(author string) bool
 }
 
+// DB is the open database, for a package that keeps tables of its own
+// in it (the stats desk keeps hits and hits_salt there). The store's own
+// tables are not its to touch.
+func (s *Store) DB() *sql.DB { return s.db }
+
 func Open(path string) (*Store, error) {
 	// One writer connection; SQLite serializes writes anyway and a single
 	// conn avoids SQLITE_BUSY juggling. WAL keeps readers unblocked.
@@ -305,7 +310,7 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 	if err := s.numberTranslations(); err != nil {
 		return err
 	}
-	return s.initStats()
+	return nil
 }
 
 // backfillActivity gives every post its own arrival as activity, then

@@ -29,8 +29,8 @@ import (
 	"exehub/internal/ipfs"
 	"exehub/internal/media"
 	"exehub/internal/push"
-	"exehub/internal/stats"
 	"exehub/internal/store"
+	stats "github.com/livid/exe-stats"
 )
 
 // MaxUpload matches PLAN.md: each embed is at most 8MB.
@@ -49,12 +49,9 @@ type Server struct {
 	Events *events.Broadcaster // live post activity; nil disables /v1/events
 	Push   *push.Key           // Web Push (the VAPID key); nil disables subscribing and the page's Notify box
 	Media  *Media              // conversion through ffmpeg (media.go); nil turns /v1/media off
-	Stats  *stats.Collector    // the pages' analytics (stats.go); nil counts nothing and hides /stats
+	Stats  *stats.Stats        // the pages' analytics (stats.go); nil counts nothing and hides /stats
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
-
-	statsMu    sync.Mutex // statsCache: a computed report kept a few seconds under its query
-	statsCache map[string]statsCacheEntry
 }
 
 // bucket is a token bucket, usable at its zero value: gateRate a second,

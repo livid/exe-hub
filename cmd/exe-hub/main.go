@@ -20,6 +20,8 @@ import (
 	"time"
 	_ "time/tzdata" // stats.timezone on a host without zoneinfo
 
+	stats "github.com/livid/exe-stats"
+
 	"exehub/internal/api"
 	"exehub/internal/card"
 	"exehub/internal/config"
@@ -32,7 +34,6 @@ import (
 	"exehub/internal/media"
 	"exehub/internal/push"
 	"exehub/internal/replicate"
-	"exehub/internal/stats"
 	"exehub/internal/store"
 )
 
@@ -269,18 +270,27 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Stats: the pages' own analytics (PLAN.md, Stats) — page views
 	// counted as they are served, kept for the retention, /stats to read.
 	if cfg.StatsOn() {
-		coll, err := stats.New(st, cfg.Stats.Location)
+		an, err := stats.New(st.DB(), stats.Options{
+			Location:  cfg.Stats.Location,
+			PathLabel: srv.StatsPathLabel,
+			Title:     "Stats",
+			// the agent guide is read with curl as much as with a
+			// browser, and the desk's close box goes back to the feed
+			AnyClientKinds: []string{"skill"},
+			HomeURL:        "/",
+			HomeLabel:      "Back to the feed",
+		})
 		if err != nil {
 			return err
 		}
-		go coll.Run()
-		srv.Stats = coll
+		go an.Run()
+		srv.Stats = an
 		kept := "forever"
 		if cfg.Stats.Retention > 0 {
 			kept = fmt.Sprintf("%d days", cfg.Stats.Retention)
 			go func() {
 				for {
-					if n, err := st.StatsSweep(time.Now().AddDate(0, 0, -cfg.Stats.Retention)); err != nil {
+					if n, err := srv.Stats.Sweep(time.Now().AddDate(0, 0, -cfg.Stats.Retention)); err != nil {
 						log.Printf("stats sweep: %v", err)
 					} else if n > 0 {
 						log.Printf("stats: dropped %d page views older than %d days", n, cfg.Stats.Retention)
@@ -366,6 +376,11 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		httpSrv.Shutdown(ctx)
+		// the page views counted in the last second are written before
+		// the store closes under them
+		if srv.Stats != nil {
+			srv.Stats.Stop()
+		}
 	}()
 
 	ln, err := listenWait(cfg.Listen, 5*time.Minute)
