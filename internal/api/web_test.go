@@ -1448,3 +1448,27 @@ func TestWebChromeIsShared(t *testing.T) {
 		t.Error("the tile back to the feed is not a link")
 	}
 }
+
+// The home page is a desk: the join window at the left and the feed
+// beside it once there is room, the pair centred. Nothing from the
+// shared chrome may lay a margin on either column — a `.main` rule in it
+// once pushed the join window to the far left of the window.
+func TestWebDeskColumnsAreTheHubsOwn(t *testing.T) {
+	chrome := stats.ChromeCSS()
+	for _, own := range []string{".main", ".desk", ".join"} {
+		if strings.Contains(chrome, "\n"+own+" ") || strings.Contains(chrome, "\n"+own+"{") {
+			t.Errorf("the shared chrome lays down %s, which is a page's own layout", own)
+		}
+	}
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	_, body := get(t, s.Handler(), "/")
+	// the two columns and what places them are the hub's
+	for _, want := range []string{
+		`.desk .join { flex: 0 0 360px; position: sticky; top: 24px; margin: 0; }`,
+		`.desk .main { flex: 0 1 640px; min-width: 0; }`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the desk's own layout is missing %q", want)
+		}
+	}
+}
