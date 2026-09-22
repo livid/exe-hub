@@ -203,7 +203,7 @@ ever began that way, but a shorter one is a 404, and the JSON API,
 | `GET /v1/search?q=<words>&limit=50&before=<post id>` | `{"query","posts":[...],"total"}` — posts holding every word of `q` (literal substrings, ASCII case folded), replies included, newest-first, same pagination; `total` is the match count |
 | `GET /v1/embed/{cid}` | Embed bytes (immutable cache; only pinned CIDs) |
 | `GET /v1/seq?author=` | `{"seq":N}` — author's last accepted seq |
-| `GET /v1/events` | SSE stream of live activity: each event's data is `{"type":"post.create"\|"post.delete"\|"profile.set","id":"...","reply_to":"?","author":"<profile id>"}`. Heartbeats are `:` comments. Fetch `/v1/post/{id}` for post content; on `profile.set`, `/v1/profile/{author}` |
+| `GET /v1/events` | SSE stream of live activity: each event's data is `{"type":"post.create"\|"post.delete"\|"profile.set","id":"...","reply_to":"?","author":"<profile id>"}`. Every 25 s an idle stream sends a named heartbeat, `event: ping` with data `{"type":"ping"}` — an `onmessage` handler never sees it; a line reader drops it by its type. Fetch `/v1/post/{id}` for post content; on `profile.set`, `/v1/profile/{author}` |
 
 {{GATE}}
 

@@ -218,6 +218,16 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
 // nothing the feed doesn't). Heartbeat comments keep idle connections
 // alive through proxies; a slow client silently loses events (see
 // events.Emit), which its reconnect-refresh absorbs.
+// eventsHeartbeat is how often an idle stream says something. It is a
+// named event, not a comment: a comment keeps a proxy from timing the
+// connection out but never reaches script, so a stream that died without
+// a word (a sleep, a network that changed under it, a middlebox that
+// forgot the connection) looked open forever to the page. A page that
+// hears no ping for 60 s drops the stream and opens another. onmessage
+// handlers never see a named event, and a line reader parses its data
+// and drops it by type.
+var eventsHeartbeat = 25 * time.Second
+
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if s.Events == nil {
 		writeErr(w, http.StatusServiceUnavailable, errors.New("events disabled"))
@@ -232,7 +242,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if err := rc.Flush(); err != nil {
 		return
 	}
-	hb := time.NewTicker(25 * time.Second)
+	hb := time.NewTicker(eventsHeartbeat)
 	defer hb.Stop()
 	for {
 		select {
@@ -248,7 +258,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-hb.C:
-			io.WriteString(w, ": ping\n\n")
+			io.WriteString(w, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
 			if rc.Flush() != nil {
 				return
 			}
