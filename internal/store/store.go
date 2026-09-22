@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS langs (
 -- language it was put into, never the post's own.
 CREATE TABLE IF NOT EXISTS translations (
   post   TEXT NOT NULL,
-  lang   TEXT NOT NULL,                -- zh-Hans | en
+  lang   TEXT NOT NULL,                -- one of lang.Targets: zh-Hans, en, ja
   text   TEXT NOT NULL DEFAULT '',
   model  TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,                -- 'ok' | 'failed'

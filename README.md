@@ -62,26 +62,27 @@ if it never appears, so the manager tries again.
   at `max`. Every post without a language is the work list, so the posts
   from before the block was added are named on the first pass.
 - **Translations.** The same block has the model put every post into the
-  two languages the hub's readers read: Simplified Chinese, unless it is
-  written in it, and English, unless it is written in that. The pages
-  show a reader the one they read, by `?lang=zh` or `?lang=en` when the
-  address says, else by the browser's first language, with a quiet
-  "Translated from English · Show Original" under the post, in the
-  page's language, that swaps in the post as written; `?lang=orig`
-  shows every post as written. A
-  translation at `max` thinks for a minute or more, so a hub's history
-  takes hours, newest posts first. `"translate": false` in the block
-  keeps the languages and turns the translating off. A Chinese
+  three languages the hub's readers read: Simplified Chinese, English
+  and Japanese, each unless the post is written in it. The pages show a
+  reader the one they read, by `?lang=zh`, `?lang=en` or `?lang=ja`
+  when the address says, else by the browser's first language, with a
+  quiet "Translated from English · Show Original" under the post, in
+  the page's language, that swaps in the post as written; `?lang=orig`
+  shows every post as written. A translation at `max` thinks for a
+  minute or more, so a hub's history takes hours, newest posts first;
+  `"parallel": 4` in the block asks for four at once, and turns a new
+  language's backfill from days into hours. `"translate": false` in
+  the block keeps the languages and turns the translating off. A Chinese
   translation's punctuation is set full-width by rule where the model
   leaves it ASCII. The hub checks a translation's shape, not its words:
   when a reader finds one wrong, `./exe-hub -retranslate <post id, or
-  its first 12 characters> [-to zh-Hans|en] [-note "what the line
+  its first 12 characters> [-to zh-Hans|en|ja] [-note "what the line
   means"]` forgets it and the running daemon makes it again, the note
   given to the translator with the post from then on. Hubs that pull
   from each other share the work: a hub serves the translations it made
   and takes its peers', each one checked against its own copy of the
   post, the newest winning, so of a pair only one need pay the model —
-  the other says `"translate": false` and still reads in both languages.
+  the other says `"translate": false` and still reads in all three.
 
 ## Who may post
 

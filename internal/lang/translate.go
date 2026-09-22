@@ -16,7 +16,8 @@ import (
 
 // Targets are the languages the hub keeps every post in (see PLAN.md,
 // Translations): a post not written in one of them is put into it.
-var Targets = []string{"zh-Hans", "en"}
+// Japanese since 2026-09-22.
+var Targets = []string{"zh-Hans", "en", "ja"}
 
 // Translatable says a post named tag has words to put into another
 // language: zxx has none, and und nobody could read.
@@ -62,6 +63,7 @@ Write the way a native speaker would have posted it: natural, plain, the same to
 // what a target asks for beyond the rest
 var translateExtra = map[string]string{
 	"zh-Hans": ` In Chinese, put a space between Chinese characters and Latin letters or digits ("用 Go 写的 770 个帖子"), and use full-width Chinese punctuation.`,
+	"ja":      ` In Japanese, put a space between Japanese characters and Latin letters or digits ("Go で書いた 770 件の投稿"), and use Japanese punctuation (、。「」).`,
 }
 
 // An editor's note rides under the rest: the hub's operator wrote it
@@ -129,20 +131,29 @@ func Check(text, out, to string) error {
 	if ra >= 20 && (rb*7 < ra || rb > ra*6+40) {
 		return fmt.Errorf("%d characters for a post of %d", rb, ra)
 	}
-	letters, han := 0, 0
+	letters, han, kana := 0, 0, 0
 	for _, r := range out {
 		if unicode.IsLetter(r) {
 			letters++
-			if unicode.Is(unicode.Han, r) {
+			switch {
+			case unicode.Is(unicode.Han, r):
 				han++
+			case unicode.Is(unicode.Hiragana, r) || unicode.Is(unicode.Katakana, r):
+				kana++
 			}
 		}
 	}
+	// the script says whether it was put into the language at all: Chinese
+	// has Han and no kana to speak of, Japanese has kana, English neither
 	switch {
 	case strings.HasPrefix(to, "zh") && letters >= 40 && han == 0:
 		return fmt.Errorf("no Chinese in it")
-	case to == "en" && han*2 > letters:
-		return fmt.Errorf("mostly Chinese still")
+	case strings.HasPrefix(to, "zh") && kana*4 > letters:
+		return fmt.Errorf("still Japanese")
+	case to == "ja" && letters >= 40 && kana == 0:
+		return fmt.Errorf("no Japanese in it")
+	case to == "en" && (han+kana)*2 > letters:
+		return fmt.Errorf("mostly Chinese or Japanese still")
 	}
 	return nil
 }

@@ -3,8 +3,12 @@ package lang
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"exehub/internal/store"
 )
@@ -110,8 +114,10 @@ func TestNames(t *testing.T) {
 	}
 }
 
-// fakeOwed is the translator's slice of the store.
+// fakeOwed is the translator's slice of the store; locked, since a
+// parallel pass writes it from as many goroutines.
 type fakeOwed struct {
+	mu      sync.Mutex
 	owed    []store.OwedTranslation
 	rows    map[string]fakeRow
 	kept    []store.KeptTranslation
@@ -119,6 +125,8 @@ type fakeOwed struct {
 }
 
 func (o *fakeOwed) PostsToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedTranslation, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	var out []store.OwedTranslation
 	for _, w := range o.owed {
 		if _, done := o.rows[w.ID+" "+w.To]; !done && len(out) < limit {
@@ -138,6 +146,8 @@ func (o *fakeOwed) RewriteTranslation(post, lang, text string) error {
 }
 
 func (o *fakeOwed) SetTranslation(post, lang, text, model string, ok bool) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.rows[post+" "+lang] = fakeRow{text, model, ok, o.rows[post+" "+lang].tries + 1}
 	return nil
 }
@@ -284,5 +294,89 @@ func TestCheckMentions(t *testing.T) {
 		if err := Check(post, out, "zh-Hans"); err == nil || !strings.Contains(err.Error(), "the mentions differ") {
 			t.Errorf("%q: %v", out, err)
 		}
+	}
+}
+
+// TestCheckJapanese: a translation into Japanese has kana in it, one
+// out of Japanese has none to speak of, and Chinese is not Japanese.
+func TestCheckJapanese(t *testing.T) {
+	ja := "この hub は小さな公開フィードです。登録もパスワードもなく、ed25519 の鍵がそのままアカウントになります。"
+	zh := "这个 hub 是一个小型的公开信息流，没有注册也没有密码，一把 ed25519 密钥就是一个账号，任何人都可以阅读。"
+	en := "This hub is a small public feed: no registration and no passwords, an ed25519 key is the account, and anyone may read."
+	for _, c := range []struct {
+		text, out, to string
+		ok            bool
+	}{
+		{en, ja, "ja", true}, {en, zh, "ja", false}, {en, en, "ja", false}, {"OK, sure.", "はい", "ja", true}, {"OK, sure.", "了解", "ja", true}, // a short answer may be all kana or all kanji
+		{ja, en, "en", true}, {ja, ja, "en", false},
+		{ja, zh, "zh-Hans", true}, {ja, ja, "zh-Hans", false}, {en, zh + "（日本語では「ハブ」）", "zh-Hans", true},
+	} {
+		err := Check(c.text, c.out, c.to)
+		if (err == nil) != c.ok {
+			t.Errorf("Check(%.20q → %.20q, %s) = %v, want ok %v", c.text, c.out, c.to, err, c.ok)
+		}
+	}
+	if len(Targets) != 3 || Targets[2] != "ja" {
+		t.Errorf("Targets = %v", Targets)
+	}
+	if !strings.Contains(translateSystem("en", "ja", ""), "into Japanese") || !strings.Contains(translateSystem("en", "ja", ""), "Japanese punctuation") {
+		t.Error("the Japanese prompt lacks its target or its extra")
+	}
+}
+
+// TestTranslatorParallel: with Parallel set, a pass has that many in
+// flight at once and keeps the same rows as one at a time; a refused
+// post is stepped over among them, and three refusals in a row still
+// end the pass with Ollama away.
+func TestTranslatorParallel(t *testing.T) {
+	var inflight, most atomic.Int32
+	away := false
+	f := &fakeOllama{levels: true, answer: func(p string) (int, string) {
+		n := inflight.Add(1)
+		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
+		}
+		time.Sleep(30 * time.Millisecond)
+		inflight.Add(-1)
+		if away || p == "refused" {
+			return 500, "upstream"
+		}
+		return 200, "大家好，各位。"
+	}}
+	st := &fakeOwed{rows: map[string]fakeRow{}, owed: []store.OwedTranslation{{ID: "r", Text: "refused", From: "en", To: "zh-Hans"}}}
+	for i := 0; i < 10; i++ {
+		st.owed = append(st.owed, store.OwedTranslation{ID: fmt.Sprint("p", i), Text: "hello there, everyone", From: "en", To: "zh-Hans"})
+	}
+	tr := NewTranslator(st, newFake(t, f), nil)
+	tr.Parallel = 3
+	if !tr.pass() {
+		t.Fatal("pass = false with one refused post, want true")
+	}
+	if len(st.rows) != 10 {
+		t.Errorf("%d rows, want 10: %v", len(st.rows), st.rows)
+	}
+	for i := 0; i < 10; i++ {
+		if r := st.rows[fmt.Sprint("p", i)+" zh-Hans"]; r.lang != "大家好，各位。" || !r.ok {
+			t.Errorf("p%d = %+v", i, r)
+		}
+	}
+	if m := most.Load(); m != 3 {
+		t.Errorf("%d in flight at most, want 3", m)
+	}
+	// Ollama away: the first three, asked together, are three misses
+	away = true
+	st2 := &fakeOwed{rows: map[string]fakeRow{}}
+	for i := 0; i < 10; i++ {
+		st2.owed = append(st2.owed, store.OwedTranslation{ID: fmt.Sprint("q", i), Text: "hello there, everyone", From: "en", To: "zh-Hans"})
+	}
+	tr = NewTranslator(st2, newFake(t, f), nil)
+	tr.Parallel = 3
+	if tr.pass() || len(st2.rows) != 0 {
+		t.Errorf("Ollama away: pass = true or %d rows written", len(st2.rows))
+	}
+	f.mu.Lock()
+	asked := len(f.asked)
+	f.mu.Unlock()
+	if asked != 11+3 {
+		t.Errorf("%d asked, want 11 for the first pass and 3 for the second", asked)
 	}
 }

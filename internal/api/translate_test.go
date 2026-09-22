@@ -17,8 +17,9 @@ import (
 )
 
 // TestWebReading: ?lang= when the request says, else the browser's first
-// language; a Chinese reader reads Simplified, every other English, a
-// request that names no language every post as written.
+// language; a Chinese reader reads Simplified, a Japanese one Japanese,
+// every other English, a request that names no language every post as
+// written.
 func TestWebReading(t *testing.T) {
 	for _, c := range []struct{ path, header, reader, target, q string }{
 		{"/", "", "", "", ""},
@@ -27,11 +28,13 @@ func TestWebReading(t *testing.T) {
 		{"/", "zh-CN,zh;q=0.9,en;q=0.8", "zh-Hans", "zh-Hans", ""},
 		{"/", "zh", "zh-Hans", "zh-Hans", ""},
 		{"/", "zh-TW", "zh-Hant", "zh-Hans", ""},
-		{"/", "ja,en;q=0.8", "ja", "en", ""},
+		{"/", "ja,en;q=0.8", "ja", "ja", ""},
+		{"/", "ja-JP", "ja", "ja", ""},
+		{"/", "fr-FR,fr;q=0.9", "fr", "en", ""},
 		{"/?lang=zh", "en-US", "zh-Hans", "zh-Hans", "?lang=zh"},
 		{"/?lang=ZH-TW", "en-US", "zh-Hant", "zh-Hans", "?lang=zh-tw"},
 		{"/?lang=en", "zh-CN", "en", "en", "?lang=en"},
-		{"/?lang=ja", "zh-CN", "ja", "en", "?lang=ja"},
+		{"/?lang=ja", "zh-CN", "ja", "ja", "?lang=ja"},
 		{"/?lang=orig", "zh-CN", "orig", "", "?lang=orig"},
 		{"/?lang=klingon!", "zh-CN", "zh-Hans", "zh-Hans", ""}, // no language: the browser's
 		{"/?lang=zxx", "en", "en", "en", ""},
@@ -44,14 +47,15 @@ func TestWebReading(t *testing.T) {
 		}
 	}
 	zhTW := webReading{Reader: "zh-Hant", Target: "zh-Hans"}
-	ja := webReading{Reader: "ja", Target: "en"}
+	ja, fr := webReading{Reader: "ja", Target: "ja"}, webReading{Reader: "fr", Target: "en"}
 	for _, c := range []struct {
 		rd   webReading
 		from string
 		want bool
 	}{
-		{zhTW, "zh-Hant", false}, {zhTW, "zh-Hans", false}, {zhTW, "en", true},
-		{ja, "ja", false}, {ja, "en", false}, {ja, "zh-Hans", true},
+		{zhTW, "zh-Hant", false}, {zhTW, "zh-Hans", false}, {zhTW, "en", true}, {zhTW, "ja", true},
+		{ja, "ja", false}, {ja, "en", true}, {ja, "zh-Hans", true},
+		{fr, "fr", false}, {fr, "en", false}, {fr, "ja", true},
 		{webReading{Reader: "orig"}, "en", false}, {webReading{}, "en", false},
 	} {
 		if got := c.rd.shows(c.from); got != c.want {
@@ -184,7 +188,7 @@ func TestWebSearchTranslated(t *testing.T) {
 // to a Chinese reader, whom it tells Traditional from Simplified.
 func TestWebTrNote(t *testing.T) {
 	zh, en := webReading{Reader: "zh-Hans", Target: "zh-Hans", L: webLocales["zh"]}, webReading{Reader: "en", Target: "en", L: webLocales["en"]}
-	ja := webReading{Reader: "ja", Target: "en", L: webLocales["ja"]} // reads English translations under a Japanese line
+	ja := webReading{Reader: "ja", Target: "ja", L: webLocales["ja"]}
 	for _, c := range []struct {
 		rd         webReading
 		from, want string

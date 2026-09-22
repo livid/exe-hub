@@ -78,6 +78,10 @@ type Ollama struct {
 	// Translate false keeps the posts' languages and leaves the
 	// translating off (PLAN.md, Translations); absent is on.
 	Translate *bool `json:"translate,omitempty"`
+	// Parallel is how many translations are asked for at once; absent
+	// or 1 is one at a time. A few abreast turn a backfill of days into
+	// hours (Japanese, 2026-09-22) at the model account's expense.
+	Parallel int `json:"parallel,omitempty"`
 }
 
 // Translates says whether the hub puts posts into its readers' languages.

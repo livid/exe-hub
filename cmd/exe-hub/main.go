@@ -42,7 +42,7 @@ func main() {
 	stateDir := flag.String("state", "", "state directory (default ~/.exe-hub)")
 	sig := flag.String("s", "", `send a signal to the running daemon: "reload" re-reads config (nginx-style; editing the file alone changes nothing)`)
 	redo := flag.String("retranslate", "", "forget one post's kept translations so the running daemon makes them again: the post's id, or the first 12 characters or more of it")
-	redoTo := flag.String("to", "", "with -retranslate: only the translation into this language (zh-Hans, en)")
+	redoTo := flag.String("to", "", "with -retranslate: only the translation into this language ("+strings.Join(lang.Targets, ", ")+")")
 	redoNote := flag.String("note", "", "with -retranslate: an editor's note on the post for its translator, kept with the post — what a terse or ambiguous line means")
 	flag.Parse()
 
@@ -117,7 +117,7 @@ func retranslate(dbPath, post, to, note string) error {
 		return err
 	}
 	if to != "" && !slices.Contains(lang.Targets, to) {
-		return fmt.Errorf("-to %q: the hub translates into %s", to, strings.Join(lang.Targets, " and "))
+		return fmt.Errorf("-to %q: the hub translates into %s", to, strings.Join(lang.Targets, ", "))
 	}
 	st, err := store.Open(dbPath)
 	if err != nil {
@@ -210,7 +210,7 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		model := lang.NewModel(o.BaseURL, o.APIKey, o.Model, o.Effort)
 		does := "names each post's language"
 		if o.Translates() {
-			does += " and translates it into " + strings.Join(lang.Targets, " and ")
+			does += " and translates it into " + strings.Join(lang.Targets, ", ")
 		}
 		if err := model.Available(); err != nil {
 			log.Printf("lang: ollama %s unreachable (%v) — posts wait for it", o.BaseURL, err)
@@ -221,6 +221,7 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		wakeLangs = langs.Wake
 		if o.Translates() {
 			tr := lang.NewTranslator(st, model, bus)
+			tr.Parallel = o.Parallel
 			langs.Named = tr.Wake
 			wakeLangs = func() { langs.Wake(); tr.Wake() }
 			go tr.Run()

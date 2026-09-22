@@ -7,6 +7,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"exehub/internal/events"
@@ -100,33 +101,56 @@ const (
 // cannot hold up the ones behind it; downAfter of them in a row is an
 // Ollama that is away, and the pass ends, false, to come again soon.
 func drain[T any](size int, list func(limit int) ([]T, error), key func(T) string, do func(T) outcome) (up bool) {
+	return drainN(1, size, list, key, do)
+}
+
+// drainN is drain with up to n pieces of work in flight at once (the
+// translator's, see PLAN.md, Translations — Japanese): the page is
+// worked n at a time, each n judged in the order listed once they are
+// all back, so the step-over and the three-misses rule read the same
+// as one at a time, and n of 1 is exactly that.
+func drainN[T any](n, size int, list func(limit int) ([]T, error), key func(T) string, do func(T) outcome) (up bool) {
+	n = max(n, 1)
 	skip := map[string]bool{}
 	missed := 0
 	for {
-		work, err := list(size + len(skip))
+		work, err := list(max(size, n) + len(skip))
 		if err != nil {
 			log.Printf("lang: %v", err)
 			return true
 		}
-		progress := false
+		todo := work[:0:0]
 		for _, t := range work {
-			if skip[key(t)] {
-				continue
-			}
-			switch do(t) {
-			case stop:
-				return true
-			case noAnswer:
-				skip[key(t)] = true
-				if missed++; missed >= downAfter {
-					return false
-				}
-			default:
-				missed, progress = 0, true
+			if !skip[key(t)] {
+				todo = append(todo, t)
 			}
 		}
-		if !progress { // nothing left but what was stepped over
+		if len(todo) == 0 { // nothing left but what was stepped over
 			return true
+		}
+		for len(todo) > 0 {
+			chunk := todo[:min(n, len(todo))]
+			todo = todo[len(chunk):]
+			results := make([]outcome, len(chunk))
+			var wg sync.WaitGroup
+			for i := range chunk {
+				wg.Add(1)
+				go func(i int) { defer wg.Done(); results[i] = do(chunk[i]) }(i)
+			}
+			wg.Wait()
+			for i, r := range results {
+				switch r {
+				case stop:
+					return true
+				case noAnswer:
+					skip[key(chunk[i])] = true
+					if missed++; missed >= downAfter {
+						return false
+					}
+				default:
+					missed = 0
+				}
+			}
 		}
 	}
 }
@@ -193,10 +217,15 @@ type Owed interface {
 // so a hub's history is hours of passes; whatever lands is announced on
 // the bus as post.translation, so a live page brings it in.
 type Translator struct {
-	St   Owed
-	M    *Model
-	Bus  *events.Broadcaster
-	wake chan struct{}
+	St  Owed
+	M   *Model
+	Bus *events.Broadcaster
+	// Parallel is how many translations are in flight at once; 0 or 1
+	// is one at a time. A backfill of a new language over a hub's
+	// history (Japanese, 2026-09-22: a thousand posts at two to four
+	// minutes each) is days alone and hours a few abreast.
+	Parallel int
+	wake     chan struct{}
 }
 
 func NewTranslator(st Owed, m *Model, bus *events.Broadcaster) *Translator {
@@ -248,13 +277,14 @@ const logEvery = 50
 
 func (t *Translator) pass() (up bool) {
 	kept, n := map[string]int{}, 0
+	var mu sync.Mutex // kept and n, written by as many as are in flight
 	say := func() {
 		if len(kept) > 0 {
 			log.Printf("translate: %s", tally(kept, "translation kept", "translations kept"))
 		}
 	}
 	defer say()
-	return drain(trPage,
+	return drainN(t.Parallel, trPage,
 		func(limit int) ([]store.OwedTranslation, error) {
 			return t.St.PostsToTranslate(Targets, maxTries, time.Now().Add(-retryEvery).UnixMilli(), limit)
 		},
@@ -272,10 +302,12 @@ func (t *Translator) pass() (up bool) {
 				return stop
 			}
 			if err == nil {
+				mu.Lock()
 				kept[o.To]++
 				if n++; n%logEvery == 0 {
 					say()
 				}
+				mu.Unlock()
 				if t.Bus != nil {
 					t.Bus.Emit(events.Event{Type: "post.translation", ID: o.ID, Author: o.Author})
 				}

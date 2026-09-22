@@ -960,9 +960,10 @@ type webReading struct {
 	// names none — a crawler's — and "orig" when it asks for every post
 	// as written.
 	Reader string
-	// Target is the language they are given translations in: zh-Hans for
-	// a Chinese reader, en, the hub's second language, for every other,
-	// "" for none.
+	// Target is the language they are given translations in: the one of
+	// lang.Targets their own language is, zh-Hans for any Chinese, ja
+	// for Japanese, en for English — and en, the hub's second language,
+	// for every other; "" for none.
 	Target string
 	// Lang is the request's ?lang= when it said one the pages take, and Q
 	// the same as "?lang=…": the page's own links carry it.
@@ -988,14 +989,23 @@ func webReadingOf(r *http.Request) webReading {
 	if rd.Reader == "" {
 		rd.Reader = webReaderTag(webBrowserLang(r))
 	}
-	switch {
-	case rd.Reader == "" || rd.Reader == "orig":
-	case strings.HasPrefix(rd.Reader, "zh-"):
-		rd.Target = "zh-Hans"
-	default:
-		rd.Target = "en"
+	if rd.Reader != "" && rd.Reader != "orig" {
+		rd.Target = webTarget(rd.Reader)
 	}
 	return rd
+}
+
+// webTarget is the language a reader of reader is given translations
+// in: the target their language is, by its base — zh-Hant reads zh-Hans
+// — else English.
+func webTarget(reader string) string {
+	base, _, _ := strings.Cut(reader, "-")
+	for _, t := range lang.Targets {
+		if tb, _, _ := strings.Cut(t, "-"); tb == base {
+			return t
+		}
+	}
+	return "en"
 }
 
 // webReaderTag is a language as a request names it, in the hub's form:

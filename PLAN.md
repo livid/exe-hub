@@ -1796,18 +1796,19 @@ shows it yet, and no read serves it. Asked by Livid 2026-09-19.
 
 ## Translations — a post in the reader's language (built 2026-09-19)
 
-With every post's language known, the hub keeps each post in the two
-languages its readers read, Simplified Chinese and English, and the
-pages show a reader the one they read, the original one press away.
-Asked by Livid 2026-09-19.
+With every post's language known, the hub keeps each post in the
+languages its readers read, Simplified Chinese and English, and since
+2026-09-22 Japanese, and the pages show a reader the one they read,
+the original one press away. Asked by Livid 2026-09-19.
 
 - **What is translated.** A post not in `zh-Hans` gets a `zh-Hans`
-  translation and a post not in `en` an `en` one, so an English post has
-  one translation, a Chinese one the other, a Japanese one both
-  (`zh-Hant` is not `zh-Hans`: it gets both too). `zxx` and `und` posts
-  get none. The same `ollama` block turns it on, the same model at the
-  same `effort` does it; `"translate": false` in the block keeps the
-  languages and leaves the translating off.
+  translation, a post not in `en` an `en` one and a post not in `ja` a
+  `ja` one (`lang.Targets`), so an English post has two translations,
+  a Chinese one two, a Japanese one two, and a `zh-Hant` post, which is
+  not `zh-Hans`, all three. `zxx` and `und` posts get none. The same
+  `ollama` block turns it on, the same model at the same `effort` does
+  it; `"translate": false` in the block keeps the languages and leaves
+  the translating off.
 - **The prompt keeps the post's shape**: every line and blank line, the
   Markdown a post takes (headings, list markers, a table's pipes, bold,
   code, a link's address), and leaves alone URLs, code, paths, ids,
@@ -1848,14 +1849,16 @@ Asked by Livid 2026-09-19.
   post as written), else the browser's first language, the
   Accept-Language tag with the highest q, as the join block already
   reads it; a request with neither, a crawler's, gets every post as
-  written. A Chinese reader reads `zh-Hans` and everyone else `en`, the
-  hub's second language. A post is shown translated when it is in
-  neither the reader's own language nor the one they read, and its
-  translation is there: a `zh-TW` reader gets a `zh-Hant` post as
-  written and an English one in Simplified, a Japanese reader gets a
-  Japanese post as written and a Chinese one in English. Decided on the
-  server, so nothing flashes and the page stands without script; every
-  page with posts says `Vary: Accept-Language`.
+  written. A reader reads the target their language is, by its base
+  (`webTarget`): any Chinese reads `zh-Hans`, Japanese `ja`, English
+  and everyone else `en`, the hub's second language. A post is shown
+  translated when it is in neither the reader's own language nor the
+  one they read, and its translation is there: a `zh-TW` reader gets a
+  `zh-Hant` post as written and an English one in Simplified, a
+  Japanese reader gets a Japanese post as written and an English or
+  Chinese one in Japanese, a French reader everything in English.
+  Decided on the server, so nothing flashes and the page stands without
+  script; every page says `Vary: Accept-Language`.
 - **On the page.** The translation stands where the text does, with
   `lang` set on it (and on every post's text now, so Han draws in the
   glyphs of its own language), and a quiet line under it in the
@@ -1966,6 +1969,28 @@ Asked by Livid 2026-09-19.
   round, is translated there, and is back a round after it lands. The
   public hub still names languages itself, a second a post, since the
   pages join a translation to its post's language.
+- **Japanese** (2026-09-22, Livid: "add Japanese translation logic and
+  do a backfill job", the day after the pages learned to speak it). `ja`
+  is the third of `lang.Targets`, and that one list is what the owed
+  query, the take rule of replication, `-retranslate -to` and the
+  reader's target all read, so nothing else named the languages. The
+  prompt's extra for Japanese asks for the half-width space between
+  Japanese and Latin the pages' dates have and for Japanese
+  punctuation. `Check` reads the script: a Japanese translation of
+  forty letters or more has kana, a Chinese one is not a quarter kana
+  (still Japanese), an English one is not half Han and kana. A
+  Japanese reader reads `ja` now, where they read `en` the day before.
+  **The backfill** is the queue itself: every post with words and a
+  language but no `ja` row is owed, newest first, and the host hub's
+  translator works through them while the public hub takes each one on
+  its next round. A thousand posts at the two to four minutes a
+  translation takes at `max` is days one at a time, so `"parallel": n`
+  in the `ollama` block (`Translator.Parallel`, `drainN`) asks for n at
+  once: the page is worked n at a time, each n judged in the order
+  listed once all are back, so the step-over and the three-misses rule
+  read as before, and 1 is exactly the old loop. The account pays for
+  the parallelism; 1 is the default, and the number the host ran the
+  backfill at is in the memory of the day.
 - Not built: translations in the JSON API and the Hub app, search inside
   translations, a Traditional Chinese target, a hub with no model at all
   taking its peers' languages along with their translations, and an
