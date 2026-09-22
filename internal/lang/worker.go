@@ -239,15 +239,16 @@ func (t *Translator) Run() {
 	run(t.wake, 40*time.Second, t.pass) // after the languages' first pass has begun
 }
 
-// tidy runs the punctuation rule (FullWidth) over the Chinese
-// translations kept before it, once at start: a translation is
-// rewritten only when the rule changes it and it still passes Check, so
-// after the first start this finds nothing to do.
+// tidy runs the punctuation rule (Tidy: FullWidth for Chinese,
+// FullWidthJa for Japanese) over the translations kept before it, once
+// at start: a translation is rewritten only when the rule changes it
+// and it still passes Check, so after the first start this finds
+// nothing to do.
 func (t *Translator) tidy() {
 	n := 0
 	for _, to := range Targets {
-		if !strings.HasPrefix(to, "zh") {
-			continue
+		if Tidy(to, "a:b") == "a:b" && Tidy(to, "中:文") == "中:文" && Tidy(to, "か:な") == "か:な" {
+			continue // a language the rule leaves alone
 		}
 		kept, err := t.St.KeptTranslations(to)
 		if err != nil {
@@ -255,7 +256,7 @@ func (t *Translator) tidy() {
 			return
 		}
 		for _, k := range kept {
-			set := FullWidth(k.Text)
+			set := Tidy(to, k.Text)
 			if set == k.Text || Check(k.Source, set, to) != nil {
 				continue
 			}

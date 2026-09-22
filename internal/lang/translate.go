@@ -90,10 +90,7 @@ func (d *Model) Translate(ctx context.Context, text, from, to, note string) (str
 	if err != nil {
 		return "", err
 	}
-	out := strings.TrimSpace(answer)
-	if strings.HasPrefix(to, "zh") {
-		out = FullWidth(out) // the model's one habit, set right by rule
-	}
+	out := Tidy(to, strings.TrimSpace(answer)) // the model's one habit, set right by rule
 	if err := Check(text, out, to); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrAnswer, err)
 	}

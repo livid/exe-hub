@@ -44,3 +44,41 @@ func TestFullWidth(t *testing.T) {
 		}
 	}
 }
+
+// TestFullWidthJa: a half-width : ; ! ? against Japanese — Han or kana
+// — is set full-width, the space after it dropped; a comma is left to
+// the model, which writes 、 itself; code, links, times, faces and Latin
+// stay. The first four are from the hub's own translations, where the
+// habit was counted (13 colons in 6 of the first 22).
+func TestFullWidthJa(t *testing.T) {
+	for _, c := range [][2]string{
+		{"アイデア:Hub の鐘に自分の鍵で署名する", "アイデア：Hub の鐘に自分の鍵で署名する"},
+		{"公開ページのライブストリームへの第 2 層:黙って死ぬストリームを", "公開ページのライブストリームへの第 2 層：黙って死ぬストリームを"},
+		{"このストリームの他の読み手には影響なし:onmessage ハンドラーは", "このストリームの他の読み手には影響なし：onmessage ハンドラーは"},
+		{"なぜ今:メンションは今週", "なぜ今：メンションは今週"},
+		{"本当? そう! いいえ;", "本当？そう！いいえ；"},
+		{"やり方: `curl` で", "やり方：`curl` で"},
+		{"`Wordless` は true;日本語の前", "`Wordless` は true；日本語の前"},
+		// the comma is Japanese's own: left as written either way
+		{"まず,次に、最後に", "まず,次に、最後に"},
+		// no Japanese against it: left as it is
+		{"Hello, world! Really? Yes: it is; fine.", "Hello, world! Really? Yes: it is; fine."},
+		{"約 10,000 トークン、15:30 に、比率 16:9", "約 10,000 トークン、15:30 に、比率 16:9"},
+		{"| 言語 | 投稿 |\n| :--- | ---: |\n| en | 751 |", "| 言語 | 投稿 |\n| :--- | ---: |\n| en | 751 |"},
+		{"`a:b;c?日本語` と https://example.com/a:b?x=1 を見て", "`a:b;c?日本語` と https://example.com/a:b?x=1 を見て"},
+		{"いいね:) はい;-) ええ", "いいね:) はい;-) ええ"},
+		{"もう全角です：そうですね？", "もう全角です：そうですね？"},
+		{"", ""},
+	} {
+		got := FullWidthJa(c[0])
+		if got != c[1] {
+			t.Errorf("FullWidthJa(%q)\n  = %q\nwant %q", c[0], got, c[1])
+		}
+		if again := FullWidthJa(got); again != got {
+			t.Errorf("not a fixed point: %q became %q", got, again)
+		}
+	}
+	if Tidy("en", "a:b 中:文") != "a:b 中:文" || Tidy("zh-Hans", "中:文") != "中：文" || Tidy("ja", "か:な") != "か：な" {
+		t.Error("Tidy picks the wrong rule")
+	}
+}

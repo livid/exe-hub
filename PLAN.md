@@ -1894,7 +1894,15 @@ the original one press away. Asked by Livid 2026-09-19.
   before `Check`, and once at start over the ones already kept,
   rewriting only what it changes that still passes `Check`; after the
   first start it finds nothing. On a copy of the host hub that was 28
-  marks in 11 of 49 kept translations, each read and right.
+  marks in 11 of 49 kept translations, each read and right. **Japanese
+  the same** (`lang.FullWidthJa`, 2026-09-22, the night the target was
+  added): a read of the first 22 kept Japanese translations found one
+  habit, a half-width colon set straight against Japanese — "第 2
+  層:黙って", "影響なし:onmessage", 13 in 6 posts — and nothing else, so
+  `: ; ! ?` turn full-width against Han or kana by the same rule, and
+  the comma is left alone, since Japanese sets its own, 、, and the
+  model does. `lang.Tidy(to, text)` picks the rule for a target, in
+  `Translate` and in the start-up pass over kept rows.
 - **One translation again** (`exe-hub -retranslate <post> [-to <lang>]
   [-note "…"]`). The shape check cannot judge words, and a read found
   one clause put wrong: "six columns, five set right, five rows", five
