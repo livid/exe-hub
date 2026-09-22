@@ -854,7 +854,8 @@ func strip(body, open string) string {
 }
 
 // TestWebPicture: a picture embed renders as a viewer link carrying its
-// name, and the page ships the viewer script.
+// name, and the page ships the viewer script, which keeps one window a
+// picture.
 func TestWebPicture(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	const cid = "bafybeieeqqg3m4keu6lt3bwmo6s2gofxyrrn3sbyayw63kvxzrq4p5rdsy"
@@ -870,6 +871,10 @@ func TestWebPicture(t *testing.T) {
 	}
 	if !strings.Contains(body, `closest("a.pic, a.page")`) {
 		t.Error("viewer script missing")
+	}
+	// a second click on a picture already open raises its window, no new one
+	if !strings.Contains(body, `find(w => w.dataset.src === src)`) || !strings.Contains(body, `if (had) { front(had); return; }`) {
+		t.Error("viewer does not raise the window a picture already has")
 	}
 }
 

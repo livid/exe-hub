@@ -811,9 +811,15 @@ document.addEventListener("change", e => {
     w.style.left = Math.max(0, Math.min(w.offsetLeft, vw - w.offsetWidth)) + "px";
     w.style.top = Math.max(0, Math.min(w.offsetTop, vh - w.offsetHeight)) + "px";
   }));
+  // one window a picture (or a page): a second click on one already open
+  // raises its window where it is, moved or not, instead of stacking another
+  const shown = src => [...document.querySelectorAll(".viewer")].find(w => w.dataset.src === src);
   const open = (src, name) => {
+    const had = shown(src);
+    if (had) { front(had); return; }
     const w = document.createElement("div");
     w.className = "window viewer";
+    w.dataset.src = src;
     w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
       '<span class="title"></span><span class="stripe"></span></div>' +
       '<div class="frame"><img alt=""><div class="statusbar"><span></span></div></div>';
@@ -877,8 +883,11 @@ document.addEventListener("change", e => {
     return text.slice(0, at) + base + text.slice(at);
   };
   const openPage = async (href, name, cid) => {
+    const had = shown(href);
+    if (had) { front(had); return; }
     const w = document.createElement("div");
     w.className = "window viewer pageview";
+    w.dataset.src = href;
     w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
       '<span class="title"></span><span class="stripe"></span><span class="tbox zoom" title="' + T("zoom") + '"></span></div>' +
       '<div class="frame"><iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" title=""></iframe><div class="statusbar"><span>' + T("loading") + '</span></div></div>';

@@ -511,7 +511,10 @@ small inline scripts and a push-only service worker: the local-time
 rewrite (below), videos that play in view (see Video and sound), the picture
 viewer — a click on a picture opens it in a window of its own (fixed,
 cascading, dragged by its title bar, closed by its box or Escape, size
-in pixels on its status line), like the desktop's PictureViewer — and,
+in pixels on its status line), like the desktop's PictureViewer; a
+second click on a picture already open raises its window where it is
+rather than stacking another (Livid, 2026-09-22), and a page's window
+is kept the same way — and,
 on the home page's first page and every thread, the live script
 (below), the first page alone wearing the Notify bell (see
 Notifications). Without script the link opens the picture and the
