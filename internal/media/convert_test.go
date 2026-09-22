@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image/png"
 	"os"
 	"os/exec"
@@ -324,4 +325,71 @@ func TestConvertFile(t *testing.T) {
 	}
 	st, _ := os.Stat(res.File)
 	t.Logf("%s with %s in %s: %+v, %d bytes", in, c.Encoder(), time.Since(start).Round(time.Millisecond), *res, st.Size())
+}
+
+// ffmpeg's last line is a trailer that says the same of every failed
+// run; the error names the cause said before it.
+func TestErrLine(t *testing.T) {
+	for in, want := range map[string]string{
+		"[h264_nvenc @ 0xc29e578b76f0] dl_fn->cuda_dl->cuInit(0) failed -> CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected\n" +
+			"[vost#0:0/h264_nvenc @ 0xc29e578b7370] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.\n" +
+			"Error while filtering: Unknown error occurred\n" +
+			"[out#0/mp4 @ 0xc29e578b60b0] Nothing was written into output file, because at least one of its streams received no packets.\n": "[h264_nvenc] dl_fn->cuda_dl->cuInit(0) failed -> CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected",
+		"x264 [error]: baseline profile doesn't support 4:4:4\n[libx264 @ 0xae1a0405f3c0] Error setting profile baseline.\n" +
+			"[vost#0:0/libx264 @ 0xae1a0405f040] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.\n" +
+			"Error while filtering: Invalid argument\n[out#0/mp4 @ 0xae1a0405dd80] Nothing was written into output file, because at least one of its streams received no packets.\n": "x264 [error]: baseline profile doesn't support 4:4:4; [libx264] Error setting profile baseline.",
+		"MESA: error: something about another driver\nFailed to set value 'vulkan=vk' for option 'init_hw_device': Generic error in an external library\n" +
+			"Error parsing global options: Generic error in an external library\n": "Failed to set value 'vulkan=vk' for option 'init_hw_device': Generic error in an external library",
+		"[out#0/mp4 @ 0x1] Nothing was written into output file, because at least one of its streams received no packets.\n":                   "[out#0/mp4] Nothing was written into output file, because at least one of its streams received no packets.",
+		"[hevc @ 0x1] Could not find ref with POC 3\n[hevc @ 0x1] Could not find ref with POC 3\n[hevc @ 0x1] Could not find ref with POC 3\n": "[hevc] Could not find ref with POC 3",
+		"":            "",
+		"TU: noise\n": "",
+	} {
+		if got := errLine(in); got != want {
+			t.Errorf("errLine(%q)\n got %q\nwant %q", in, got, want)
+		}
+	}
+}
+
+// An NVENC session that cannot open — the GPU out of memory under a model
+// served beside the hub, though it ran at start — is not the end of the
+// clip: it is encoded with x264. When that fails too, the error names the
+// cause, not ffmpeg's trailer.
+func TestConvertFallsBackToX264(t *testing.T) {
+	c := testConverter(t)
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.mp4")
+	ffmpeg(t, c, "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=10", "-t", "2", "-c:v", "libx264", in)
+	// ffmpeg as it is when NVENC is out of memory: the encoder's lines
+	// and the trailer, and every other run as it was
+	fail := "echo '[h264_nvenc @ 0xaaaa] OpenEncodeSessionEx failed: out of memory (10): (no details)' >&2\n" +
+		"echo '[vost#0:0/h264_nvenc @ 0xaaab] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.' >&2\n" +
+		"echo '[out#0/mp4 @ 0xaaac] Nothing was written into output file, because at least one of its streams received no packets.' >&2\nexit 171\n"
+	wrap := filepath.Join(dir, "ffmpeg")
+	os.WriteFile(wrap, []byte("#!/bin/sh\nfor a in \"$@\"; do if [ \"$a\" = h264_nvenc ]; then\n"+fail+"fi; done\nexec "+c.FFmpeg+" \"$@\"\n"), 0o755)
+	var logs []string
+	broken := *c
+	broken.FFmpeg, broken.NVENC, broken.Vulkan = wrap, true, false
+	broken.Log = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
+	out := filepath.Join(dir, "out")
+	os.MkdirAll(out, 0o700)
+	res, err := broken.Convert(context.Background(), in, out, nil)
+	if err != nil {
+		t.Fatalf("with NVENC out of memory: %v", err)
+	}
+	if st, err := os.Stat(res.File); err != nil || st.Size() == 0 {
+		t.Fatalf("no output: %v", err)
+	}
+	if v := probeOut(t, c, res.File)["streams"].([]any)[0].(map[string]any); v["codec_name"] != "h264" {
+		t.Errorf("x264 wrote %v", v["codec_name"])
+	}
+	if len(logs) != 1 || !strings.Contains(logs[0], "NVENC failed (ffmpeg: [h264_nvenc] OpenEncodeSessionEx failed: out of memory (10): (no details)); encoding with x264") {
+		t.Errorf("log: %q", logs)
+	}
+	// every run fails: the cause is what the job says
+	os.WriteFile(wrap, []byte("#!/bin/sh\n"+fail), 0o755)
+	_, err = broken.Convert(context.Background(), in, out, nil)
+	if err == nil || !strings.Contains(err.Error(), "OpenEncodeSessionEx failed: out of memory") || strings.Contains(err.Error(), "Nothing was written") {
+		t.Errorf("error names the trailer, not the cause: %v", err)
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -205,7 +206,7 @@ func (c *Converter) probeJSON(ctx context.Context, args ...string) ([]byte, erro
 	cmd := command(ctx, c.FFprobe, args...)
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrUnreadable, lastLine(stderr.String()))
+		return nil, fmt.Errorf("%w: %s", ErrUnreadable, errLine(stderr.String()))
 	}
 	return stdout.Bytes(), nil
 }
@@ -330,6 +331,14 @@ func (c *Converter) video(ctx context.Context, in, dir string, p *Probe, loop bo
 			c.Log("media: GPU chain failed (%v); converting on the CPU", err)
 			gpu = false
 			err = run(c.progress(p.Duration, progress), c.videoArgs(in, out, v, w, h, vbps, abps, fps, false, nvenc)...)
+		}
+		if err != nil && nvenc {
+			// an encode session can fail to open on a GPU that ran fine
+			// at start (out of memory under a model served beside the
+			// hub); x264 writes the file all the same
+			c.Log("media: NVENC failed (%v); encoding with x264", err)
+			nvenc = false
+			err = run(c.progress(p.Duration, progress), c.videoArgs(in, out, v, w, h, vbps, abps, fps, false, false)...)
 		}
 		if err != nil {
 			return nil, err
@@ -517,7 +526,7 @@ func (c *Converter) run(ctx context.Context, watch func(io.Reader), args ...stri
 		if ctx.Err() != nil {
 			return fmt.Errorf("ffmpeg stopped: %w", ctx.Err())
 		}
-		return fmt.Errorf("ffmpeg: %s", or(lastLine(stderr.String()), err.Error()))
+		return fmt.Errorf("ffmpeg: %s", or(errLine(stderr.String()), err.Error()))
 	}
 	return nil
 }
@@ -530,17 +539,49 @@ func command(ctx context.Context, name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-// lastLine is the last line of ffmpeg's errors that says something: the
-// Vulkan loader's complaints about other drivers are noise.
-func lastLine(s string) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
-		if l != "" && !strings.HasPrefix(l, "MESA:") && !strings.HasPrefix(l, "TU:") {
-			return l
+// errLine is what ffmpeg's errors say, in a line: the last two distinct
+// lines that name a cause, heap addresses dropped. The Vulkan loader's
+// complaints about other drivers are noise, and ffmpeg closes every
+// failed run with the same trailers — "Nothing was written into output
+// file", "Error while filtering", "Error while opening encoder - maybe
+// incorrect parameters" — which as the last line hid the one that
+// mattered (an encoder that could not open because the GPU was out of
+// memory). When nothing else was said the last line stands.
+func errLine(s string) string {
+	var lines []string
+	var last string
+	for _, l := range strings.Split(s, "\n") {
+		l = strings.TrimSpace(l)
+		if l == "" || strings.HasPrefix(l, "MESA:") || strings.HasPrefix(l, "TU:") {
+			continue
+		}
+		l = heapAddr.ReplaceAllString(l, "]")
+		last = l
+		if trailer(l) || (len(lines) > 0 && lines[len(lines)-1] == l) {
+			continue
+		}
+		lines = append(lines, l)
+	}
+	if len(lines) == 0 {
+		return last
+	}
+	if len(lines) > 2 {
+		lines = lines[len(lines)-2:]
+	}
+	return strings.Join(lines, "; ")
+}
+
+var heapAddr = regexp.MustCompile(` @ 0x[0-9a-f]+\]`)
+
+// trailer is a line ffmpeg says after the cause, whatever it was.
+func trailer(l string) bool {
+	for _, t := range []string{"Nothing was written into output file", "Error while filtering",
+		"Error while opening encoder - maybe incorrect parameters", "Conversion failed", "Error parsing global options"} {
+		if strings.Contains(l, t) {
+			return true
 		}
 	}
-	return ""
+	return false
 }
 
 func minutes(s float64) string {

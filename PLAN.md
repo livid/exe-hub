@@ -1391,7 +1391,13 @@ ffmpeg) does not, and draws what it mirrors all the same.
   edge, so the turn happens after download, at the output size. Any other
   codec, or a GPU run that fails, goes through the CPU: swscale (zscale +
   hable for PQ/HLG) with autorotate. A test compares GPU and CPU frames
-  and edges for 90, −90 and 180 on H.264 and HEVC.
+  and edges for 90, −90 and 180 on H.264 and HEVC. An NVENC session that
+  will not open although it ran at start (2026-09-22: the GB10's unified
+  memory full under a model served beside the hub, the kernel logging
+  NVRM out-of-memory, Vulkan and NVENC both refused) falls to x264, which
+  writes the file all the same. A failed run's error names the line that
+  says why, addresses dropped, not ffmpeg's closing trailer ("Nothing was
+  written into output file…"), which is all the job used to carry.
 - **Sound → AAC m4a** (`ipod` muxer, brand M4A; up to 160 kb/s, less if
   the cap needs it), with a PNG waveform as its poster (`showwavespic`,
   960×96, #262626 on clear, twice the 480×48 the pages show it at). A
