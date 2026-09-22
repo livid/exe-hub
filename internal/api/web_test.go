@@ -129,6 +129,7 @@ func TestWebHome(t *testing.T) {
 		`placeholder="搜索帖子"`, `<button class="btn" type="submit">搜索</button>`,
 		`<span class="title">发帖</span>`, `<button type="button" class="btn signin">用 Solana 登录</button>`,
 		`"checking":"正在检查这个地址…"`, // the scripts' words, as JSON in the head
+		`<span class="popup lang" id="lang"><select aria-label="语言" title="语言"><option value="en">English</option><option value="zh" selected>中文</option><option value="ja">日本語</option></select><span class="well"><i><b></b></i></span></span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Chinese home lacks %q\n%s", want, body)
@@ -150,6 +151,7 @@ func TestWebHome(t *testing.T) {
 		`<span class="m"><span data-n="members">1</span> 人のメンバー · </span><span data-n="posts">1</span> 件の投稿`,
 		`placeholder="投稿を検索"`, `<span class="title">投稿</span>`, `<button type="button" class="btn signin">Solana でサインイン</button>`,
 		`"checking":"このアドレスを確認しています…"`,
+		`<option value="ja" selected>日本語</option>`, `aria-label="言語"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Japanese home lacks %q\n%s", want, body)

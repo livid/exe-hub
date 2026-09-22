@@ -2102,6 +2102,20 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   `~/tools/playwright/exe-hub-lang-nav-test.js`, an English browser
   opening a Japanese thread and leaving by each exit, searching,
   following a mention and coming back from a 404, Japanese throughout.
+- **A language menu** (2026-09-22, Livid: a dropdown beside the bell,
+  built from the OS 9 pop-up the Weather app has, reused rather than
+  written again or copied). The find strip ends in a pop-up menu button
+  reading English, 中文 or 日本語, the page's language selected; a choice
+  opens the same page in that language, `?lang=` set and the rest of the
+  address kept, and the links carry it from there. Without script it
+  shows the language and does nothing more. The button is the shared
+  block: `popup.css` in exe-stats beside the chrome, taken here as
+  `{{popup}}` as the chrome is `{{chrome}}`, and served by the exe
+  daemon at `/platinum/popup.css` to the Weather app and Blue Pencil,
+  which link it in place of the copies they carried — one block, three
+  pages, and a fix to it reaches all of them. The `language` key names
+  it for a screen reader. Checked beside the Weather app's own at DPR 1,
+  1.5 and 2 (`exe-hub-lang-menu-test.js`).
 - The stats desk's own words (exe-stats page.html) stay English: the
   package draws the exe homepage's desk too, and its columns are the
   report's. Its title and its error pages speak the language.

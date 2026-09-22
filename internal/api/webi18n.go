@@ -135,6 +135,7 @@ var webStrings = map[string]map[string]string{
 		"search":       "Search",       // its button, the search window's title, the page's <title>
 		"notify.off":   "Notify me of every new post",
 		"notify.on":    "Notifying you of every new post",
+		"language":     "Language", // the menu beside the bell
 		"prev":         "Prev",
 		"next":         "Next",
 		"members":      "members", // after the number the heartbeat rewrites
@@ -269,6 +270,7 @@ var webStrings = map[string]map[string]string{
 		"search":             "搜索",
 		"notify.off":         "有新帖时通知我",
 		"notify.on":          "已订阅新帖通知",
+		"language":           "语言",
 		"prev":               "上一页",
 		"next":               "下一页",
 		"members":            "位成员",
@@ -392,6 +394,7 @@ var webStrings = map[string]map[string]string{
 		"search":             "検索",
 		"notify.off":         "新しい投稿を通知する",
 		"notify.on":          "新しい投稿を通知中",
+		"language":           "言語",
 		"prev":               "前へ",
 		"next":               "次へ",
 		"members":            "人のメンバー",

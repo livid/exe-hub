@@ -40,6 +40,9 @@
    and it is written once. It follows the exe desktop, which defines the
    look. What this page adds to it is below. */
 {{chrome}}
+/* The pop-up menu button, the shared block (exe-stats popup.css, the
+   one Weather and Blue Pencil link): the language menu on the find strip. */
+{{popup}}
 
 /* Mac OS 9 Platinum, the exe desktop's chrome reduced to what a page
    needs: a window with a striped title bar and a hard shadow, a sunken
@@ -164,6 +167,9 @@ a.mention { text-decoration: none; }
 .find .bell[aria-pressed=true] .f { fill: #997a1f; } .find .bell[aria-pressed=true] .s { fill: #66511a; } .find .bell[aria-pressed=true] .w { fill: #ccaa44; }
 .find .bell:focus { outline: none; }
 .find .bell:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+.find .lang { flex: none; width: 84px; } /* "English", the longest name, and the arrow well */
+@media (max-width: 480px) { .find { gap: 8px; } } /* four controls on a phone: the field keeps its width */
+.find .lang select:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
 /* posting from a Solana wallet: a window of its own above the posts —
    Post over the feed on the home page, Reply over the thread on a thread
    page — its frame holding one strip on the find strip's platinum.
@@ -765,6 +771,17 @@ document.addEventListener("click", e => {
   for (const t of line.parentNode.querySelectorAll(":scope > .text")) t.hidden = !t.hidden;
   line.firstElementChild.hidden = !line.firstElementChild.hidden;
   [a.textContent, a.dataset.other] = [a.dataset.other, a.textContent];
+});
+// The language menu on the find strip: a choice opens this same page in
+// that language, ?lang= set and everything else in the address kept,
+// and the links carry it from there. Without script the menu shows the
+// page's language and does nothing more.
+document.addEventListener("change", e => {
+  if (!(e.target instanceof HTMLSelectElement) || !e.target.closest("#lang")) return;
+  const u = new URL(location.href);
+  u.searchParams.set("lang", e.target.value);
+  u.hash = "";
+  location.assign(u);
 });
 </script>
 <script>
@@ -1736,7 +1753,7 @@ document.addEventListener("click", e => {
 
 {{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
 
-{{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
+{{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}<span class="popup lang" id="lang"><select aria-label="{{T "language"}}" title="{{T "language"}}"><option value="en"{{if eq .L.Code "en"}} selected{{end}}>English</option><option value="zh"{{if eq .L.Code "zh"}} selected{{end}}>中文</option><option value="ja"{{if eq .L.Code "ja"}} selected{{end}}>日本語</option></select><span class="well"><i><b></b></i></span></span></form>
 {{end}}
 
 {{define "compose"}}<div class="window composer">
