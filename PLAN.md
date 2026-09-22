@@ -2120,8 +2120,14 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   daemon at `/platinum/popup.css` to the Weather app and Blue Pencil,
   which link it in place of the copies they carried — one block, three
   pages, and a fix to it reaches all of them. The `language` key names
-  it for a screen reader. Checked beside the Weather app's own at DPR 1,
-  1.5 and 2 (`exe-hub-lang-menu-test.js`).
+  it for a screen reader. A thread page has no find strip, so there the
+  menu stands at the right end of the strip that leads back to the feed,
+  Feed at its left (2026-09-22, Livid's ask), in the pager's third column
+  where Next stands on a list; on a phone Feed keeps its word, since the
+  arrows-only rule is for the buttons beside the counts. One menu on a
+  page, whichever strip carries it. Checked beside the Weather app's own
+  at DPR 1, 1.5 and 2, and on the thread page at the same three and a
+  phone (`exe-hub-lang-menu-test.js`).
 - The stats desk's own words (exe-stats page.html) stay English: the
   package draws the exe homepage's desk too, and its columns are the
   report's. Its title and its error pages speak the language.

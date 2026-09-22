@@ -41,7 +41,8 @@
    look. What this page adds to it is below. */
 {{chrome}}
 /* The pop-up menu button, the shared block (exe-stats popup.css, the
-   one Weather and Blue Pencil link): the language menu on the find strip. */
+   one Weather and Blue Pencil link): the language menu on the find
+   strip, and on a thread page's top strip. */
 {{popup}}
 
 /* Mac OS 9 Platinum, the exe desktop's chrome reduced to what a page
@@ -93,15 +94,16 @@ a.mention { text-decoration: none; }
 /* a phone: the words will not fit beside the counts (an iPhone sets the
    strip in Verdana, a wide face), so Prev and Next shrink to their
    arrows, as the Hub app's buttons do on a phone — 8px either side of
-   the glyph, the word still there for a screen reader. Feed, alone on a
-   thread's strip, has the room and keeps its word. Narrower than any
+   the glyph, the word still there for a screen reader. Feed, with only
+   the language menu across from it on a thread's strip and no counts
+   between, has the room and keeps its word. Narrower than any
    current phone, the counts let the members go first; and whatever the
    face or the numbers, the buttons keep their size (the outer columns
    never go under their button) and the counts give way, ellipsized,
    8px clear of either button — nothing on the strip can overlap. */
 @media (max-width: 480px) {
-  .pager .btn:not(:only-child) { min-width: 0; padding: 2px 8px; }
-  .pager .btn:not(:only-child) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .pager .btn:has(~ .stats), .pager .stats ~ .btn { min-width: 0; padding: 2px 8px; }
+  .pager .btn:has(~ .stats) span, .pager .stats ~ .btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 @media (max-width: 359px) { .pager .stats .m { display: none; } }
 /* under a finger a 20px button is a small mark: each of the strip's
@@ -167,9 +169,13 @@ a.mention { text-decoration: none; }
 .find .bell[aria-pressed=true] .f { fill: #997a1f; } .find .bell[aria-pressed=true] .s { fill: #66511a; } .find .bell[aria-pressed=true] .w { fill: #ccaa44; }
 .find .bell:focus { outline: none; }
 .find .bell:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
-.find .lang { flex: none; width: 84px; } /* "English", the longest name, and the arrow well */
+.lang { flex: none; width: 84px; } /* "English", the longest name, and the arrow well */
 @media (max-width: 480px) { .find { gap: 8px; } } /* four controls on a phone: the field keeps its width */
-.find .lang select:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
+.lang select:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
+/* on a thread page, which has no find strip, the menu stands at the
+   right end of the strip that leads back to the feed, across from Feed
+   in the pager's third column, 12px from the frame's edge like Next */
+.pager .lang { grid-column: 3; justify-self: end; }
 /* posting from a Solana wallet: a window of its own above the posts —
    Post over the feed on the home page, Reply over the thread on a thread
    page — its frame holding one strip on the find strip's platinum.
@@ -553,7 +559,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <div class="window">
   <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread"{{end}}>
-    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a></div>
+    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{template "lang" .}}</div>
     {{template "post" .Post}}
     {{range .Replies}}{{template "post" .}}{{end}}
     <div class="statusbar"><span>{{T "replies" "n" (len .Replies)}}</span></div>
@@ -1753,8 +1759,14 @@ document.addEventListener("change", e => {
 
 {{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
 
-{{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}<span class="popup lang" id="lang"><select aria-label="{{T "language"}}" title="{{T "language"}}"><option value="en"{{if eq .L.Code "en"}} selected{{end}}>English</option><option value="zh"{{if eq .L.Code "zh"}} selected{{end}}>中文</option><option value="ja"{{if eq .L.Code "ja"}} selected{{end}}>日本語</option></select><span class="well"><i><b></b></i></span></span></form>
+{{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}{{template "lang" .}}</form>
 {{end}}
+
+{{/* The language menu, the shared pop-up: at the end of the find strip,
+     and at the right end of a thread page's top strip, which has no find
+     strip, across from Feed. One on a page, so the change listener finds
+     it by id. */}}
+{{define "lang"}}<span class="popup lang" id="lang"><select aria-label="{{T "language"}}" title="{{T "language"}}"><option value="en"{{if eq .L.Code "en"}} selected{{end}}>English</option><option value="zh"{{if eq .L.Code "zh"}} selected{{end}}>中文</option><option value="ja"{{if eq .L.Code "ja"}} selected{{end}}>日本語</option></select><span class="well"><i><b></b></i></span></span>{{end}}
 
 {{define "compose"}}<div class="window composer">
 <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{if .ReplyTo}}{{T "reply"}}{{else}}{{T "post"}}{{end}}</span><span class="stripe"></span></div>

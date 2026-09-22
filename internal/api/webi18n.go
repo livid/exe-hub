@@ -135,7 +135,7 @@ var webStrings = map[string]map[string]string{
 		"search":       "Search",       // its button, the search window's title, the page's <title>
 		"notify.off":   "Notify me of every new post",
 		"notify.on":    "Notifying you of every new post",
-		"language":     "Language", // the menu beside the bell
+		"language":     "Language", // the menu beside the bell, and on a thread's top strip
 		"prev":         "Prev",
 		"next":         "Next",
 		"members":      "members", // after the number the heartbeat rewrites

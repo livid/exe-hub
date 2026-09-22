@@ -240,9 +240,12 @@ func TestWebThreadProfile(t *testing.T) {
 		t.Errorf("thread page: %d\n%s", code, body)
 	}
 	// the way back to the feed is a push button on the strip heading the
-	// page, above the post; the status line along the bottom is text only
+	// page, above the post, and the language menu stands at the strip's
+	// other end (the thread page has no find strip to carry it); the
+	// status line along the bottom is text only
 	if top := topStrip(body); !strings.HasPrefix(top, `<div class="pager top"><a class="btn prev back" href="/"><svg class="gl" viewBox="0 0 11 9"`) ||
-		!strings.HasSuffix(top, `</svg><span>Feed</span></a></div>`) || strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) {
+		!strings.HasSuffix(top, `</svg><span>Feed</span></a><span class="popup lang" id="lang"><select aria-label="Language" title="Language"><option value="en" selected>English</option><option value="zh">中文</option><option value="ja">日本語</option></select><span class="well"><i><b></b></i></span></span></div>`) ||
+		strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) || strings.Count(body, `id="lang"`) != 1 {
 		t.Errorf("thread page strip: %q", top)
 	}
 	if !strings.Contains(body, `<div class="statusbar"><span>1 reply</span></div>`) {
