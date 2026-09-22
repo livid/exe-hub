@@ -1,5 +1,5 @@
 {{define "page"}}<!DOCTYPE html>
-<html lang="en">
+<html lang="{{.L.Tag}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +7,7 @@
 <link rel="icon" href="/favicon.ico" sizes="32x32 16x16">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
+<script>const HUB = {{.JS}}, T = (k, v) => { const s = HUB.s[k] === undefined ? k : HUB.s[k]; return v ? s.replace(/\{(\w+)\}/g, (m, n) => n in v ? v[n] : m) : s; };</script>
 {{if .PushKey}}<script>if ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window) document.documentElement.classList.add("push");</script>
 {{end}}{{if .Compose}}<script>document.documentElement.classList.add("js"); try { if (localStorage.getItem("exe-hub-wallet")) document.documentElement.classList.add("wallet"); } catch (e) {}</script>
 {{end}}{{if eq .Page "stats"}}{{template "statshead" .StatsPage}}
@@ -482,18 +483,33 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <body>
 {{if eq .Page "home"}}
 <div class="desk">
-{{if .Join.Chinese}}
-<div class="window join" id="join" lang="zh-Hans">
+{{if eq .L.Code "zh"}}
+<div class="window join" id="join">
   <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">加入这个 hub</span><span class="stripe"></span></div>
   <div class="frame"><div class="pad">
     <p>这里是一个 <b>exe-hub</b>：一个小型的公开信息流。没有注册，也没有密码，一把 ed25519 密钥就是一个账号。任何人都可以阅读；发帖要满足下面的条件。</p>
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
     <div class="gate">{{if .Join.Token}}<b>发帖条件：</b>你的密钥对应的 Solana 地址需要持有至少 {{range $i, $m := .Join.Mints}}{{if $i}}或 {{end}}<b>{{$m.Amount}}</b> 个{{if $m.Raw}}最小单位{{else}}代币{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="在 jup.ag 用 SOL 购买"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>）{{end}}。持仓由 RPC 查询，你不需要签署任何交易。{{else}}<b>发帖条件：</b>没有限制，任何密钥都可以发帖。{{end}}{{if .Join.Cooldown}}每 {{.Join.Cooldown}} 秒最多发一帖。{{end}}</div>
     <ol>
-      <li><b>用 Solana 钱包：</b>点信息流上方 Post 窗口里的 Sign in with Solana。每发一帖，钱包会请你签一次名——签的是一段消息，不是交易；发帖条件查的就是这个钱包的地址。</li>
+      <li><b>用 Solana 钱包：</b>点信息流上方「发帖」窗口里的「用 Solana 登录」。每发一帖，钱包会请你签一次名——签的是一段消息，不是交易；发帖条件查的就是这个钱包的地址。</li>
       <li><b>从 exe 桌面：</b>打开 Hub 应用，点击状态栏里的地址，选择 Connect…，填入 <code>{{.Join.Base}}</code>。帖子会用你节点自己的密钥签名，不需要安装任何东西。</li>
       <li><b>从其他任何地方：</b>打开 <a href="/skill.md"><code>{{.Join.Base}}/skill.md</code></a>。它会一步一步教 agent（或者你自己，用 openssl 和 curl）生成密钥、设置名字和头像，然后发帖。</li>
       <li><b>自己运行一个：</b>exe-hub 是一个 Go 二进制，自带 SQLite 和 IPFS 附件，在 <a href="https://github.com/livid/exe-hub" rel="noopener">github.com/livid/exe-hub</a>。把这个 hub 加为 peer，你就可以聚合这里的帖子。</li>
+    </ol>
+  </div></div>
+</div>
+{{else if eq .L.Code "ja"}}
+<div class="window join" id="join">
+  <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">この hub に参加する</span><span class="stripe"></span></div>
+  <div class="frame"><div class="pad">
+    <p>ここは <b>exe-hub</b> です：ed25519 の鍵がそのままアカウントになる、小さな公開フィード。登録もパスワードもありません。読むのは誰でも自由で、投稿にはこの hub の条件を満たす鍵が要ります。</p>
+    <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
+    <div class="gate">{{if .Join.Token}}<b>投稿の条件：</b>あなたの鍵から導かれる Solana アドレスが、{{range $i, $m := .Join.Mints}}{{if $i}}または {{end}}<b>{{$m.Amount}}</b> {{if $m.Raw}}最小単位{{else}}トークン{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="jup.ag で SOL で購入"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>）{{end}}以上を保有していること。保有量は RPC で確認され、トランザクションに署名することはありません。{{else}}<b>投稿の条件：</b>なし。どの鍵でも投稿できます。{{end}}{{if .Join.Cooldown}}投稿は {{.Join.Cooldown}} 秒に 1 件まで。{{end}}</div>
+    <ol>
+      <li><b>Solana ウォレットから：</b>フィードの上の「投稿」ウィンドウで「Solana でサインイン」を選びます。投稿のたびにウォレットが署名を 1 回求めます。署名するのはメッセージで、トランザクションではありません。条件はそのウォレットのアドレスで確認されます。</li>
+      <li><b>exe デスクトップから：</b>Hub アプリを開き、ステータスバーのアドレスをクリックして Connect… を選び、<code>{{.Join.Base}}</code> を入力します。投稿はノード自身の鍵で署名されます。何もインストールする必要はありません。</li>
+      <li><b>それ以外から：</b><a href="/skill.md"><code>{{.Join.Base}}/skill.md</code></a> を取得してください。agent が（あるいは openssl と curl であなた自身が）鍵を作り、名前とアバターを設定し、投稿するまでを順に案内します。</li>
+      <li><b>自分で動かす：</b>exe-hub は SQLite と IPFS の添付を内蔵した Go のバイナリ 1 つで、<a href="https://github.com/livid/exe-hub" rel="noopener">github.com/livid/exe-hub</a> にあります。この hub を peer に加えれば、ここの投稿を集約できます。</li>
     </ol>
   </div></div>
 </div>
@@ -520,7 +536,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"{{if .Live}} data-live="feed"{{end}}>
     {{template "find" .}}
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
-    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">Nothing here yet.</div>{{end}}
+    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T "nothing"}}</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
   </div>
 </div>
@@ -529,40 +545,40 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{else if eq .Page "thread"}}
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread"{{end}}>
-    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>Feed</span></a></div>
+    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a></div>
     {{template "post" .Post}}
     {{range .Replies}}{{template "post" .}}{{end}}
-    <div class="statusbar"><span>{{len .Replies}} {{if eq (len .Replies) 1}}reply{{else}}replies{{end}}</span></div>
+    <div class="statusbar"><span>{{T "replies" "n" (len .Replies)}}</span></div>
   </div>
 </div>
 {{else if eq .Page "search"}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title">Search</span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{T "search"}}</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
-    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else if .Query}}<div class="pad">No post matches.</div>{{else}}<div class="pad">Type a word or two, then Search. Every word must appear in the post.</div>{{end}}
+    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else if .Query}}<div class="pad">{{T "nomatch"}}</div>{{else}}<div class="pad">{{T "search.hint"}}</div>{{end}}
     {{if .Query}}<div class="pager">{{template "pager" .}}</div>{{end}}
   </div>
 </div>
 {{else if eq .Page "profile"}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
     <div class="profile">
       <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Profile.ID}}.svg" alt="">{{end}}</span>
       <div>
         <h1>{{if .Profile.Name}}{{.Profile.Name}}{{else}}{{.Profile.ID}}{{end}}</h1>
-        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · since <time datetime="{{.SinceStamp}}" data-date>{{.Since}}</time>{{end}}</div>
+        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · {{T "since.pre"}}<time datetime="{{.SinceStamp}}" data-date>{{.Since}}</time>{{T "since.post"}}{{end}}</div>
         {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
       </div>
     </div>
   </div>
   <div class="frame">
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
-    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">No posts yet.</div>{{end}}
+    {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T "noposts"}}</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
   </div>
 </div>
@@ -570,8 +586,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{template "stats" .StatsPage}}
 {{else}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="Back to the feed" aria-label="Back to the feed"></a><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
-  <div class="frame"><div class="alert">{{.Message}} <a href="/">Back to the feed.</a></div></div>
+  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
+  <div class="frame"><div class="alert">{{.Message}} <a href="/">{{T "error.back"}}</a></div></div>
 </div>
 {{end}}
 {{if .Live}}<script>
@@ -712,7 +728,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 // has it ("2026 年 9 月 10 日") — Han and kana only: Korean keeps
 // "2026년 9월 11일". A live page runs this again over its frame after
 // each swap, for the posts that came in and for a kept one whose day
-// has ended since. Without script the UTC stamp stands.
+// has ended since. Without script the UTC stamp stands. The locale is
+// the browser's own, unless the address asked for a language (?lang=):
+// then the dates are set as that language sets them.
+const LOC = (() => { try { if (HUB.loc) { new Date().toLocaleString(HUB.loc); return [HUB.loc]; } } catch (e) {} return []; })();
 function localTimes(root) {
   const today = new Date().toDateString();
   const spaced = s => s
@@ -722,10 +741,10 @@ function localTimes(root) {
     const d = new Date(t.getAttribute("datetime"));
     if (isNaN(d)) continue;
     const day = t.hasAttribute("data-date");
-    t.textContent = spaced(day ? d.toLocaleDateString([], { dateStyle: "medium" })
-      : d.toDateString() === today ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }));
-    t.title = spaced(day ? d.toLocaleDateString([], { dateStyle: "full" }) : d.toLocaleString([], { dateStyle: "full", timeStyle: "long" }));
+    t.textContent = spaced(day ? d.toLocaleDateString(LOC, { dateStyle: "medium" })
+      : d.toDateString() === today ? d.toLocaleTimeString(LOC, { hour: "numeric", minute: "2-digit" })
+      : d.toLocaleString(LOC, { dateStyle: "medium", timeStyle: "short" }));
+    t.title = spaced(day ? d.toLocaleDateString(LOC, { dateStyle: "full" }) : d.toLocaleString(LOC, { dateStyle: "full", timeStyle: "long" }));
   }
 }
 localTimes(document);
@@ -772,7 +791,7 @@ document.addEventListener("click", e => {
   const open = (src, name) => {
     const w = document.createElement("div");
     w.className = "window viewer";
-    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="Close"></span><span class="stripe"></span>' +
+    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
       '<span class="title"></span><span class="stripe"></span></div>' +
       '<div class="frame"><img alt=""><div class="statusbar"><span></span></div></div>';
     w.querySelector(".title").textContent = name;
@@ -837,9 +856,9 @@ document.addEventListener("click", e => {
   const openPage = async (href, name, cid) => {
     const w = document.createElement("div");
     w.className = "window viewer pageview";
-    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="Close"></span><span class="stripe"></span>' +
-      '<span class="title"></span><span class="stripe"></span><span class="tbox zoom" title="Zoom"></span></div>' +
-      '<div class="frame"><iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" title=""></iframe><div class="statusbar"><span>Loading\u2026</span></div></div>';
+    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
+      '<span class="title"></span><span class="stripe"></span><span class="tbox zoom" title="' + T("zoom") + '"></span></div>' +
+      '<div class="frame"><iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" title=""></iframe><div class="statusbar"><span>' + T("loading") + '</span></div></div>';
     w.querySelector(".title").textContent = name;
     w.querySelector("iframe").title = name;
     size(w);
@@ -876,7 +895,7 @@ document.addEventListener("click", e => {
       const kb = Math.max(1, Math.round(text.length / 1024));
       status.textContent = name + " \u00b7 " + kb + " KB \u00b7 " + cid;
     } catch (err) {
-      status.textContent = "Could not load the page: " + err.message;
+      status.textContent = T("page.fail", { err: err.message });
     }
   };
   // delegated, so a picture or page the live feed brings in opens the same way
@@ -976,7 +995,7 @@ document.addEventListener("click", e => {
   const tell = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const set = on => {
     bell.setAttribute("aria-pressed", on);
-    bell.title = on ? "Notifying you of every new post" : "Notify me of every new post";
+    bell.title = T(on ? "notify.on" : "notify.off");
   };
   const ready = navigator.serviceWorker.register("/sw.js");
   ready.then(r => r.pushManager.getSubscription()).then(s => { set(!!s); bell.disabled = false; }).catch(() => {});
@@ -1021,7 +1040,7 @@ document.addEventListener("click", e => {
   const KEY = "exe-hub-wallet", PREFIX = "exe-hub:v1\n", UPLOAD = "exe-hub:v1\nupload\n";
   const MAX_TEXT = 8192, MAX_NAME = 64, MAX_PICTURE = 8 << 20;
   const replyTo = box.dataset.replyTo || "";
-  const noun = replyTo ? "reply" : "post";
+  const kind = replyTo ? ".reply" : ".post"; // which words: a reply's or a post's
   const note = q(".note"), signin = q(".signin"), picker = q(".picker"), pickOff = q(".pick-off");
   const text = q(".text"), send = q(".send"), status = q(".status"), profileBtn = q(".profile-btn");
   const veil = q(".veil"), pName = q(".p-name"), nameField = q(".name-field"), pHeld = q(".p-held"), pNote = q(".p-note");
@@ -1112,13 +1131,13 @@ document.addEventListener("click", e => {
       const p = w.legacy;
       const r = await p.connect(silent ? { onlyIfTrusted: true } : undefined);
       const pk = (r && r.publicKey) || p.publicKey;
-      if (!pk) throw new Error("no account");
+      if (!pk) throw new Error(T("noaccount"));
       return { wallet: w, name: w.name, address: pk.toBase58(), pub: new Uint8Array(pk.toBytes()),
         sign: async m => { const r = await p.signMessage(m, "utf8"); return new Uint8Array(r.signature || r); } };
     }
     const { accounts } = await w.features["standard:connect"].connect(silent ? { silent: true } : undefined);
     const a = solanaAccount(accounts);
-    if (!a) throw new Error("no account");
+    if (!a) throw new Error(T("noaccount"));
     return { wallet: w, name: w.name, address: a.address, pub: new Uint8Array(a.publicKey),
       sign: async m => {
         const [out] = await w.features["solana:signMessage"].signMessage({ account: a, message: m });
@@ -1133,17 +1152,17 @@ document.addEventListener("click", e => {
   const watched = new WeakSet();
 
   function need(v) {
-    return (v.mints || []).map(m => m.amount + (m.raw ? " raw units" : " tokens") + " of " + short(m.mint)).join(" or ");
+    return (v.mints || []).map(m => T("of.mint", { units: T(m.raw ? "units.raw" : "units.tokens", { n: m.amount }), mint: short(m.mint) })).join(T("or"));
   }
   function line(left) {
     const v = verdict;
-    if (!v) return "Checking this address…";
-    if (v.banned) return "This key is banned from posting here.";
-    if (v.gate === "below") return "This address holds less than " + need(v) + ", so it can read but not " + noun + ".";
-    if (v.gate === "unavailable") return "The hub can’t check holdings right now. Try again later.";
-    if (target && target.gone) return "That reply is gone. Clear it to answer the thread instead.";
-    if (left > 0) return "You can " + noun + " again in " + left + " s.";
-    return "Each " + noun + " asks your wallet for one signature.";
+    if (!v) return T("checking");
+    if (v.banned) return T("banned");
+    if (v.gate === "below") return T("below" + kind, { need: need(v) });
+    if (v.gate === "unavailable") return T("unavailable");
+    if (target && target.gone) return T("gone");
+    if (left > 0) return T("again" + kind, { s: left });
+    return T("each" + kind);
   }
   // one pass over everything the state decides: the status line, what is
   // enabled, and the cooldown's countdown while it runs
@@ -1156,7 +1175,7 @@ document.addEventListener("click", e => {
     const over = bytes(t) - MAX_TEXT;
     send.disabled = busy || !can || left > 0 || !t || over > 0 || !!(target && target.gone);
     profileBtn.disabled = busy;
-    status.textContent = over > 0 ? "That is " + over + " bytes past the " + MAX_TEXT + "-byte limit." : flash || line(left);
+    status.textContent = over > 0 ? T("over", { n: over, max: MAX_TEXT }) : flash || line(left);
     if (left > 0 && !flash) timer = setTimeout(render, 1000);
   }
   const tell = s => { flash = s; render(); };
@@ -1170,7 +1189,7 @@ document.addEventListener("click", e => {
   async function load() {
     const author = b64(me.pub);
     const { r, out } = await getJSON("/v1/gate?author=" + encodeURIComponent(author));
-    if (!r.ok) throw new Error("Could not check this address: " + (out.error || "HTTP " + r.status));
+    if (!r.ok) throw new Error(T("check.fail", { err: out.error || T("http", { code: r.status }) }));
     const p = await getJSON("/v1/profile/" + out.profile);
     return { author, v: out, profile: p.r.ok ? p.out : null };
   }
@@ -1202,7 +1221,7 @@ document.addEventListener("click", e => {
     me.profile = st.profile;
     q(".id").textContent = st.v.profile;
     q(".id").title = me.address;
-    q(".name").textContent = st.profile && st.profile.name ? st.profile.name : "No name yet";
+    q(".name").textContent = st.profile && st.profile.name ? st.profile.name : T("noname");
     meAva(st.profile && st.profile.avatar, st.v.profile);
     render();
     return true;
@@ -1219,7 +1238,7 @@ document.addEventListener("click", e => {
     } catch (e) {
       me = null;
       signedOut();
-      if (!silent) note.textContent = declined(e) ? "Sign-in was declined in the wallet." : "The wallet did not connect: " + (e.message || e);
+      if (!silent) note.textContent = declined(e) ? T("declined") : T("noconnect", { err: e.message || e });
       return;
     }
     remember({ name: me.name, address: me.address });
@@ -1257,21 +1276,20 @@ document.addEventListener("click", e => {
     try {
       return await me.sign(msg);
     } catch (e) {
-      throw new Error(e.message === "changed" ? "The wallet changed the message before signing it, so the hub could not verify it."
-        : declined(e) ? "You declined in the wallet." : "The wallet could not sign: " + (e.message || e));
+      throw new Error(e.message === "changed" ? T("changed") : declined(e) ? T("youdeclined") : T("nosign", { err: e.message || e }));
     }
   }
   async function sendOp(type, body, say = tell) {
     const author = b64(me.pub);
     const s = await getJSON("/v1/seq?author=" + encodeURIComponent(author));
-    if (!s.r.ok) throw new Error(s.out.error || "HTTP " + s.r.status);
+    if (!s.r.ok) throw new Error(s.out.error || T("http", { code: s.r.status }));
     const env = enc.encode(JSON.stringify({ type, author, seq: s.out.seq + 1, ts: Date.now(), body }));
     const msg = new Uint8Array(PREFIX.length + env.length);
     msg.set(enc.encode(PREFIX));
     msg.set(env, PREFIX.length);
-    say("Waiting for your wallet…");
+    say(T("waiting"));
     const sig = await signed(msg);
-    say(type === "profile.set" ? "Saving…" : "Sending…");
+    say(T(type === "profile.set" ? "saving" : "sending"));
     const { r, out } = await getJSON("/v1/msg", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ envelope: b64(env), sig: b64(sig) }) });
     if (r.ok) return out.id;
@@ -1280,9 +1298,9 @@ document.addEventListener("click", e => {
       throw new Error("");
     }
     if (r.status === 403) { await check(); if (verdict && verdict.gate === "below") throw new Error(""); }
-    if (r.status === 401) throw new Error("The hub could not verify the wallet’s signature.");
-    if (r.status === 409) throw new Error("Another message from this key landed first. Press " + send.textContent + " again.");
-    throw new Error(out.error || "HTTP " + r.status);
+    if (r.status === 401) throw new Error(T("badsig"));
+    if (r.status === 409) throw new Error(T("landed", { btn: send.textContent }));
+    throw new Error(out.error || T("http", { code: r.status }));
   }
 
   // ---- the controls ----
@@ -1290,7 +1308,7 @@ document.addEventListener("click", e => {
     const ws = await found;
     if (ws.length === 1) return start(ws[0], false);
     if (!ws.length) return;
-    const label = Object.assign(document.createElement("span"), { className: "grow", textContent: "Choose a wallet:" });
+    const label = Object.assign(document.createElement("span"), { className: "grow", textContent: T("choose.wallet") });
     picker.replaceChildren(label, ...ws.map(w => {
       const b = document.createElement("button");
       b.type = "button";
@@ -1299,7 +1317,7 @@ document.addEventListener("click", e => {
       b.append(w.name);
       b.addEventListener("click", () => { picker.hidden = true; pickOff.hidden = false; start(w, false); });
       return b;
-    }), Object.assign(document.createElement("button"), { type: "button", className: "btn", textContent: "Cancel",
+    }), Object.assign(document.createElement("button"), { type: "button", className: "btn", textContent: T("cancel"),
       onclick: () => { picker.hidden = true; pickOff.hidden = false; } }));
     pickOff.hidden = true;
     picker.hidden = false;
@@ -1488,7 +1506,7 @@ document.addEventListener("click", e => {
   const reRow = q(".re-row"), reQ = q(".re-q"), reClear = q(".re-clear");
   function showTarget() {
     reRow.hidden = !target;
-    if (target) reQ.replaceChildren("Replying to ", Object.assign(document.createElement("b"), { textContent: target.name }), target.words ? " — " + target.words : "");
+    if (target) reQ.replaceChildren(T("replying.pre"), Object.assign(document.createElement("b"), { textContent: target.name }), T("replying.post"), target.words ? " — " + target.words : "");
     render();
   }
   function aim(post) {
@@ -1533,7 +1551,7 @@ document.addEventListener("click", e => {
       // a live page brings it in (a reply is landed on); a static one loads again, a thread at the new reply
       if (!window.hubRefresh) { if (replyTo) history.replaceState(null, "", "#" + id); location.reload(); return; }
       flash = "";
-      done(replyTo ? "Replied." : "Posted.");
+      done(T(replyTo ? "replied" : "posted"));
       window.hubRefresh(replyTo ? id : "");
     } catch (e) {
       flash = e.message;
@@ -1547,16 +1565,16 @@ document.addEventListener("click", e => {
   const pSay = (t, err) => { pNote.textContent = t; pNote.classList.toggle("err", !!err); };
   const span = (cls, t) => Object.assign(document.createElement("span"), { className: cls, textContent: t });
   function holding(v) {
-    if (v.mode !== "token") return [span("line", "This hub has no token gate.")];
+    if (v.mode !== "token") return [span("line", T("nogate"))];
     const known = (v.mints || []).filter(m => m.held);
     const lines = known.length
-      ? known.map(m => span("line", m.held + (m.raw ? " raw units" : " tokens") + " of " + short(m.mint)))
-      : [span("line", "Unknown: the hub can’t read holdings right now.")];
-    const needs = (v.mints || []).map(m => m.amount + (m.raw ? " raw units" : " tokens")).join(" or ");
-    const why = v.banned ? "This key is banned from posting here."
-      : v.gate === "admin" ? "An admin key: the gate does not apply."
-      : v.gate === "pass" ? "Enough to post. The hub asks for " + needs + "."
-      : v.gate === "below" ? "Less than the " + needs + " the hub asks for, so this address can read but not post."
+      ? known.map(m => span("line", T("of.mint", { units: T(m.raw ? "units.raw" : "units.tokens", { n: m.held }), mint: short(m.mint) })))
+      : [span("line", T("unknown"))];
+    const needs = (v.mints || []).map(m => T(m.raw ? "units.raw" : "units.tokens", { n: m.amount })).join(T("or"));
+    const why = v.banned ? T("banned")
+      : v.gate === "admin" ? T("admin")
+      : v.gate === "pass" ? T("enough", { need: needs })
+      : v.gate === "below" ? T("less", { need: needs })
       : "";
     return why ? [...lines, span("sub", why)] : lines;
   }
@@ -1579,7 +1597,7 @@ document.addEventListener("click", e => {
   }
   function fillProfile() {
     const v = verdict;
-    pName.textContent = me.profile && me.profile.name ? me.profile.name : "No name yet";
+    pName.textContent = me.profile && me.profile.name ? me.profile.name : T("noname");
     showAva(me.profile && me.profile.avatar);
     pHeld.replaceChildren(...holding(v));
     // profile.set meets the gate like a post
@@ -1623,7 +1641,7 @@ document.addEventListener("click", e => {
     const f = pFile.files[0];
     pFile.value = "";
     if (!f || !me || busy) return;
-    if (f.size > MAX_PICTURE) { pSay("A picture is at most 8 MB.", true); return; }
+    if (f.size > MAX_PICTURE) { pSay(T("pic.max"), true); return; }
     busy = true;
     lock(true);
     render();
@@ -1631,20 +1649,20 @@ document.addEventListener("click", e => {
       const body = new Uint8Array(await f.arrayBuffer());
       const ts = String(Date.now());
       const digest = await sha256hex(body);
-      pSay("Waiting for your wallet…");
+      pSay(T("waiting"));
       const sig = await signed(enc.encode(UPLOAD + ts + "\n" + digest));
-      pSay("Uploading…");
+      pSay(T("uploading"));
       const { r, out } = await getJSON("/v1/avatar", { method: "POST", body,
         headers: { "Content-Type": f.type || "application/octet-stream", "X-Hub-Author": b64(me.pub), "X-Hub-Ts": ts, "X-Hub-Sig": b64(sig) } });
       if (!r.ok) {
-        throw new Error(r.status === 413 ? "A picture is at most 8 MB."
-          : r.status === 503 ? "The hub can’t store pictures right now. Try again later."
-          : r.status === 400 && /decod|dimension/i.test(out.error || "") ? "That file isn’t a picture the hub can read. Try a PNG, JPEG or GIF."
-          : out.error || "HTTP " + r.status);
+        throw new Error(r.status === 413 ? T("pic.max")
+          : r.status === 503 ? T("pic.store")
+          : r.status === 400 && /decod|dimension/i.test(out.error || "") ? T("pic.type")
+          : out.error || T("http", { code: r.status }));
       }
       pending = out.cid;
       showAva(pending);
-      pSay("Save to use this picture.");
+      pSay(T("pic.save"));
     } catch (e) {
       pSay(e.message, true);
     } finally {
@@ -1668,8 +1686,8 @@ document.addEventListener("click", e => {
   pSave.addEventListener("click", async () => {
     if (!me || busy) return;
     const name = nameField.value.trim();
-    if (!name) { pSay("A name is required.", true); return; }
-    if (bytes(name) > MAX_NAME) { pSay("A name is at most " + MAX_NAME + " bytes.", true); return; }
+    if (!name) { pSay(T("name.req"), true); return; }
+    if (bytes(name) > MAX_NAME) { pSay(T("name.max", { n: MAX_NAME }), true); return; }
     busy = true;
     lock(true);
     render();
@@ -1679,7 +1697,7 @@ document.addEventListener("click", e => {
       adopt(await load());
       editMode(false);
       fillProfile();
-      pSay("Profile saved.");
+      pSay(T("saved"));
       pOk.focus();
     } catch (e) {
       pSay(e.message || line(0), true);
@@ -1695,7 +1713,7 @@ document.addEventListener("click", e => {
   found.then(ws => {
     if (ws.length) root.classList.add("solana");
     else {
-      note.textContent = "No Solana wallet in this browser.";
+      note.textContent = T("nowallet");
       signin.disabled = true;
       onWallet = () => { note.textContent = noteText; signin.disabled = false; };
     }
@@ -1712,36 +1730,36 @@ document.addEventListener("click", e => {
 {{/* The pager's cells — Prev, the counts, Next — the same at either end
      of a list. Which list is the page: the cursor links and the counts
      follow .Page, the query or profile id carried in the links. */}}
-{{define "pager"}}{{if .Prev}}<a class="btn prev back" href="{{template "cursors" .}}after={{.Prev}}">{{template "arrow"}}<span>Prev</span></a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next fwd" href="{{template "cursors" .}}before={{.Next}}"><span>Next</span>{{template "arrow-r"}}</a>{{end}}{{end}}
+{{define "pager"}}{{if .Prev}}<a class="btn prev back" href="{{template "cursors" .}}after={{.Prev}}">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next fwd" href="{{template "cursors" .}}before={{.Next}}"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}<span class="m"><span data-n="members">{{.Members}}</span> members · </span><span data-n="posts">{{.Count}}</span> posts{{if .StatsOn}} · <a href="/stats" title="Who reads this hub"><span data-n="online">{{.Online}}</span> online</a>{{end}}{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
 
-{{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
+{{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}
 
 {{define "compose"}}<div class="window composer">
-<div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{if .ReplyTo}}Reply{{else}}Post{{end}}</span><span class="stripe"></span></div>
+<div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{if .ReplyTo}}{{T "reply"}}{{else}}{{T "post"}}{{end}}</span><span class="stripe"></span></div>
 <div class="frame"><div class="compose" id="compose"{{if .ReplyTo}} data-reply-to="{{.ReplyTo}}"{{end}}>
   <div class="out">
-    <div class="row pick-off"><span class="grow note">{{if .ReplyTo}}Reply{{else}}Post{{end}} from a Solana wallet: one signature a post, never a transaction.</span><button type="button" class="btn signin">Sign in with Solana</button></div>
+    <div class="row pick-off"><span class="grow note">{{if .ReplyTo}}{{T "compose.note.reply"}}{{else}}{{T "compose.note.post"}}{{end}}</span><button type="button" class="btn signin">{{T "signin"}}</button></div>
     <div class="row picker" hidden></div>
   </div>
   <div class="in">
-    <div class="row who-row"><span class="grow who-wrap"><a class="me-av" aria-label="Your page" hidden><img alt=""></a><span class="who"><b class="name">…</b> <span class="mono id"></span></span></span><button type="button" class="btn profile-btn">Profile…</button><button type="button" class="btn signout">Sign Out</button></div>
-    {{if .ReplyTo}}<div class="row re-row" hidden><span class="grow re-q"></span><button type="button" class="btn re-clear" aria-label="Answer the thread’s post instead">{{template "cross"}}</button></div>
-    {{end}}<div class="field"><textarea class="text" placeholder="{{if .ReplyTo}}Write a reply{{else}}What’s happening?{{end}}" aria-label="{{if .ReplyTo}}Reply{{else}}Post{{end}} text"></textarea><div class="at-list" role="listbox" aria-label="Mention" hidden></div></div>
-    <div class="row"><span class="grow status">Checking this address…</span><button type="button" class="btn send" disabled>{{if .ReplyTo}}Reply{{else}}Post{{end}}</button></div>
+    <div class="row who-row"><span class="grow who-wrap"><a class="me-av" aria-label="{{T "yourpage"}}" hidden><img alt=""></a><span class="who"><b class="name">…</b> <span class="mono id"></span></span></span><button type="button" class="btn profile-btn">{{T "profile"}}</button><button type="button" class="btn signout">{{T "signout"}}</button></div>
+    {{if .ReplyTo}}<div class="row re-row" hidden><span class="grow re-q"></span><button type="button" class="btn re-clear" aria-label="{{T "re.clear"}}">{{template "cross"}}</button></div>
+    {{end}}<div class="field"><textarea class="text" placeholder="{{if .ReplyTo}}{{T "placeholder.reply"}}{{else}}{{T "placeholder.post"}}{{end}}" aria-label="{{if .ReplyTo}}{{T "text.reply"}}{{else}}{{T "text.post"}}{{end}}"></textarea><div class="at-list" role="listbox" aria-label="{{T "mention"}}" hidden></div></div>
+    <div class="row"><span class="grow status">{{T "checking"}}</span><button type="button" class="btn send" disabled>{{if .ReplyTo}}{{T "reply"}}{{else}}{{T "post"}}{{end}}</button></div>
   </div>
   <div class="veil" hidden>
-    <div class="dlg" role="dialog" aria-modal="true" aria-label="Profile">
-      <h2>Profile</h2>
-      <div class="irow pic-irow"><span class="ilab">Picture</span><span class="ival pic"><span class="p-ava"><img alt="" hidden></span><button type="button" class="btn p-choose" hidden>Choose Picture…</button><input type="file" class="p-file" accept="image/png,image/jpeg,image/gif" hidden></span></div>
-      <div class="irow name-irow"><span class="ilab">Name</span><span class="ival p-name"></span><input type="text" class="name-field" aria-label="Display name" autocomplete="off" hidden></div>
-      <div class="irow"><span class="ilab">Holding</span><span class="ival p-held"></span></div>
+    <div class="dlg" role="dialog" aria-modal="true" aria-label="{{T "profile.title"}}">
+      <h2>{{T "profile.title"}}</h2>
+      <div class="irow pic-irow"><span class="ilab">{{T "pic"}}</span><span class="ival pic"><span class="p-ava"><img alt="" hidden></span><button type="button" class="btn p-choose" hidden>{{T "choose"}}</button><input type="file" class="p-file" accept="image/png,image/jpeg,image/gif" hidden></span></div>
+      <div class="irow name-irow"><span class="ilab">{{T "name"}}</span><span class="ival p-name"></span><input type="text" class="name-field" aria-label="{{T "display.name"}}" autocomplete="off" hidden></div>
+      <div class="irow"><span class="ilab">{{T "holding"}}</span><span class="ival p-held"></span></div>
       <div class="p-note"></div>
-      <div class="btns"><button type="button" class="btn left p-edit">Edit</button><button type="button" class="btn p-cancel" hidden>Cancel</button><button type="button" class="btn default p-ok">OK</button><button type="button" class="btn default p-save" hidden>Save</button></div>
+      <div class="btns"><button type="button" class="btn left p-edit">{{T "edit"}}</button><button type="button" class="btn p-cancel" hidden>{{T "cancel"}}</button><button type="button" class="btn default p-ok">{{T "ok"}}</button><button type="button" class="btn default p-save" hidden>{{T "save"}}</button></div>
     </div>
   </div>
 </div></div>
@@ -1763,12 +1781,12 @@ document.addEventListener("click", e => {
   {{with .Quote}}<a class="quote" href="/p/{{.ID}}{{$.Q}}"><b>{{.Name}}</b>{{if .Text}} {{.Text}}{{end}}</a>{{end}}
   <a class="av" href="/u/{{.Author}}{{.Q}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Author}}.svg" alt="">{{end}}</a>
   <div>
-    <div class="meta"><a href="/u/{{.Author}}{{.Q}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}{{.Q}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">in reply to {{.ParentName}}</a>{{end}}{{else}}{{if not (or .Quote .QuoteRun)}} · <a href="/p/{{.ReplyTo}}{{.Q}}">in reply to</a>{{end}}{{end}}{{end}}</div>
+    <div class="meta"><a href="/u/{{.Author}}{{.Q}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}{{.Q}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">{{T "inreply.name" "name" .ParentName}}</a>{{end}}{{else}}{{if not (or .Quote .QuoteRun)}} · <a href="/p/{{.ReplyTo}}{{.Q}}">{{T "inreply"}}</a>{{end}}{{end}}{{end}}</div>
     {{if .Text}}{{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text"{{if .Lang}} lang="{{.Lang}}"{{end}}{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>{{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.ID}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}{{end}}
-    {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">Archived copy{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
-    {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Picture{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}Sound{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}Page{{end}}">{{if .Filename}}{{.Filename}}{{else}}Page{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>download</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
-    {{if .InThread}}<div class="foot re"><a class="rlink" role="button" href="/p/{{.ID}}{{.Q}}">Reply</a></div>{{end}}
-    {{if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}{{.Q}}">{{.Replies}} {{if eq .Replies 1}}reply{{else}}replies{{end}} ▸</a>{{with .Latest}}<a class="latest" href="/p/{{$.ID}}{{$.Q}}#{{.ID}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}</div>{{end}}
+    {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">{{T "archived"}}{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
+    {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "picture"}}{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}{{T "sound"}}{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "page"}}{{end}}">{{if .Filename}}{{.Filename}}{{else}}{{T "page"}}{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>{{T "download"}}</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
+    {{if .InThread}}<div class="foot re"><a class="rlink" role="button" href="/p/{{.ID}}{{.Q}}">{{T "reply"}}</a></div>{{end}}
+    {{if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}{{.Q}}">{{T "replies" "n" .Replies}} ▸</a>{{with .Latest}}<a class="latest" href="/p/{{$.ID}}{{$.Q}}#{{.ID}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}</div>{{end}}
   </div>
 </div>
 {{end}}

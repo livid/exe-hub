@@ -40,9 +40,10 @@ import (
 // can never smuggle markup in. The join block on the home page is
 // rendered from the live config like skill.md: an open hub says so, a
 // token-gated one names the holding, so a SIGHUP gate change shows at
-// once. A browser whose language is Chinese reads the block in Chinese
-// (Accept-Language, or ?lang=, see webChinese); the rest of the page
-// stays as it is, the posts in whatever language they were written.
+// once. The pages' own words are in the reader's language, English,
+// Chinese or Japanese (Accept-Language, or ?lang=, see webi18n.go); the
+// posts stay in whatever language they were written, or translated
+// (see Translations).
 
 //go:embed web.html
 var webHTML string
@@ -150,11 +151,6 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
-
-// The stats desk's blocks come from the package that draws it; the hub
-// parses them into its own set so the desk renders inside its chrome.
-var webTmpl = template.Must(template.Must(template.New("web").
-	Funcs(stats.Funcs()).Parse(webHTML)).Parse(stats.TemplateHTML()))
 
 // webPage is the page size of the feed and profile pages; the next page
 // is a plain link carrying the last post's id as the keyset cursor.
@@ -264,7 +260,6 @@ type webJoin struct {
 	Token    bool
 	Mints    []webMint
 	Cooldown int
-	Chinese  bool // the browser's language is Chinese: the block reads in Chinese
 }
 
 type webMint struct {
@@ -304,6 +299,11 @@ type webCompose struct {
 type webData struct {
 	Base, Host, Path string
 	Title, Desc      string
+	// the language the page's own words are in (webi18n.go), and the
+	// locale its script sets the dates in — the request's ?lang= when it
+	// named one, else "" for the browser's own
+	L       *webLocale
+	DateLoc string
 	// the link preview (see PLAN.md, Public pages — Link previews): the
 	// OpenGraph picture, its size when known, what it shows, and the
 	// Twitter card kind — "summary_large_image" for a 1.91:1 picture,
@@ -907,7 +907,7 @@ func webBase(r *http.Request) string {
 
 func (s *Server) webJoinBlock(r *http.Request) *webJoin {
 	c := s.Cfg.Get()
-	j := &webJoin{Base: webBase(r), Cooldown: c.CooldownSec(), Chinese: webChinese(r)}
+	j := &webJoin{Base: webBase(r), Cooldown: c.CooldownSec()}
 	if s.Hub != nil {
 		j.HubID = s.Hub.ID
 	}
@@ -924,37 +924,6 @@ func (s *Server) webJoinBlock(r *http.Request) *webJoin {
 		}
 	}
 	return j
-}
-
-// webLang is what the request asks the join block to read in: ?lang=zh
-// the Chinese, ?lang=en the English — a look at the other one from a
-// browser of any language, and a link that shows it — "" to let the
-// browser's own language decide (webChinese). Anything else is "".
-func webLang(r *http.Request) string {
-	l := strings.ToLower(r.URL.Query().Get("lang"))
-	switch {
-	case l == "zh" || strings.HasPrefix(l, "zh-"):
-		return "zh"
-	case l == "en" || strings.HasPrefix(l, "en-"):
-		return "en"
-	}
-	return ""
-}
-
-// webChinese reports whether the join block reads in Chinese
-// (Simplified; a Traditional reader gets the same text): ?lang= when
-// the request says, else the browser's language — the Accept-Language
-// tag with the highest q, the first one the browser lists, zh, zh-CN,
-// zh-TW, zh-Hant-HK alike — not Chinese anywhere in the list: a
-// browser whose first language is English with Chinese further down
-// reads the English. Decided on the server, so the page stands without
-// script and never flashes; the home page says Vary: Accept-Language.
-func webChinese(r *http.Request) bool {
-	if l := webLang(r); l != "" {
-		return l == "zh"
-	}
-	best := webBrowserLang(r)
-	return best == "zh" || strings.HasPrefix(best, "zh-")
 }
 
 // webBrowserLang is the browser's first language, lower-cased: the
@@ -998,15 +967,18 @@ type webReading struct {
 	// Lang is the request's ?lang= when it said one the pages take, and Q
 	// the same as "?lang=…": the page's own links carry it.
 	Lang, Q string
+	// L is the language the page's own words are in (webLocaleOf): the
+	// line under a translated post reads in it
+	L *webLocale
 }
 
-// webReadingOf reads the request the way webChinese does: ?lang= when
+// webReadingOf reads the request the way webLocaleOf does: ?lang= when
 // it says — zh, en, a fuller tag, or orig — else the browser's first
 // language. Decided on the server, so a page never flashes from one
-// language to another and stands without script; every page with posts
-// says Vary: Accept-Language.
+// language to another and stands without script; every page says Vary:
+// Accept-Language.
 func webReadingOf(r *http.Request) webReading {
-	var rd webReading
+	rd := webReading{L: webLocaleOf(r)}
 	tag := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang")))
 	if tag != "" {
 		if rd.Reader = webReaderTag(tag); rd.Reader != "" {
@@ -1049,21 +1021,26 @@ func (rd webReading) shows(from string) bool {
 }
 
 // tr dresses a translation for the page, the line under it in the
-// reader's language; names is the post's mentions, which a translation
+// page's language; names is the post's mentions, which a translation
 // keeps as they were written.
 func (rd webReading) tr(t store.Translation, names map[string]string) *webTr {
 	tr := &webTr{HTML: renderPost(t.Text, names), Lang: rd.Target}
 	// the language alone: its script tells only a Chinese reader
 	// something, Traditional from the Simplified they are reading
 	from, _, _ := strings.Cut(t.From, "-")
-	if rd.Target == "zh-Hans" {
+	var name string
+	switch rd.L.Code {
+	case "zh":
 		if from == "zh" {
 			from = t.From
 		}
-		tr.Note, tr.Show, tr.Back = "译自"+lang.Chinese(from), "显示原文", "显示译文"
-	} else {
-		tr.Note, tr.Show, tr.Back = "Translated from "+lang.English(from), "Show Original", "Show Translation"
+		name = lang.Chinese(from)
+	case "ja":
+		name = lang.Japanese(from)
+	default:
+		name = lang.English(from)
 	}
+	tr.Note, tr.Show, tr.Back = rd.L.T("tr.from", "lang", name), rd.L.T("tr.show"), rd.L.T("tr.back")
 	return tr
 }
 
@@ -1088,6 +1065,10 @@ func (s *Server) webTranslations(rd webReading, ids []string) map[string]store.T
 
 func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *webData) {
 	d.Base, d.Host, d.Path = webBase(r), r.Host, r.URL.Path
+	d.L = webLocaleOf(r)
+	if l := strings.ToLower(r.URL.Query().Get("lang")); l != "" && l != "orig" {
+		d.DateLoc = l
+	}
 	if d.Title == "" {
 		d.Title = r.Host
 	}
@@ -1102,26 +1083,26 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	switch d.Page {
-	case "home", "thread", "profile", "search":
-		// the join block's language, and the posts' (PLAN.md, Translations)
-		w.Header().Set("Vary", "Accept-Language")
-	}
+	// the page's own words are in the reader's language, and the posts
+	// (PLAN.md, Translations)
+	w.Header().Set("Vary", "Accept-Language")
 	w.WriteHeader(code)
-	if err := webTmpl.ExecuteTemplate(w, "page", d); err != nil {
+	if err := webTmpls[d.L.Code].ExecuteTemplate(w, "page", d); err != nil {
 		// headers are out; the log is all that is left
 		fmt.Fprintf(w, "<!-- render: %s -->", html.EscapeString(err.Error()))
 	}
 }
 
-// webError is the page that says what went wrong. What it says is true
+// webError is the page that says what went wrong, key naming the words
+// in webStrings. What it says is true
 // for now and may not be kept: a post that is not here may be on its way
 // from a peer, a profile may be set tomorrow, a store that could not be
 // read will be. A 404 without a word on caching may be kept by a cache
 // on its own judgment (RFC 9110, heuristic freshness), and a link opened
 // a moment too early would stay "No such post." after the post arrived.
-func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, msg string) {
+func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, key string) {
 	w.Header().Set("Cache-Control", "no-store")
+	msg := webLocaleOf(r).T(key)
 	s.webRender(w, r, code, &webData{Page: "error", Title: msg + " · " + r.Host, Message: msg})
 }
 
@@ -1204,11 +1185,11 @@ func opening(text string) string {
 // author — "Idea: every hub account gets a home page — Claude" — so a
 // preview has a subject of its own even when a client shows no
 // description; a post with no words is its author on this hub.
-func threadTitle(p store.FeedPost, host string) string {
+func threadTitle(p store.FeedPost, host string, l *webLocale) string {
 	if s := opening(named(p)); s != "" {
 		return s + " — " + authorLabel(p)
 	}
-	return authorLabel(p) + " on " + host
+	return l.T("title.on", "name", authorLabel(p), "host", host)
 }
 
 func authorLabel(p store.FeedPost) string {
@@ -1229,11 +1210,11 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		func(before string, n int) ([]store.FeedPost, error) { return s.St.Feed(before, n, false) },
 		func(after string, n int) ([]store.FeedPost, error) { return s.St.FeedNewer(after, n, false) })
 	if errors.Is(err, store.ErrNotFound) {
-		s.webError(w, r, http.StatusNotFound, "No such page.")
+		s.webError(w, r, http.StatusNotFound, "err.nopage")
 		return
 	}
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The feed could not be read.")
+		s.webError(w, r, http.StatusInternalServerError, "err.feed")
 		return
 	}
 	rd := webReadingOf(r)
@@ -1284,21 +1265,21 @@ func normQuery(q string) string {
 func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	q := normQuery(r.URL.Query().Get("q"))
 	rd := webReadingOf(r)
-	d := &webData{Page: "search", Title: "Search · " + r.Host, Query: q, Lang: rd.Lang, Q: rd.Q}
+	d := &webData{Page: "search", Title: rd.L.T("search") + " · " + r.Host, Query: q, Lang: rd.Lang, Q: rd.Q}
 	if q == "" {
 		s.webRender(w, r, http.StatusOK, d)
 		return
 	}
-	d.Title = "Search: " + q + " · " + r.Host
+	d.Title = rd.L.T("search") + ": " + q + " · " + r.Host
 	pg, err := webPageOf(r.URL.Query(),
 		func(before string, n int) ([]store.FeedPost, error) { return s.St.Search(q, before, n) },
 		func(after string, n int) ([]store.FeedPost, error) { return s.St.SearchNewer(q, after, n) })
 	if errors.Is(err, store.ErrNotFound) {
-		s.webError(w, r, http.StatusNotFound, "No such page.")
+		s.webError(w, r, http.StatusNotFound, "err.nopage")
 		return
 	}
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The posts could not be searched.")
+		s.webError(w, r, http.StatusInternalServerError, "err.search")
 		return
 	}
 	if pg.Home {
@@ -1311,7 +1292,7 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	}
 	count, err := s.St.SearchCount(q)
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The posts could not be searched.")
+		s.webError(w, r, http.StatusInternalServerError, "err.search")
 		return
 	}
 	d.Posts, d.Prev, d.Next, d.Count = s.webPosts(rd, pg.Posts), pg.Prev, pg.Next, count
@@ -1365,11 +1346,11 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case errors.Is(err, store.ErrAmbiguous):
-			s.webError(w, r, http.StatusNotFound, "More than one post begins that way. Use the whole id.")
+			s.webError(w, r, http.StatusNotFound, "err.ambiguous")
 		case errors.Is(err, store.ErrNotFound):
-			s.webError(w, r, http.StatusNotFound, "No such post.")
+			s.webError(w, r, http.StatusNotFound, "err.nopost")
 		case err != nil:
-			s.webError(w, r, http.StatusInternalServerError, "The post could not be read.")
+			s.webError(w, r, http.StatusInternalServerError, "err.post")
 		default:
 			to := "/p/" + id
 			if r.URL.RawQuery != "" {
@@ -1381,17 +1362,17 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.St.Post(r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
-		s.webError(w, r, http.StatusNotFound, "No such post.")
+		s.webError(w, r, http.StatusNotFound, "err.nopost")
 		return
 	}
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The post could not be read.")
+		s.webError(w, r, http.StatusInternalServerError, "err.post")
 		return
 	}
 	// the whole tree, a reply to a reply under the reply it answers
 	thread, err := s.St.Thread(p.ID, 500)
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The thread could not be read.")
+		s.webError(w, r, http.StatusInternalServerError, "err.thread")
 		return
 	}
 	rd := webReadingOf(r)
@@ -1407,7 +1388,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		replies[i].ParentName = names[replies[i].ReplyTo]
 	}
 	d := &webData{
-		Page: "thread", Title: threadTitle(*p, r.Host), Desc: excerpt(named(*p), 200),
+		Page: "thread", Title: threadTitle(*p, r.Host, rd.L), Desc: excerpt(named(*p), 200),
 		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 		Live: s.Events != nil, Lang: rd.Lang, Q: rd.Q,
@@ -1447,11 +1428,11 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		func(before string, n int) ([]store.FeedPost, error) { return s.St.ProfileFeed(id, before, n) },
 		func(after string, n int) ([]store.FeedPost, error) { return s.St.ProfileFeedNewer(id, after, n) })
 	if errors.Is(err, store.ErrNotFound) {
-		s.webError(w, r, http.StatusNotFound, "No such page.")
+		s.webError(w, r, http.StatusNotFound, "err.nopage")
 		return
 	}
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The posts could not be read.")
+		s.webError(w, r, http.StatusInternalServerError, "err.posts")
 		return
 	}
 	rd := webReadingOf(r)
@@ -1471,14 +1452,14 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, store.ErrNotFound) && len(posts) > 0:
 		d.Profile = &store.Profile{ID: id}
 	case errors.Is(err, store.ErrNotFound):
-		s.webError(w, r, http.StatusNotFound, "No such profile.")
+		s.webError(w, r, http.StatusNotFound, "err.noprofile")
 		return
 	default:
-		s.webError(w, r, http.StatusInternalServerError, "The profile could not be read.")
+		s.webError(w, r, http.StatusInternalServerError, "err.profile")
 		return
 	}
 	name := profileName(d.Profile)
-	d.Title = name + " on " + r.Host
+	d.Title = rd.L.T("title.on", "name", name, "host", r.Host)
 	d.Canonical = true
 	if d.Desc == "" {
 		d.Desc = name + "'s posts on " + r.Host + "."

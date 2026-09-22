@@ -109,8 +109,9 @@ func TestWebHome(t *testing.T) {
 		t.Errorf("GET /nothing = %d, want 404", code)
 	}
 
-	// a Chinese browser reads the join block in Chinese, the rest of
-	// the page as it is; the response varies on the language
+	// a Chinese browser reads the whole page in Chinese — the join
+	// block, the chrome, the page's lang — the posts as they are; the
+	// response varies on the language
 	req := httptest.NewRequest("GET", "http://hub.example/", nil)
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -118,22 +119,44 @@ func TestWebHome(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	body = rec.Body.String()
 	for _, want := range []string{
-		`<div class="window join" id="join" lang="zh-Hans">`,
+		`<html lang="zh-Hans">`,
+		`<div class="window join" id="join">`,
 		`<span class="title">加入这个 hub</span>`,
 		"<b>发帖条件：</b>没有限制，任何密钥都可以发帖。每 60 秒最多发一帖。",
 		"<code>https://hub.example</code>",
 		"<b>Ann</b>", // the feed stays as it is
-		`<html lang="en">`,
+		`<span class="m"><span data-n="members">1</span> 位成员 · </span><span data-n="posts">1</span> 条帖子`,
+		`placeholder="搜索帖子"`, `<button class="btn" type="submit">搜索</button>`,
+		`<span class="title">发帖</span>`, `<button type="button" class="btn signin">用 Solana 登录</button>`,
+		`"checking":"正在检查这个地址…"`, // the scripts' words, as JSON in the head
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Chinese home lacks %q\n%s", want, body)
 		}
 	}
-	if strings.Contains(body, "Join this hub") {
-		t.Error("the English join block beside the Chinese one")
+	for _, stray := range []string{"Join this hub", " members", "Search posts", "Sign in with Solana", "Nothing here yet"} {
+		if strings.Contains(body, stray) {
+			t.Errorf("Chinese home still says %q", stray)
+		}
 	}
 	if v := rec.Header().Get("Vary"); v != "Accept-Language" {
 		t.Errorf("Vary = %q", v)
+	}
+	// a Japanese browser the same in Japanese
+	_, body = get(t, h, "/", "Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
+	for _, want := range []string{
+		`<html lang="ja">`, `<span class="title">この hub に参加する</span>`,
+		"<b>投稿の条件：</b>なし。どの鍵でも投稿できます。投稿は 60 秒に 1 件まで。",
+		`<span class="m"><span data-n="members">1</span> 人のメンバー · </span><span data-n="posts">1</span> 件の投稿`,
+		`placeholder="投稿を検索"`, `<span class="title">投稿</span>`, `<button type="button" class="btn signin">Solana でサインイン</button>`,
+		`"checking":"このアドレスを確認しています…"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Japanese home lacks %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "Join this hub") || strings.Contains(body, "加入这个 hub") {
+		t.Error("another join block beside the Japanese one")
 	}
 	// English first, Chinese further down: English
 	if _, body := get(t, h, "/", "Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8"); !strings.Contains(body, "Join this hub") || strings.Contains(body, "加入这个 hub") {
@@ -143,50 +166,60 @@ func TestWebHome(t *testing.T) {
 	if _, body := get(t, h, "/?lang=zh", "Accept-Language", "en-US"); !strings.Contains(body, "加入这个 hub") || strings.Contains(body, "Join this hub") {
 		t.Error("?lang=zh did not give an English browser the Chinese join block")
 	}
+	if _, body := get(t, h, "/?lang=ja", "Accept-Language", "en-US"); !strings.Contains(body, "この hub に参加する") || strings.Contains(body, "Join this hub") {
+		t.Error("?lang=ja did not give an English browser the Japanese join block")
+	}
 	if _, body := get(t, h, "/?lang=en", "Accept-Language", "zh-CN"); !strings.Contains(body, "Join this hub") || strings.Contains(body, "加入这个 hub") {
 		t.Error("?lang=en did not give a Chinese browser the English join block")
 	}
-}
-
-// TestWebLang: ?lang= is zh, en, or nothing.
-func TestWebLang(t *testing.T) {
-	for path, want := range map[string]string{
-		"/": "", "/?lang=zh": "zh", "/?lang=ZH-TW": "zh", "/?lang=en": "en", "/?lang=en-GB": "en",
-		"/?lang=fr": "", "/?lang=": "", "/?lang=zho": "",
-	} {
-		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
-		req.Header.Set("Accept-Language", "zh-CN")
-		if got := webLang(req); got != want {
-			t.Errorf("webLang(%q) = %q, want %q", path, got, want)
-		}
-		if got := webChinese(req); got != (want != "en") { // the browser is Chinese: only ?lang=en says no
-			t.Errorf("webChinese(%q, zh browser) = %v", path, got)
-		}
+	// an error page and a search page speak the language too, and the
+	// error page's title with them
+	if code, body := get(t, h, "/p/"+strings.Repeat("0", 64), "Accept-Language", "ja"); code != 404 || !strings.Contains(body, "<title>その投稿はありません。 · hub.example</title>") || !strings.Contains(body, `<div class="alert">その投稿はありません。 <a href="/">フィードに戻る。</a></div>`) {
+		t.Errorf("Japanese 404: %d %q", code, statusLine(body))
+	}
+	if _, body := get(t, h, "/search?lang=zh"); !strings.Contains(body, "<title>搜索 · hub.example</title>") || !strings.Contains(body, `<div class="pad">输入一两个词，然后搜索。每个词都必须出现在帖子里。</div>`) || !strings.Contains(body, `<input type="hidden" name="lang" value="zh">`) {
+		t.Errorf("Chinese search page: %q", statusLine(body))
 	}
 }
 
-// TestWebChinese: the browser's language is its highest-q tag.
-func TestWebChinese(t *testing.T) {
-	for header, want := range map[string]bool{
-		"":                                  false,
-		"en-US,en;q=0.9":                    false,
-		"zh-CN,zh;q=0.9,en;q=0.8":           true,
-		"zh-TW":                             true,
-		"zh-Hant-HK,zh-Hant;q=0.9,zh;q=0.8": true,
-		"zh":                                true,
-		"ZH-cn":                             true,
-		"en;q=0.8, zh;q=0.9":                true,  // q wins over order
-		"en,zh":                             false, // a tie keeps the browser's order
-		"zh;q=0,en":                         false, // q=0 is a refusal
-		"*":                                 false,
-		"zho":                               false, // not a zh- tag
+// TestWebLocale: the page's language is ?lang= when it names one the
+// pages speak, else the browser's highest-q tag, else English.
+func TestWebLocale(t *testing.T) {
+	for path, want := range map[string]string{
+		"/": "zh", "/?lang=zh": "zh", "/?lang=ZH-TW": "zh", "/?lang=en": "en", "/?lang=en-GB": "en",
+		"/?lang=ja": "ja", "/?lang=ja-JP": "ja", "/?lang=orig": "zh", // orig: the posts as written, the chrome the browser's
+		"/?lang=fr": "zh", "/?lang=": "zh", "/?lang=zho": "zh", "/?lang=jpn": "zh",
+	} {
+		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
+		req.Header.Set("Accept-Language", "zh-CN")
+		if got := webLocaleOf(req).Code; got != want {
+			t.Errorf("webLocaleOf(%q, zh browser) = %q, want %q", path, got, want)
+		}
+	}
+	for header, want := range map[string]string{
+		"":                                  "en",
+		"en-US,en;q=0.9":                    "en",
+		"zh-CN,zh;q=0.9,en;q=0.8":           "zh",
+		"zh-TW":                             "zh",
+		"zh-Hant-HK,zh-Hant;q=0.9,zh;q=0.8": "zh",
+		"zh":                                "zh",
+		"ZH-cn":                             "zh",
+		"ja":                                "ja",
+		"ja-JP,ja;q=0.9,en;q=0.8":           "ja",
+		"en;q=0.8, zh;q=0.9":                "zh", // q wins over order
+		"en;q=0.8, ja;q=0.9":                "ja",
+		"en,zh":                             "en", // a tie keeps the browser's order
+		"zh;q=0,en":                         "en", // q=0 is a refusal
+		"*":                                 "en",
+		"zho":                               "en", // not a zh- tag
+		"fr-FR,fr;q=0.9,ja;q=0.5":           "en", // a language the pages do not speak reads English
 	} {
 		req := httptest.NewRequest("GET", "http://hub.example/", nil)
 		if header != "" {
 			req.Header.Set("Accept-Language", header)
 		}
-		if got := webChinese(req); got != want {
-			t.Errorf("webChinese(%q) = %v, want %v", header, got, want)
+		if got := webLocaleOf(req).Code; got != want {
+			t.Errorf("webLocaleOf(%q) = %q, want %q", header, got, want)
 		}
 	}
 }
@@ -582,7 +615,7 @@ func TestWebPaging(t *testing.T) {
 	}
 
 	_, body := get(t, h, "/")
-	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next fwd" href="/?before=`+oldestOnFirst+`"><span>Next</span><svg`) {
+	if strings.Contains(body, "<span>Prev</span>") || !strings.Contains(body, `<a class="btn next fwd" href="/?before=`+oldestOnFirst+`"><span>Next</span><svg`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
 	if !strings.Contains(body, `<span class="stats"><span class="m"><span data-n="members">1</span> members · </span><span data-n="posts">32</span> posts</span>`) {
@@ -604,7 +637,7 @@ func TestWebPaging(t *testing.T) {
 	if !strings.Contains(body, "post 2<") || !strings.Contains(body, "post 1<") || strings.Contains(body, "post 3<") {
 		t.Error("second page should hold posts 2 and 1 only")
 	}
-	if strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev back" href="/?after=`+ids[1]+`"><svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M4 0h1v1h-1z`) {
+	if strings.Contains(body, "<span>Next</span>") || !strings.Contains(body, `<a class="btn prev back" href="/?after=`+ids[1]+`"><svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M4 0h1v1h-1z`) {
 		t.Errorf("last page: %q", statusLine(body))
 	}
 	if strings.Count(body, `<a class="btn prev back" href="/?after=`+ids[1]+`"><svg`) != 2 {
@@ -736,7 +769,7 @@ func TestWebSearchPaging(t *testing.T) {
 	oldestOnFirst := ids[2]
 
 	_, body := get(t, h, "/search?q=hit+me")
-	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next fwd" href="/search?q=hit%20me&amp;before=`+oldestOnFirst+`"><span>Next</span><svg`) {
+	if strings.Contains(body, "<span>Prev</span>") || !strings.Contains(body, `<a class="btn next fwd" href="/search?q=hit%20me&amp;before=`+oldestOnFirst+`"><span>Next</span><svg`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
 	if !strings.Contains(body, `<span class="stats">32 posts match</span>`) || strings.Contains(body, "miss 99") {
@@ -750,7 +783,7 @@ func TestWebSearchPaging(t *testing.T) {
 	}
 	_, body = get(t, h, "/search?q=hit+me&before="+oldestOnFirst)
 	if !strings.Contains(body, "<mark>hit</mark> <mark>me</mark> 2<") || !strings.Contains(body, "<mark>hit</mark> <mark>me</mark> 1<") || strings.Contains(body, "</mark> 3<") ||
-		strings.Contains(body, "Next") || !strings.Contains(body, `<a class="btn prev back" href="/search?q=hit%20me&amp;after=`+ids[1]+`"><svg`) {
+		strings.Contains(body, "<span>Next</span>") || !strings.Contains(body, `<a class="btn prev back" href="/search?q=hit%20me&amp;after=`+ids[1]+`"><svg`) {
 		t.Errorf("last page: %q", statusLine(body))
 	}
 	req := httptest.NewRequest("GET", "http://hub.example/search?q=hit+me&after="+ids[1], nil)

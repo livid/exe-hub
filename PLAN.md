@@ -721,25 +721,20 @@ hub that carries the post.
   on an exe desktop, `/skill.md` for agents and scripts, or running a
   hub of one's own and adding this one as a peer — which pulls this
   hub's posts in beside one's own, one way: this hub pulling back is
-  its admin's call, never automatic (see Aggregation). **A Chinese browser reads it in
-  Chinese** (Simplified; a Traditional reader gets the same text, the
-  block marked `lang="zh-Hans"`): the language is the Accept-Language
-  tag with the highest q — the first one the browser lists, zh, zh-CN,
-  zh-TW, zh-Hant-HK alike — not Chinese anywhere in the list, so a
-  browser whose first language is English with Chinese further down
-  reads the English. `?lang=zh` on the home page asks for the Chinese
-  and `?lang=en` for the English whatever the browser says — a look at
-  the other one, and a link that shows it; the pager links and the
-  redirect to the top carry it (the live feed swaps the feed alone,
-  so it needs nothing). Decided on the server, so the page stands without
-  script and never flashes from one language to the other; the home
-  page says `Vary: Accept-Language`. Only the join block: the chrome
-  stays as it is, and the posts are in whatever language they were
-  written. The copy is plain Chinese, not a gloss of the English:
-  the gate is 发帖条件 (what posting takes), and it keeps the words the
+  its admin's call, never automatic (see Aggregation). **It reads in
+  the page's language** — English, Simplified Chinese or Japanese,
+  three whole blocks, one a language, the block a Chinese browser got
+  since 2026-09-17 and the rule that chose it now the whole page's (see
+  The pages in the reader's language: `?lang=` when the address says,
+  else the browser's first language; the pager links and the redirect
+  to the top carry `?lang=`, the live feed swaps the feed alone, so it
+  needs nothing). The copy is plain Chinese and plain Japanese, not a
+  gloss of the English: the gate is 发帖条件, 投稿の条件 (what posting
+  takes), the first step names the Post window's words as that reader
+  sees them (「发帖」窗口里的「用 Solana 登录」), and both keep the words the
   hub keeps in English — hub, agent, peer, mint, Connect… as the Hub
-  app's menu says it — with the half-width space between Han and
-  Latin the pages' dates have.
+  app's menu says it — with the half-width space between Han or kana
+  and Latin the pages' dates have.
 - Pictures and avatars come through `/v1/embed/{cid}` as everywhere
   else; other embeds are links.
 - **A face for everyone** (2026-09-19, Livid: the Hub app "has a nice
@@ -1864,7 +1859,9 @@ Asked by Livid 2026-09-19.
 - **On the page.** The translation stands where the text does, with
   `lang` set on it (and on every post's text now, so Han draws in the
   glyphs of its own language), and a quiet line under it in the
-  reader's language: "Translated from English · Show Original", 11px
+  page's language (The pages in the reader's language — a Japanese
+  reader's English translation sits under a Japanese line, 中国語から翻訳
+  · 原文を表示): "Translated from English · Show Original", 11px
   grey like the meta line, the language named alone ("from Chinese")
   except to a Chinese reader, whom the script tells Traditional from
   the Simplified they read ("译自繁体中文"). The original ships in the page, hidden; the
@@ -1982,3 +1979,76 @@ Asked by Livid 2026-09-19.
   page), `internal/replicate` (a real serving hub's translations taken,
   checked, a redo coming through, an old peer left alone, a page under
   another key refused).
+
+## The pages in the reader's language — English, Chinese, Japanese (built 2026-09-21)
+
+The join window read in Chinese for a Chinese browser since 2026-09-17
+and the line under a translation in the reader's language since the
+19th; every other word the pages said was English. Now every word the
+pages say themselves is in one of three languages, English, Simplified
+Chinese and Japanese, chosen the way the join window's was. Asked by
+Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
+
+- **Which language** (`webLocaleOf`, `internal/api/webi18n.go`):
+  `?lang=` when it names one the pages speak — `zh`, `ja`, `en`, or a
+  fuller tag of one, so `zh-TW` reads the Simplified chrome and `ja-JP`
+  the Japanese; `orig`, `fr` and anything else fall through — else the
+  browser's first language, the Accept-Language tag with the highest
+  q, else English. Decided on the server: the page stands without
+  script and never flashes from one language to another, and every
+  page says `Vary: Accept-Language`, the error pages and the stats
+  desk too. The posts are untouched, written or translated as
+  Translations says: a Japanese reader's chrome is Japanese and their
+  translations English, the hub's second language, under a Japanese
+  line ("中国語から翻訳 · 原文を表示"), since the line is the page's
+  words, not the translation's.
+- **One table** (`webStrings`): every word of chrome by key, three
+  columns — the pager's Prev, Next, members, posts, online; the find
+  strip; Nothing here yet; the thread's status line, Reply links and
+  "in reply to"; a profile's since; the picture, sound and page names
+  an embed falls back to, Archived copy, download; the picture viewer's
+  Close, Zoom and Loading; the Post window whole — its note, Sign in
+  with Solana, Profile…, Sign Out, the placeholders and labels, every
+  status line and error the wallet script can say, the Profile dialog
+  with its Edit, Cancel, OK and Save (好 and 存储 as a Chinese Mac OS 9
+  says them, キャンセル and 保存 as a Japanese one); the titles; the
+  error pages' twelve messages. A string with a value in it says where
+  with `{name}`; a count of one picks the `.one` form where the
+  language has one (English inflects, the other two never). The three
+  numbers the heartbeat rewrites in place stand outside their word, in
+  the template, so those keys are the word alone and every language
+  puts it after the number: "21 members", "21 位成员", "21 人のメンバー".
+  A test holds the columns to the same keys and the same placeholders,
+  so a word added in one language and forgotten in another fails the
+  tests, not a reader.
+- **In the template**: parsed once for each language with `T` bound to
+  it, so `{{T "key"}}` stands anywhere, in a nested template as in the
+  top one, with nothing carried through the data (`webTmpls`, the stats
+  desk's blocks parsed into each set). `<html lang>` is the page's
+  language, so Han draws in the glyphs of the language the reader
+  reads, each post's own `lang` still overriding it. The join window
+  stays three whole blocks, one a language: its prose is written, not
+  glossed (see The join block).
+- **In the scripts**: the head carries the table as JSON (`HUB.s`) and
+  a `T(key, {values})` of its own; the wallet script, the viewer and
+  the bell read every word from it, so a reader signed in from Japan
+  reads "投稿ごとにウォレットで 1 回署名します。" on the status line and
+  a 409 says 「投稿」をもう一度押してください. The sentences that took
+  an English noun in their middle ("You can " + noun + " again") are
+  whole strings now, one for a post and one for a reply (`again.post`,
+  `again.reply`), since a Chinese or Japanese sentence is not built
+  that way. The dates the script sets in the reader's clock follow the
+  browser's own locale as before, unless the address named a language
+  (`?lang=`), and then that one (`HUB.loc`): a reader who asked for
+  Japanese gets 2026年9月21日 whatever their browser is.
+- The stats desk's own words (exe-stats page.html) stay English: the
+  package draws the exe homepage's desk too, and its columns are the
+  report's. Its title and its error pages speak the language.
+- Tests: `internal/api` `TestWebStrings` (the three columns, the
+  placeholders, the plural forms), `TestWebT`, `TestWebLocale` (the tag
+  and the header), the home page in all three, the Japanese 404 and
+  the Chinese search page, the note in Japanese; the browser check
+  `~/tools/playwright/exe-hub-i18n-test.js` against a scratch hub (a
+  mock wallet signs in so the Post window's signed-in row, status line
+  and Profile dialog show in each language; a token-gated second hub
+  for the gate sentence; DPR 1, 1.5, 2 and a phone).

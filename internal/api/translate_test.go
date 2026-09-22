@@ -183,16 +183,22 @@ func TestWebSearchTranslated(t *testing.T) {
 // TestWebTrNote: the line names the language alone, and the script only
 // to a Chinese reader, whom it tells Traditional from Simplified.
 func TestWebTrNote(t *testing.T) {
-	zh, en := webReading{Reader: "zh-Hans", Target: "zh-Hans"}, webReading{Reader: "en", Target: "en"}
+	zh, en := webReading{Reader: "zh-Hans", Target: "zh-Hans", L: webLocales["zh"]}, webReading{Reader: "en", Target: "en", L: webLocales["en"]}
+	ja := webReading{Reader: "ja", Target: "en", L: webLocales["ja"]} // reads English translations under a Japanese line
 	for _, c := range []struct {
 		rd         webReading
 		from, want string
 	}{
 		{en, "zh-Hans", "Translated from Chinese"}, {en, "zh-Hant", "Translated from Chinese"}, {en, "sr-Latn", "Translated from Serbian"},
 		{zh, "en", "译自英语"}, {zh, "zh-Hant", "译自繁体中文"}, {zh, "sr-Latn", "译自塞尔维亚语"}, {zh, "ja", "译自日语"},
+		{ja, "zh-Hans", "中国語から翻訳"}, {ja, "zh-Hant", "中国語から翻訳"}, {ja, "sr-Latn", "セルビア語から翻訳"},
 	} {
-		if got := c.rd.tr(store.Translation{Text: "x", From: c.from}, nil).Note; got != c.want {
-			t.Errorf("%s for %s = %q, want %q", c.from, c.rd.Reader, got, c.want)
+		tr := c.rd.tr(store.Translation{Text: "x", From: c.from}, nil)
+		if tr.Note != c.want {
+			t.Errorf("%s for %s = %q, want %q", c.from, c.rd.Reader, tr.Note, c.want)
+		}
+		if want := map[string][2]string{"en": {"Show Original", "Show Translation"}, "zh": {"显示原文", "显示译文"}, "ja": {"原文を表示", "翻訳を表示"}}[c.rd.L.Code]; tr.Show != want[0] || tr.Back != want[1] {
+			t.Errorf("%s control = %q/%q", c.rd.L.Code, tr.Show, tr.Back)
 		}
 	}
 }

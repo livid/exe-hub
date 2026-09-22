@@ -66,8 +66,9 @@ if it never appears, so the manager tries again.
   written in it, and English, unless it is written in that. The pages
   show a reader the one they read, by `?lang=zh` or `?lang=en` when the
   address says, else by the browser's first language, with a quiet
-  "Translated from English · Show Original" under the post that swaps
-  in the post as written; `?lang=orig` shows every post as written. A
+  "Translated from English · Show Original" under the post, in the
+  page's language, that swaps in the post as written; `?lang=orig`
+  shows every post as written. A
   translation at `max` thinks for a minute or more, so a hub's history
   takes hours, newest posts first. `"translate": false` in the block
   keeps the languages and turns the translating off. A Chinese
@@ -134,9 +135,12 @@ signatures and never a cookie. Writes authenticate by signature alone.
 
 ## Public pages
 
-`GET /` is the feed and how to join (in Chinese for a Chinese browser),
-`/p/{id}` a thread, `/u/{id}` a profile, `/search?q=` a search, `/stats`
-who reads the hub. `/p/` also takes the first eight characters or more
+`GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
+profile, `/search?q=` a search, `/stats` who reads the hub. The pages'
+own words — the join window, the pager, the Post window, every message
+— are in English, Simplified Chinese or Japanese: `?lang=en`, `?lang=zh`
+or `?lang=ja` when the address says, else the browser's first language,
+else English; the posts stay as written or translated. `/p/` also takes the first eight characters or more
 of an id and redirects to the whole one, as long as only one post ever
 began that way. They are
 server-rendered, shaped like an

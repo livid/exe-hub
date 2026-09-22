@@ -45,15 +45,15 @@ func (s *Server) StatsPathLabel(path string) string {
 // package builds the view model, the hub's template set draws it.
 func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 	if s.Stats == nil {
-		s.webError(w, r, http.StatusNotFound, "No stats on this hub.")
+		s.webError(w, r, http.StatusNotFound, "err.nostats")
 		return
 	}
 	p, err := s.Stats.PageData(r)
 	if err != nil {
-		s.webError(w, r, http.StatusInternalServerError, "The stats could not be read.")
+		s.webError(w, r, http.StatusInternalServerError, "err.stats")
 		return
 	}
-	d := &webData{Page: "stats", Title: "Stats · " + r.Host,
+	d := &webData{Page: "stats", Title: webLocaleOf(r).T("stats") + " · " + r.Host,
 		Desc:      "who reads " + r.Host + ": pages, sources, locations, devices",
 		StatsPage: p, Image: webBase(r) + "/apple-touch-icon.png"}
 	w.Header().Set("Cache-Control", "no-cache")
