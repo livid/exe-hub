@@ -957,7 +957,23 @@ hub that carries the post.
   drawn on request: `/v1/preview/post/{id}.png`, `/v1/preview/profile/{id}.png`
   and `/v1/preview/home.png` (`internal/preview`, `internal/api/preview.go`)
   are 1200×630 PNGs of one Platinum window — the page's own chrome at
-  2x so its lines stay crisp at the half a card is shown at — holding
+  2x so its lines stay crisp at the half a card is shown at, laid out
+  in CSS pixels as chrome.css lays it out and painted two device
+  pixels to each: the 17px bar with its 13px close box (outer and
+  inner bevels, the ring, the 135° well), the 4px gaps, the stripes
+  with their light and dark end columns, the title on the bar's own
+  grey centred between the box and the bar's edge, the frame's two
+  shadows and the window bevel's blended corners, the 23px status
+  strip; edges the browser lays out at half pixels (the stripes' share
+  of the bar, their half-pixel drop in the 13px row) are snapped to
+  whole CSS pixels the way Blink snaps them. Pinned by `TestChrome`
+  (the corners as lettered drawings) and diffed pixel for pixel
+  against Chromium rendering chrome.css at 2x by
+  `~/tools/playwright/exe-hub-og-chrome-test.js` (`PREVIEW_OUT=<dir>
+  go test ./internal/preview` writes the pictures it reads; only the
+  well's dithered gradient may differ, by a level). Livid, 2026-09-22:
+  the card's chrome was a loose recreation (a 22px bar, an 11px flat
+  close box, the title on #ddd). The card holds
   the avatar, the name, the date (UTC), the words wrapped to six lines
   with an ellipsis, and the reply count on the status bar; a profile
   carries its bio and post count, the home page the hub icon, its host

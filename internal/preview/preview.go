@@ -17,6 +17,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
+	"math"
 	"strings"
 	"sync"
 	"unicode"
@@ -54,14 +55,13 @@ type Card struct {
 
 // the Platinum palette, as the page's CSS names it
 var (
-	desk   = color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
-	ink    = color.RGBA{0x26, 0x26, 0x26, 0xff}
-	white  = color.RGBA{0xff, 0xff, 0xff, 0xff}
-	light  = color.RGBA{0xdd, 0xdd, 0xdd, 0xff}
-	shade  = color.RGBA{0x99, 0x99, 0x99, 0xff}
-	stripe = color.RGBA{0x77, 0x77, 0x77, 0xff}
-	grey   = color.RGBA{0x66, 0x66, 0x66, 0xff}
-	dim    = color.RGBA{0x33, 0x33, 0x33, 0xff}
+	desk  = color.RGBA{0xcc, 0xcc, 0xcc, 0xff}
+	ink   = color.RGBA{0x26, 0x26, 0x26, 0xff}
+	white = color.RGBA{0xff, 0xff, 0xff, 0xff}
+	light = color.RGBA{0xdd, 0xdd, 0xdd, 0xff}
+	shade = color.RGBA{0x99, 0x99, 0x99, 0xff}
+	grey  = color.RGBA{0x66, 0x66, 0x66, 0xff}
+	dim   = color.RGBA{0x33, 0x33, 0x33, 0xff}
 )
 
 var (
@@ -293,65 +293,171 @@ func (c Card) PNG() ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// draw is the page's window at 2x: the CSS's 1px lines are 2px here,
-// its 2px hard shadow 4px, the title bar's 1px stripes 2px.
+// u is the picture's scale: device pixels per CSS pixel. The page's
+// chrome is laid out here in CSS pixels, as chrome.css lays it out,
+// and every edge lands on a device pixel — the one half-pixel offset
+// in the page, the stripes' centring in the bar, is a whole one at 2x.
+const u = 2
+
+// css is the device rectangle of a box given by its CSS-pixel edges.
+func css(x0, y0, x1, y1 int) image.Rectangle {
+	return image.Rect(x0*u, y0*u, x1*u, y1*u)
+}
+
+// snap is a device coordinate laid out at a fraction of a CSS pixel,
+// moved to the whole CSS pixel the browser paints it at.
+func snap(v float64) int {
+	return int(math.Floor(v/u+0.5)) * u
+}
+
+// px paints one CSS pixel.
+func px(dst draw.Image, x, y int, c color.Color) {
+	fill(dst, css(x, y, x+1, y+1), c)
+}
+
+// the chrome's colours, as chrome.css names them
+var (
+	g700   = color.RGBA{0x80, 0x80, 0x80, 0xff} // the boxes' outer bevel and inner well edge
+	w60dd  = color.RGBA{0xf1, 0xf1, 0xf1, 0xff} // white at 60% over the status strip's #ddd
+	w60aa  = color.RGBA{0xdd, 0xdd, 0xdd, 0xff} // white at 60% over its #aaa edge: the strip's corners
+	w50g6  = color.RGBA{0xcc, 0xcc, 0xcc, 0xff} // white at 50% over #999: the window bevel's corners
+	sedge  = color.RGBA{0xaa, 0xaa, 0xaa, 0xff} // the status strip's bottom and right edge
+	wellLo = 0x9a                               // the close box's well: a 135° gradient, #9a9a9a…
+	wellHi = 0xf1                               // …to #f1f1f1 across its 9px square
+)
+
+// closeBox draws .tbox with its top-left corner at CSS (x, y): 13px
+// square, #808080 along the outer top and left and white along the
+// outer bottom and right, a 1px black ring inside that, a white then
+// #808080 bevel inside the ring, and the 7×7 well between: the 135°
+// gradient a 9px square wears centred in the box, of which the bevel
+// leaves the middle 7 showing. At 2x the well's shade is computed per
+// device pixel along the diagonal, as the browser computes it.
+func closeBox(dst draw.Image, x, y int) {
+	fill(dst, css(x, y, x+13, y+13), g700)      // outer top and left
+	fill(dst, css(x+1, y+1, x+13, y+13), white) // outer bottom and right
+	fill(dst, css(x+1, y+1, x+12, y+12), ink)   // the ring
+	fill(dst, css(x+2, y+2, x+11, y+11), white) // inner top and left
+	fill(dst, css(x+3, y+3, x+11, y+11), g700)  // inner bottom and right
+	// the well: the gradient's square is CSS (x+2, y+2) to (x+11, y+11),
+	// 9u device pixels a side, its line running corner to corner
+	side := 9 * u
+	for dy := 0; dy < 7*u; dy++ {
+		for dx := 0; dx < 7*u; dx++ {
+			// the pixel centre's way along the diagonal, in half pixels
+			k := dx + u + dy + u + 1
+			c := uint8(wellLo + ((wellHi-wellLo)*k+side)/(2*side))
+			dst.Set((x+3)*u+dx, (y+3)*u+dy, color.RGBA{c, c, c, 0xff})
+		}
+	}
+}
+
+// stripe draws .titlebar .stripe between device columns x0 and x1,
+// its top at device row y: 12 CSS px of 1px rows, white then #777,
+// with a 1px column at the left of white then #ccc and at the right
+// of #ccc then #777 (the ::before and ::after).
+func stripe(dst draw.Image, x0, x1, y int) {
+	for i := 0; i < 12*u; i++ {
+		hi := (i/u)%2 == 0
+		row, left, right := stripeDark, light4, stripeDark
+		if hi {
+			row, left, right = white, white, light4
+		}
+		fill(dst, image.Rect(x0, y+i, x1, y+i+1), row)
+		fill(dst, image.Rect(x0, y+i, x0+u, y+i+1), left)
+		fill(dst, image.Rect(x1-u, y+i, x1, y+i+1), right)
+	}
+}
+
+var (
+	stripeDark = color.RGBA{0x77, 0x77, 0x77, 0xff}
+	light4     = color.RGBA{0xcc, 0xcc, 0xcc, 0xff} // --g400, the bar's own grey
+)
+
+// baseline is where a line of text's baseline goes when the browser
+// centres the face's ascent and descent in a line box h device pixels
+// tall whose top is at top: half the leading above, the ascent below.
+func (t typeface) baseline(top, h int) int {
+	m := t.main.Metrics()
+	return top + (fixed.I(h)-(m.Ascent+m.Descent)).Round()/2 + m.Ascent.Round()
+}
+
+// draw is the page's window at 2x: chrome.css's window, title bar,
+// frame and status strip laid out in CSS pixels and painted u device
+// pixels to each, so the picture's chrome is the page's own, edge for
+// edge; the card's content sits inside.
 func (c Card) draw(img *image.RGBA) {
-	const u = 2 // one CSS pixel
 	fill(img, img.Bounds(), desk)
 
-	// the window: hard shadow, border, inset bevel
-	win := image.Rect(36, 36, W-36, H-36)
-	fill(img, win.Add(image.Pt(2*u, 2*u)), ink)
-	fill(img, win, desk)
-	box(img, win, u, ink)
-	in := win.Inset(u)
-	bevel(img, in, u, white, shade)
+	// the window: 18px in from the picture's edges, a 1px #262626
+	// border on #ccc, a hard shadow 2px down and right
+	x0, y0, x1, y1 := 18, 18, W/u-18, H/u-18
+	fill(img, css(x0+2, y0+2, x1+2, y1+2), ink)
+	fill(img, css(x0, y0, x1, y1), desk)
+	box(img, css(x0, y0, x1, y1), u, ink)
 
-	// the title bar: padding 2px 4px, the close box, the stripes, the
-	// title on its own light box between them
-	title := face(bold, 26)
-	barH := 22 * u
-	bar := image.Rect(in.Min.X+4*u, in.Min.Y+2*u, in.Max.X-4*u, in.Min.Y+2*u+barH)
-	stripes := image.Rect(bar.Min.X, bar.Min.Y+(barH-12*u)/2, bar.Max.X, bar.Min.Y+(barH-12*u)/2+12*u)
-	fill(img, stripes, light)
-	for y := stripes.Min.Y; y < stripes.Max.Y; y += 2 * u {
-		fill(img, image.Rect(stripes.Min.X, y, stripes.Max.X, y+u), white)
-		fill(img, image.Rect(stripes.Min.X, y+u, stripes.Max.X, y+2*u), stripe)
+	// the title bar: 17px, padding 2px 4px, a 4px gap between its
+	// parts — the close box, a stripe, the title on the bar's grey with
+	// 2px of padding, a stripe. The stripes share the width the title
+	// leaves, so their edges fall on half pixels, and the 12px stripes
+	// sit half a pixel down the 13px row: the browser snaps every edge
+	// to a whole CSS pixel, halves rounding up, so the picture does too.
+	closeBox(img, x0+5, y0+3)
+	title := face(bold, 12*u)
+	bx0, bx1 := (x0+22)*u, (x1-5)*u // the bar's content past the close box and its gap
+	maxTitle := (x1-x0-10)*u*7/10 - 4*u
+	var tw int
+	if l := title.wrap(c.Title, fixed.I(maxTitle), 1); len(l) > 0 {
+		c.Title = l[0]
+		tw = title.width(c.Title).Ceil()
+	} else {
+		c.Title = ""
 	}
-	tbox := image.Rect(bar.Min.X, bar.Min.Y+(barH-11*u)/2, bar.Min.X+11*u, bar.Min.Y+(barH-11*u)/2+11*u)
-	fill(img, tbox, light)
-	box(img, tbox, u, ink)
-	bevel(img, tbox.Inset(u), u, white, color.RGBA{0x88, 0x88, 0x88, 0xff})
-	tw := title.width(c.Title).Ceil()
-	tx := (bar.Min.X+bar.Max.X)/2 - tw/2
-	fill(img, image.Rect(tx-4*u, stripes.Min.Y, tx+tw+4*u, stripes.Max.Y), light)
-	title.draw(img, tx, stripes.Min.Y+(12*u+18)/2, c.Title, ink)
+	tbox := float64(tw + 4*u) // the title's box: 2px padding either side
+	half := (float64(bx1-bx0) - 8*u - tbox) / 2
+	l1 := snap(float64(bx0) + half)
+	t0 := snap(float64(bx0) + half + 4*u)
+	r0 := snap(float64(bx0) + half + 4*u + tbox + 4*u)
+	sy := (y0 + 4) * u
+	stripe(img, bx0, l1, sy)
+	stripe(img, r0, bx1, sy)
+	title.draw(img, t0+2*u, title.baseline((y0+3)*u, 13*u), c.Title, ink)
 
-	// the sunken white frame under the bar: margin 0 4px 4px
-	frame := image.Rect(in.Min.X+4*u, bar.Max.Y+2*u, in.Max.X-4*u, in.Max.Y-4*u)
-	fill(img, image.Rect(frame.Min.X-1*u, frame.Min.Y-1*u, frame.Max.X, frame.Max.Y), shade)
-	fill(img, image.Rect(frame.Min.X, frame.Min.Y, frame.Max.X+1*u, frame.Max.Y+1*u), white)
-	fill(img, frame, white)
-	box(img, frame, u, ink)
-	inner := frame.Inset(u)
+	// the frame: margin 0 4px 4px, a 1px black border, white inside;
+	// its #999 shadow 1px up and left, its white one 1px down and right
+	fx0, fy0, fx1, fy1 := x0+5, y0+18, x1-5, y1-5
+	fill(img, css(fx0-1, fy0-1, fx1-1, fy0), shade)
+	fill(img, css(fx0-1, fy0-1, fx0, fy1-1), shade)
+	fill(img, css(fx0+1, fy1, fx1+1, fy1+1), white)
+	fill(img, css(fx1, fy0+1, fx1+1, fy1+1), white)
+	fill(img, css(fx0, fy0, fx1, fy1), white)
+	box(img, css(fx0, fy0, fx1, fy1), u, ink)
+	ix0, iy0, ix1, iy1 := fx0+1, fy0+1, fx1-1, fy1-1
 
-	// the status bar along the frame's foot
-	foot := face(regular, 22)
-	statusH := 15 * u
-	status := image.Rect(inner.Min.X, inner.Max.Y-statusH, inner.Max.X, inner.Max.Y)
-	fill(img, status, light)
-	fill(img, image.Rect(status.Min.X, status.Min.Y, status.Max.X, status.Min.Y+u), ink)
-	bevel(img, image.Rect(status.Min.X, status.Min.Y+u, status.Max.X, status.Max.Y), u, color.RGBA{0xf3, 0xf3, 0xf3, 0xff}, color.RGBA{0xaa, 0xaa, 0xaa, 0xff})
-	base := status.Min.Y + u + (statusH-u+16)/2
-	foot.draw(img, status.Min.X+8*u, base, c.Foot, dim)
+	// the status strip along the frame's foot: a 1px black rule, then
+	// 22px of #ddd — 3px of padding round the 11px type's 16px line —
+	// with white at 60% along its top and left, #aaa along its bottom
+	// and right, the two blended where they meet
+	sy0 := iy1 - 23
+	fill(img, css(ix0, sy0, ix1, sy0+1), ink)
+	fill(img, css(ix0, sy0+1, ix1, iy1), light)
+	fill(img, css(ix0, sy0+1, ix1, sy0+2), w60dd)
+	fill(img, css(ix0, sy0+1, ix0+1, iy1), w60dd)
+	fill(img, css(ix0, iy1-1, ix1, iy1), sedge)
+	fill(img, css(ix1-1, sy0+1, ix1, iy1), sedge)
+	px(img, ix1-1, sy0+1, w60aa)
+	px(img, ix0, iy1-1, w60aa)
+	foot := face(regular, 11*u)
+	base := foot.baseline((sy0+4)*u, 16*u)
+	foot.draw(img, (ix0+8)*u, base, c.Foot, dim)
 	if c.Right != "" {
-		foot.draw(img, status.Max.X-8*u-foot.width(c.Right).Ceil(), base, c.Right, dim)
+		foot.draw(img, (ix1-8)*u-foot.width(c.Right).Ceil(), base, c.Right, dim)
 	}
 
 	// the content: the picture beside the name and its line, the words
 	// below, all inside a margin
 	const pad = 40
-	area := image.Rect(inner.Min.X+pad, inner.Min.Y+28, inner.Max.X-pad, status.Min.Y-24)
+	area := image.Rect(ix0*u+pad, iy0*u+28, ix1*u-pad, sy0*u-24)
 	x := area.Min.X
 	const pic = Pic
 	if c.Picture != nil {
@@ -388,6 +494,17 @@ func (c Card) draw(img *image.RGBA) {
 	for i, line := range body.wrap(c.Body, fixed.I(area.Dx()), n) {
 		body.draw(img, area.Min.X, top+36+i*lineH, line, ink)
 	}
+
+	// the window's inset bevel, over everything as the page's is
+	// (.window::before): white along the inner top and left, #999 along
+	// the inner bottom and right, and at the two corners where they
+	// meet the white at half strength over the #999
+	fill(img, css(x0+1, y0+1, x1-1, y0+2), white)
+	fill(img, css(x0+1, y0+1, x0+2, y1-1), white)
+	fill(img, css(x1-2, y0+1, x1-1, y1-1), shade)
+	fill(img, css(x0+1, y1-2, x1-1, y1-1), shade)
+	px(img, x1-2, y0+1, w50g6)
+	px(img, x0+1, y1-2, w50g6)
 }
 
 // Decode reads a picture for a card: whatever the store holds (PNG,
