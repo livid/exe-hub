@@ -953,24 +953,27 @@ document.addEventListener("change", e => {
 // looping once half of one is in view, paused when it leaves. A video's
 // controls show while the mouse moves over it or a finger taps it, and
 // hide once it has been still a moment; a video its reader paused keeps
-// its controls and stays paused, and unmuting one mutes the rest. With
+// its controls and stays paused, and unmuting one mutes the rest. The
+// browser's own pause for a hidden tab is nobody's, so the tab comes back
+// as it was left, no controls. With
 // reduced motion or Save-Data nothing starts on its own, and without
 // script every video keeps its own controls. The live feed's new posts
 // are picked up as they arrive.
 (() => {
   if (!("IntersectionObserver" in window)) return;
   const calm = matchMedia("(prefers-reduced-motion: reduce)").matches || !!(navigator.connection && navigator.connection.saveData);
-  const state = new WeakMap(); // video -> {held, auto}
+  const state = new WeakMap(); // video -> {held, auto, seen}
+  const start = v => v.play().catch(() => { v.muted = true; v.play().catch(() => { v.controls = true; }); });
   const io = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target, st = state.get(v);
       if (!v.isConnected) { io.unobserve(v); continue; }
       // half of it in view, or half the view for one taller than that
       // (isIntersecting alone is any sliver)
-      const seen = e.isIntersecting && (e.intersectionRatio >= 0.5 || (e.rootBounds && e.intersectionRect.height >= e.rootBounds.height / 2));
-      if (seen && v.paused && !st.held) {
-        v.play().catch(() => { v.muted = true; v.play().catch(() => { v.controls = true; }); });
-      } else if (!seen && !v.paused) {
+      st.seen = e.isIntersecting && (e.intersectionRatio >= 0.5 || (e.rootBounds && e.intersectionRect.height >= e.rootBounds.height / 2));
+      if (st.seen && v.paused && !st.held) {
+        start(v);
+      } else if (!st.seen && !v.paused) {
         st.auto = true;
         v.pause();
       }
@@ -998,6 +1001,9 @@ document.addEventListener("change", e => {
     v.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") show(3000); });
     v.addEventListener("pause", () => {
       if (st.auto) { st.auto = false; return; }
+      // Chrome pauses a muted video when its tab is hidden and starts it
+      // again when the tab is back: not the reader's doing, no controls
+      if (document.hidden) return;
       st.held = true; // the reader paused it: it stays so, controls showing
       clearTimeout(t);
       if (shows) v.controls = true;
@@ -1011,6 +1017,15 @@ document.addEventListener("change", e => {
   const scan = () => document.querySelectorAll(".embeds video").forEach(watch);
   scan();
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+  // a browser that paused the hidden tab's videos but does not start them
+  // again itself gets the ones in view going
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    for (const v of document.querySelectorAll(".embeds video")) {
+      const st = state.get(v);
+      if (st && st.seen && !st.held && v.paused) start(v);
+    }
+  });
 })();
 </script>
 {{if .PushKey}}<script>

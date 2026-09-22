@@ -789,6 +789,14 @@ hub that carries the post.
   controls show while the mouse moves over it (hidden 2 s after it goes
   still, at once when it leaves) or for 3 s after a tap, and stay while
   it is paused; a video its reader paused stays paused when scrolled back.
+  Chrome pauses a muted video when its tab is hidden and starts it again
+  when the tab is back (`WebMediaPlayerImpl::OnPageHidden`, a `pause`
+  event like any other); the script took that pause for the reader's and
+  the controls showed for 2 s on every return to the tab (Livid,
+  2026-09-22). A pause that lands while `document.hidden` is nobody's
+  now, and on `visibilitychange` back the videos in view that the
+  browser did not start again itself are played (checked with the tab's
+  hiding scripted: headless Chromium never hides a page).
   Unmuting one mutes the rest. The script takes a converted GIF's
   `autoplay` (there for readers without script) so the observer decides,
   and a GIF never wears controls. With `prefers-reduced-motion` or
