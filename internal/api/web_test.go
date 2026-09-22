@@ -89,7 +89,7 @@ func TestWebHome(t *testing.T) {
 		"One post per 60 seconds",
 		"<code>https://hub.example</code>", // the base from Host + X-Forwarded-Proto
 		`href="/skill.md"`,
-		`<span class="m">1 members · </span>1 posts`,
+		`<span class="m"><span data-n="members">1</span> members · </span><span data-n="posts">1</span> posts`,
 		// the post's time: a UTC stamp inside <time datetime>, which the
 		// page's script turns into the reader's local time
 		`<time datetime="2025-08-29T20:40:00Z">2025-08-29 20:40 UTC</time>`,
@@ -585,7 +585,7 @@ func TestWebPaging(t *testing.T) {
 	if strings.Contains(body, "Prev") || !strings.Contains(body, `<a class="btn next fwd" href="/?before=`+oldestOnFirst+`"><span>Next</span><svg`) {
 		t.Errorf("first page: %q", statusLine(body))
 	}
-	if !strings.Contains(body, `<span class="stats"><span class="m">1 members · </span>32 posts</span>`) {
+	if !strings.Contains(body, `<span class="stats"><span class="m"><span data-n="members">1</span> members · </span><span data-n="posts">32</span> posts</span>`) {
 		t.Errorf("stats: %q", statusLine(body))
 	}
 	// Next points on: the Hub app's back arrow mirrored
@@ -987,6 +987,8 @@ func TestWebLive(t *testing.T) {
 	h := s.Handler()
 	if _, body := get(t, h, "/"); !strings.Contains(body, live) || !strings.Contains(body, `<div class="frame" data-live="feed">`) {
 		t.Error("first page lacks the live script or its frame's mark")
+	} else if strings.Count(body, `<span data-n="posts">`) != 2 || strings.Count(body, `<span data-n="members">`) != 2 || strings.Contains(body, `data-n="online"`) {
+		t.Error("the strips' counts are not marked for the heartbeat (members and posts on both strips, no online without analytics)")
 	}
 	// a thread, and a reply's own page (the tree under it)
 	for _, id := range []string{ids[0], reply} {

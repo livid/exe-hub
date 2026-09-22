@@ -667,6 +667,15 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   // run when the tab is shown, the network is back or the page comes
   // back from the back-forward cache; a reopen fetches, as any reconnect
   // does, since the line was down (the Hub app's rule).
+  // The heartbeat carries the strip's counts — members, posts and who was
+  // here in the last five minutes — and they are written in place: a
+  // visitor coming or going is no event on the bus, so "online" would
+  // otherwise stand until someone posted. The swap never fights this,
+  // since it compares served HTML, not the page's copy of it.
+  const counts = data => {
+    let d = {}; try { d = JSON.parse(data); } catch (x) { return; }
+    for (const n of document.querySelectorAll("[data-n]")) if (typeof d[n.dataset.n] === "number") n.textContent = d[n.dataset.n];
+  };
   let es, down = false, back = 0, again, heard = 0;
   const connect = () => {
     clearTimeout(again);
@@ -675,7 +684,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     const me = es = new EventSource("/v1/events");
     es.onopen = () => { heard = Date.now(); back = 0; if (down) { down = false; poke(); } };
     es.onmessage = e => { heard = Date.now(); let ev = {}; try { ev = JSON.parse(e.data); } catch (x) {} if (mine(ev)) poke(); };
-    es.addEventListener("ping", () => { heard = Date.now(); });
+    es.addEventListener("ping", e => { heard = Date.now(); counts(e.data); });
     es.onerror = () => {
       down = true;
       if (me !== es || me.readyState !== EventSource.CLOSED) return; // the browser is retrying this one
@@ -1707,7 +1716,7 @@ document.addEventListener("click", e => {
 
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}<span class="m">{{.Members}} members · </span>{{.Count}} posts{{if .StatsOn}} · <a href="/stats" title="Who reads this hub">{{.Online}} online</a>{{end}}{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{.Count}} {{if eq .Count 1}}post matches{{else}}posts match{{end}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} posts{{else}}<span class="m"><span data-n="members">{{.Members}}</span> members · </span><span data-n="posts">{{.Count}}</span> posts{{if .StatsOn}} · <a href="/stats" title="Who reads this hub"><span data-n="online">{{.Online}}</span> online</a>{{end}}{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="Search posts" aria-label="Search posts" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">Search</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="Notify me of every new post" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}</form>
 {{end}}

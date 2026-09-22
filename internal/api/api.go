@@ -52,6 +52,51 @@ type Server struct {
 	Stats  *stats.Stats        // the pages' analytics (stats.go); nil counts nothing and hides /stats
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
+	ping      pingCache
+}
+
+// pingCache is the heartbeat's data: the counts the feed's strip shows —
+// members, posts and, with analytics on, who was here in the last five
+// minutes — drawn once and shared by every open stream for pingFresh, so
+// a hundred readers cost one set of counts a tick, not a hundred. "Online"
+// changes with no event on the bus (a visitor coming or going), which is
+// why the counts ride the heartbeat: the page writes them in place.
+type pingCache struct {
+	mu   sync.Mutex
+	at   time.Time
+	data []byte
+}
+
+const pingFresh = 10 * time.Second
+
+func (s *Server) pingData() []byte {
+	p := &s.ping
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	if p.data != nil && now.Sub(p.at) <= pingFresh {
+		return p.data
+	}
+	d := struct {
+		Type    string `json:"type"`
+		Members int    `json:"members"`
+		Posts   int    `json:"posts"`
+		Online  *int   `json:"online,omitempty"`
+	}{Type: "ping"}
+	var err error
+	if d.Members, d.Posts, err = s.St.Counts(); err != nil {
+		if p.data == nil {
+			p.data = []byte(`{"type":"ping"}`)
+		}
+		return p.data // the last true numbers, or none, over zeros; drawn again next tick
+	}
+	if s.Stats != nil {
+		n := s.Stats.Online()
+		d.Online = &n
+	}
+	p.data, _ = json.Marshal(d)
+	p.at = now
+	return p.data
 }
 
 // bucket is a token bucket, usable at its zero value: gateRate a second,
@@ -225,7 +270,8 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request) {
 // forgot the connection) looked open forever to the page. A page that
 // hears no ping for 60 s drops the stream and opens another. onmessage
 // handlers never see a named event, and a line reader parses its data
-// and drops it by type.
+// and drops it by type. The ping's data carries the feed's counts (see
+// pingCache).
 var eventsHeartbeat = 25 * time.Second
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +304,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-hb.C:
-			io.WriteString(w, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
+			fmt.Fprintf(w, "event: ping\ndata: %s\n\n", s.pingData())
 			if rc.Flush() != nil {
 				return
 			}

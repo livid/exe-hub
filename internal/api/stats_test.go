@@ -195,7 +195,7 @@ func TestStatsPage(t *testing.T) {
 	}
 	// the feed says who is here
 	_, body = get(t, h, "/")
-	if !strings.Contains(body, `<a href="/stats" title="Who reads this hub">2 online</a>`) {
+	if !strings.Contains(body, `<a href="/stats" title="Who reads this hub"><span data-n="online">2</span> online</a>`) {
 		t.Error("the feed's pager lacks the online link")
 	}
 	// the JSON

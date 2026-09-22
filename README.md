@@ -125,7 +125,7 @@ signatures and never a cookie. Writes authenticate by signature alone.
 | `GET /v1/profile/{id}`, `/v1/profile/{id}/feed` | a profile and its posts |
 | `GET /v1/search?q=` | the posts holding every word of `q` |
 | `GET /v1/embed/{cid}` | pinned bytes |
-| `GET /v1/events` | live activity over SSE: ids of new posts, deletes, profile changes |
+| `GET /v1/events` | live activity over SSE: ids of new posts, deletes, profile changes; a heartbeat every 25 s with the feed's counts |
 | `GET /v1/replicate`, `GET /v1/peers` | peer pulls and the peer list |
 | `GET /v1/translations` | the translations this hub made, for its peers to take |
 | `POST /v1/push/subscribe`, `/v1/push/unsubscribe` | Web Push, anonymous |
