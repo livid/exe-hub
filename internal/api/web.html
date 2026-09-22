@@ -545,7 +545,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{else if eq .Page "thread"}}
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread"{{end}}>
     <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a></div>
     {{template "post" .Post}}
@@ -555,7 +555,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{else if eq .Page "search"}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{T "search"}}</span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{T "search"}}</span><span class="stripe"></span></div>
   <div class="frame">
     {{template "find" .}}
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
@@ -565,7 +565,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{else if eq .Page "profile"}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/">{{.Host}}</a></span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame">
     <div class="profile">
       <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Profile.ID}}.svg" alt="">{{end}}</span>
@@ -586,8 +586,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{template "stats" .StatsPage}}
 {{else}}
 <div class="window">
-  <div class="titlebar"><a class="tbox" href="/" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
-  <div class="frame"><div class="alert">{{.Message}} <a href="/">{{T "error.back"}}</a></div></div>
+  <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{.Host}}</span><span class="stripe"></span></div>
+  <div class="frame"><div class="alert">{{.Message}} <a href="/{{.Q}}">{{T "error.back"}}</a></div></div>
 </div>
 {{end}}
 {{if .Live}}<script>

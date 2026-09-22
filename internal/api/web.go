@@ -602,7 +602,7 @@ func writePlain(b *strings.Builder, s string) {
 // is hex, so nothing in one is ever escaped and the token reads the same
 // in the HTML as in the post; a node's start counts as a free edge, the
 // way the Hub app's chunks begin. An id without a name stays as typed.
-func renderPost(text string, names map[string]string) template.HTML {
+func renderPost(text string, names map[string]string, q string) template.HTML {
 	page := renderText(text)
 	if len(names) == 0 {
 		return page
@@ -624,7 +624,7 @@ func renderPost(text string, names map[string]string) template.HTML {
 				continue
 			}
 			b.WriteString(s[at:m[0]])
-			b.WriteString(`<a class="mention" href="/u/` + id + `">@` + html.EscapeString(name) + `</a>`)
+			b.WriteString(`<a class="mention" href="/u/` + id + q + `">@` + html.EscapeString(name) + `</a>`)
 			at = m[1]
 		}
 		b.WriteString(s[at:])
@@ -763,7 +763,7 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 	trs := s.webTranslations(rd, ids)
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
-		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
+		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions, rd.Q), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
 		if t, ok := trs[p.ID]; ok && p.Text != "" {
 			out[i].Tr = rd.tr(t, p.Mentions)
 		}
@@ -1034,7 +1034,7 @@ func (rd webReading) shows(from string) bool {
 // page's language; names is the post's mentions, which a translation
 // keeps as they were written.
 func (rd webReading) tr(t store.Translation, names map[string]string) *webTr {
-	tr := &webTr{HTML: renderPost(t.Text, names), Lang: rd.Target}
+	tr := &webTr{HTML: renderPost(t.Text, names, rd.Q), Lang: rd.Target}
 	// the language alone: its script tells only a Chinese reader
 	// something, Traditional from the Simplified they are reading
 	from, _, _ := strings.Cut(t.From, "-")
@@ -1112,8 +1112,9 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 // a moment too early would stay "No such post." after the post arrived.
 func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, key string) {
 	w.Header().Set("Cache-Control", "no-store")
-	msg := webLocaleOf(r).T(key)
-	s.webRender(w, r, code, &webData{Page: "error", Title: msg + " · " + r.Host, Message: msg})
+	rd := webReadingOf(r) // the way back carries ?lang= like every other link
+	msg := rd.L.T(key)
+	s.webRender(w, r, code, &webData{Page: "error", Title: msg + " · " + r.Host, Message: msg, Lang: rd.Lang, Q: rd.Q})
 }
 
 // webWords is a post's text as plain words, for where no markup shows —

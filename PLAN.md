@@ -2066,6 +2066,21 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   browser's own locale as before, unless the address named a language
   (`?lang=`), and then that one (`HUB.loc`): a reader who asked for
   Japanese gets 2026年9月21日 whatever their browser is.
+- **The language rides every exit** (2026-09-22, Codex's catch the
+  night it shipped: the title bar's close box and hub-name link went to
+  a bare `/`, which served English to an English-preferring browser
+  that had opened a Japanese link; Livid: "Improve it."). Every way off
+  a page carries the request's `?lang=` now — the close box and the
+  hub-name link on the thread, search, profile and error pages, the
+  error page's way back (`webError` reads the request like every other
+  handler), and a mention inside a post, which `renderPost` draws with
+  the same `?lang=` as the page's other links — so a look at another
+  language lasts through any click, and without `?lang=` every link
+  stays bare and the browser's language decides. Test:
+  `TestWebLangRidesEveryExit`, and in the browser
+  `~/tools/playwright/exe-hub-lang-nav-test.js`, an English browser
+  opening a Japanese thread and leaving by each exit, searching,
+  following a mention and coming back from a 404, Japanese throughout.
 - The stats desk's own words (exe-stats page.html) stay English: the
   package draws the exe homepage's desk too, and its columns are the
   report's. Its title and its error pages speak the language.

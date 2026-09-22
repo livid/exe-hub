@@ -1507,3 +1507,42 @@ func TestWebDeskColumnsAreTheHubsOwn(t *testing.T) {
 		}
 	}
 }
+
+// TestWebLangRidesEveryExit: an explicit ?lang= is carried by every way
+// off a page — the title bar's close box and hub-name link, the error
+// page's way back, and a mention inside a post — not only the post,
+// profile and pager links (Codex's catch, 2026-09-22); without one the
+// links stay bare.
+func TestWebLangRidesEveryExit(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	lpub, lpriv, _ := ed25519.GenerateKey(nil)
+	jpub, jpriv, _ := ed25519.GenerateKey(nil)
+	livid := identity.Fingerprint(lpub)
+	ingest(t, s, lpriv, lpub, 1, "profile.set", map[string]any{"name": "Livid"})
+	ingest(t, s, jpriv, jpub, 1, "profile.set", map[string]any{"name": "Joe"})
+	root := ingest(t, s, jpriv, jpub, 2, "post.create", map[string]any{"text": "thanks @" + livid + " for this"})
+	h := s.Handler()
+	mention := `<a class="mention" href="/u/` + livid + `?lang=ja">@Livid</a>`
+	for path, wants := range map[string][]string{
+		"/p/" + root + "?lang=ja":                       {`<a class="tbox" href="/?lang=ja"`, `<span class="title"><a href="/?lang=ja">`, mention, `<a class="btn prev back" href="/?lang=ja">`},
+		"/u/" + identity.Fingerprint(jpub) + "?lang=ja": {`<a class="tbox" href="/?lang=ja"`, `<span class="title"><a href="/?lang=ja">`, mention},
+		"/search?q=thanks&lang=ja":                      {`<a class="tbox" href="/?lang=ja"`, mention, `<input type="hidden" name="lang" value="ja">`},
+		"/?lang=ja":                                     {mention},
+		"/p/" + strings.Repeat("0", 64) + "?lang=ja":    {`<a class="tbox" href="/?lang=ja"`, `<a href="/?lang=ja">フィードに戻る。</a>`},
+	} {
+		_, body := get(t, h, path, "Accept-Language", "en-US")
+		for _, want := range wants {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s lacks %s\n%s", path, want, statusLine(body))
+			}
+		}
+		if strings.Contains(body, `href="/"`) || strings.Contains(body, `href="/u/`+livid+`"`) {
+			t.Errorf("%s still has a bare home or mention link", path)
+		}
+	}
+	// no ?lang=: bare links, the browser's language deciding the page
+	_, body := get(t, h, "/p/"+root, "Accept-Language", "ja")
+	if !strings.Contains(body, `<a class="tbox" href="/"`) || !strings.Contains(body, `<a class="mention" href="/u/`+livid+`">@Livid</a>`) || !strings.Contains(body, `<html lang="ja">`) {
+		t.Errorf("a Japanese browser without ?lang=: %s", statusLine(body))
+	}
+}
