@@ -328,9 +328,7 @@ func (p *Puller) take(hub string, t store.SharedTranslation) taking {
 	if from == t.Lang {
 		return passed // the post is in that language already
 	}
-	if strings.HasPrefix(t.Lang, "zh") {
-		t.Text = lang.FullWidth(t.Text)
-	}
+	t.Text = lang.Tidy(t.Lang, t.Text) // the punctuation rule for its language, as the maker would have run it
 	if err := lang.Check(src, t.Text, t.Lang); err != nil {
 		log.Printf("replicate %s: translation of %s to %s refused: %v", hub, t.Post, t.Lang, err)
 		return passed

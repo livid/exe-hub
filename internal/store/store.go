@@ -1699,11 +1699,40 @@ func (s *Store) KeptTranslations(lang string) ([]KeptTranslation, error) {
 	return out, rows.Err()
 }
 
-// RewriteTranslation replaces a kept translation's words and nothing
-// else about it: who made it, when, and its tries stand.
+// RewriteTranslation replaces a kept translation's words (the
+// punctuation rule, lang.Tidy): who made it and its tries stand. This
+// hub's own row is given a new rev and time with them, so peers that
+// took it take it again; a peer's row is set right in place.
 func (s *Store) RewriteTranslation(post, lang, text string) error {
-	_, err := s.db.Exec(`UPDATE translations SET text = ? WHERE post = ? AND lang = ? AND status = 'ok'`, text, post, lang)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var origin string
+	switch err := tx.QueryRow(`SELECT origin FROM translations WHERE post = ? AND lang = ? AND status = 'ok'`, post, lang).Scan(&origin); {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil // nothing kept to rewrite
+	case err != nil:
+		return err
+	}
+	if origin != "" {
+		// a peer's: set right here, and left for the peer to serve again
+		_, err = tx.Exec(`UPDATE translations SET text = ? WHERE post = ? AND lang = ? AND status = 'ok'`, text, post, lang)
+	} else {
+		// this hub's own: a new rev and time, so peers that took it take
+		// it again (newest wins on their side, TranslationsPage serves by rev)
+		var rev int64
+		if rev, err = nextRev(tx); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE translations SET text = ?, ts = ?, rev = ? WHERE post = ? AND lang = ? AND status = 'ok'`,
+			text, time.Now().UnixMilli(), rev, post, lang)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetTranslationNote keeps the editor's note on a post, replacing the

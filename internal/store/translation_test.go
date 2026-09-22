@@ -156,6 +156,41 @@ func TestTranslationRewriteAndDrop(t *testing.T) {
 		text != "你好，世界" || model != "m" || tries != 1 {
 		t.Fatalf("after rewrite: %q %q %d, %v", text, model, tries, err)
 	}
+	// the rewrite travels: this hub's own row is served again under a
+	// new rev with a new time, so a peer that took it takes it again
+	page, next, err := s.TranslationsPage(0, 10)
+	if err != nil || len(page) != 1 || page[0].Text != "你好，世界" || next < 2 {
+		t.Fatalf("after rewrite TranslationsPage = %+v, %d, %v", page, next, err)
+	}
+	before := page[0].TS
+	time.Sleep(2 * time.Millisecond)
+	if err := s.RewriteTranslation(ja, "zh-Hans", "你好，世界。"); err != nil {
+		t.Fatal(err)
+	}
+	if again, next2, _ := s.TranslationsPage(next, 10); len(again) != 1 || again[0].Text != "你好，世界。" || again[0].TS <= before || next2 <= next {
+		t.Fatalf("a rewrite not served again: %+v, %d after %d", again, next2, next)
+	}
+	// a peer's row rewritten here keeps its rev of 0 and its time: it is
+	// its maker's to serve again
+	// (the store takes any target; the post's own language is one the
+	// puller would refuse, and one this post is never owed, so the rest
+	// of the test stands)
+	if ok, err := s.AcceptTranslation("peer", SharedTranslation{Post: ja, Lang: "ja", Text: "こんにちは:皆さん", Model: "m", TS: 5}); !ok || err != nil {
+		t.Fatalf("AcceptTranslation = %v, %v", ok, err)
+	}
+	if err := s.RewriteTranslation(ja, "ja", "こんにちは：皆さん"); err != nil {
+		t.Fatal(err)
+	}
+	var rev, ts int64
+	var origin string
+	if err := s.db.QueryRow(`SELECT text, origin, rev, ts FROM translations WHERE post=? AND lang='ja'`, ja).Scan(&text, &origin, &rev, &ts); err != nil ||
+		text != "こんにちは：皆さん" || origin != "peer" || rev != 0 || ts != 5 {
+		t.Fatalf("a peer's row after rewrite: %q %q rev %d ts %d, %v", text, origin, rev, ts, err)
+	}
+	if page, _, _ := s.TranslationsPage(0, 10); len(page) != 1 {
+		t.Fatalf("a peer's row served on: %+v", page)
+	}
+	s.db.Exec(`DELETE FROM translations WHERE post=? AND lang='ja'`, ja)
 	if trs, _ := s.Translations([]string{ja}, "en"); len(trs) != 0 {
 		t.Fatal("a rewrite made a translation of a failed try")
 	}

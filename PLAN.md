@@ -1902,7 +1902,16 @@ the original one press away. Asked by Livid 2026-09-19.
   `: ; ! ?` turn full-width against Han or kana by the same rule, and
   the comma is left alone, since Japanese sets its own, 、, and the
   model does. `lang.Tidy(to, text)` picks the rule for a target, in
-  `Translate` and in the start-up pass over kept rows.
+  `Translate`, in the start-up pass over kept rows, and on the taking
+  side of replication, which ran the Chinese rule alone before. And a
+  rewrite travels now: the start-up pass rewrote 7 Japanese rows on the
+  host, and the public hub, which takes and never tidies, kept its
+  copies with the colons, since `RewriteTranslation` changed the words
+  and nothing else and `TranslationsPage` serves by rev — so a rewrite
+  of this hub's own row takes a new rev and time, and peers take it
+  again (newest wins on their side); a taken row is set right in place
+  and left for its maker to serve again. The seven were made again on
+  the host once (`-retranslate -to ja`) to carry them over.
 - **One translation again** (`exe-hub -retranslate <post> [-to <lang>]
   [-note "…"]`). The shape check cannot judge words, and a read found
   one clause put wrong: "six columns, five set right, five rows", five
