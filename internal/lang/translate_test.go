@@ -325,9 +325,10 @@ func TestCheckJapanese(t *testing.T) {
 }
 
 // TestTranslatorParallel: with Parallel set, a pass has that many in
-// flight at once and keeps the same rows as one at a time; a refused
-// post is stepped over among them, and three refusals in a row still
-// end the pass with Ollama away.
+// flight at once, never more, and keeps the same rows as one at a time;
+// a refused post is stepped over among them, and three refusals in a
+// row still end the pass with Ollama away, the ones in flight beside
+// them finished and nothing more begun.
 func TestTranslatorParallel(t *testing.T) {
 	var inflight, most atomic.Int32
 	away := false
@@ -376,7 +377,12 @@ func TestTranslatorParallel(t *testing.T) {
 	f.mu.Lock()
 	asked := len(f.asked)
 	f.mu.Unlock()
-	if asked != 11+3 {
-		t.Errorf("%d asked, want 11 for the first pass and 3 for the second", asked)
+	// 11 for the first pass; the second asked the three that missed and
+	// at most the three a slot freed for before the third miss was judged
+	if asked < 11+3 || asked > 11+6 {
+		t.Errorf("%d asked, want 11 for the first pass and 3 to 6 for the second", asked)
+	}
+	if m := most.Load(); m != 3 {
+		t.Errorf("%d in flight at most over both passes, want 3", m)
 	}
 }

@@ -105,10 +105,14 @@ func drain[T any](size int, list func(limit int) ([]T, error), key func(T) strin
 }
 
 // drainN is drain with up to n pieces of work in flight at once (the
-// translator's, see PLAN.md, Translations — Japanese): the page is
-// worked n at a time, each n judged in the order listed once they are
-// all back, so the step-over and the three-misses rule read the same
-// as one at a time, and n of 1 is exactly that.
+// translator's, see PLAN.md, Translations — Japanese): a page is worked
+// with n in flight at all times, the next piece begun as one comes
+// back, and the outcomes are judged in the order listed, so the
+// step-over and the three-misses rule read as they do one at a time;
+// n of 1 is exactly that. A pass that ends early, on a store failure or
+// an Ollama that is away, begins nothing more and waits for what is in
+// flight, whose rows are written like any other — so an Ollama that is
+// away may be asked up to n times more than the three that said so.
 func drainN[T any](n, size int, list func(limit int) ([]T, error), key func(T) string, do func(T) outcome) (up bool) {
 	n = max(n, 1)
 	skip := map[string]bool{}
@@ -128,30 +132,64 @@ func drainN[T any](n, size int, list func(limit int) ([]T, error), key func(T) s
 		if len(todo) == 0 { // nothing left but what was stepped over
 			return true
 		}
-		for len(todo) > 0 {
-			chunk := todo[:min(n, len(todo))]
-			todo = todo[len(chunk):]
-			results := make([]outcome, len(chunk))
-			var wg sync.WaitGroup
-			for i := range chunk {
-				wg.Add(1)
-				go func(i int) { defer wg.Done(); results[i] = do(chunk[i]) }(i)
+		// judge is what one outcome does to the pass: ended says it is
+		// over, and up whether Ollama was there
+		judge := func(i int, r outcome) (ended, up bool) {
+			switch r {
+			case stop:
+				return true, true
+			case noAnswer:
+				skip[key(todo[i])] = true
+				if missed++; missed >= downAfter {
+					return true, false
+				}
+			default:
+				missed = 0
 			}
-			wg.Wait()
-			for i, r := range results {
-				switch r {
-				case stop:
-					return true
-				case noAnswer:
-					skip[key(chunk[i])] = true
-					if missed++; missed >= downAfter {
-						return false
-					}
-				default:
-					missed = 0
+			return false, false
+		}
+		if n == 1 { // one at a time: each judged before the next is begun
+			for i := range todo {
+				if ended, up := judge(i, do(todo[i])); ended {
+					return up
 				}
 			}
+			continue
 		}
+		// the pool: n in flight, the next begun as one comes back, so an
+		// early end may find up to n begun past the piece that ended it
+		results := make([]chan outcome, len(todo))
+		for i := range results {
+			results[i] = make(chan outcome, 1)
+		}
+		var wg sync.WaitGroup
+		quit, pooled := make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(pooled)
+			slots := make(chan struct{}, n)
+			for i := range todo {
+				select {
+				case slots <- struct{}{}:
+				case <-quit:
+					return
+				}
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					defer func() { <-slots }()
+					results[i] <- do(todo[i])
+				}(i)
+			}
+		}()
+		// the pool starts nothing more, then what is in flight lands
+		end := func(up bool) bool { close(quit); <-pooled; wg.Wait(); return up }
+		for i := range todo {
+			if ended, up := judge(i, <-results[i]); ended {
+				return end(up)
+			}
+		}
+		<-pooled
+		wg.Wait()
 	}
 }
 

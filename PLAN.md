@@ -2003,11 +2003,15 @@ the original one press away. Asked by Livid 2026-09-19.
   its next round. A thousand posts at the two to four minutes a
   translation takes at `max` is days one at a time, so `"parallel": n`
   in the `ollama` block (`Translator.Parallel`, `drainN`) asks for n at
-  once: the page is worked n at a time, each n judged in the order
-  listed once all are back, so the step-over and the three-misses rule
-  read as before, and 1 is exactly the old loop. The account pays for
-  the parallelism; 1 is the default, and the number the host ran the
-  backfill at is in the memory of the day.
+  once: a page is worked with n in flight at all times, the next piece
+  begun as one comes back (a first cut worked the page n at a time and
+  waited for the slowest of each n, which left two of four slots idle
+  when measured), and the outcomes are judged in the order listed, so
+  the step-over and the three-misses rule read as before; an Ollama
+  that is away may be asked up to n times more than the three that
+  said so, since those were already in flight. 1 is exactly the old
+  loop, and the default. The account pays for the parallelism; the
+  number the host ran the backfill at is in the memory of the day.
 - Not built: translations in the JSON API and the Hub app, search inside
   translations, a Traditional Chinese target, a hub with no model at all
   taking its peers' languages along with their translations, and an
