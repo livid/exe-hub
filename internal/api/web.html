@@ -588,9 +588,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 // takes what touches a post it shows — and, while a fetch is in the
 // air, everything, since what that fetch brings is not on the page yet
 // to ask about. A burst coalesces into one fetch, a hidden tab waits
-// until it is shown, a fetch that fails is tried again, and a reconnect
-// fetches too, which absorbs whatever was missed while the line was
-// down. This script stands first because it remembers the frame as the
+// until it is shown, a fetch that fails is tried again, a stream the
+// browser gave up on is opened again, and a reconnect fetches too, which
+// absorbs whatever was missed while the line was down. This script stands first because it remembers the frame as the
 // server sent it, before the ones below rewrite the times and take over
 // the videos: what it compares is the server's HTML, never the reader's
 // copy of it.
@@ -643,7 +643,6 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
       .finally(() => { busy = false; if (wanted) poke(); });
   };
   const poke = (ms = 300) => { clearTimeout(timer); timer = setTimeout(refresh, ms); };
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && wanted) poke(); });
   // a post from the compose strip shows without waiting for its event; a reply's id is where to land
   window.hubRefresh = id => { if (id) land = id; poke(); };
   // a thread's filter asks the page, so it is only as good as the page is
@@ -657,11 +656,29 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   const mine = ev => !thread || busy || (ev.type === "profile.set"
     ? [...feed.querySelectorAll(".av")].some(a => a.getAttribute("href") === "/u/" + ev.author)
     : shown(ev.id) || shown(ev.reply_to));
-  let down = false;
-  const es = new EventSource("/v1/events");
-  es.onmessage = e => { let ev = {}; try { ev = JSON.parse(e.data); } catch (x) {} if (mine(ev)) poke(); };
-  es.onerror = () => { down = true; };
-  es.onopen = () => { if (down) { down = false; poke(); } };
+  // The browser retries a stream that drops or is refused by itself, but
+  // an answer that is not the stream closes an EventSource for good —
+  // and that is what the edge says while the hub restarts: 502. So a
+  // closed stream is opened again from here, 2 s, 4 s … 30 s apart, and
+  // when the tab is shown or the network is back; the reopen fetches,
+  // as any reconnect does, since the line was down (the Hub app's rule).
+  let es, down = false, back = 0, again;
+  const connect = () => {
+    clearTimeout(again);
+    if (es) es.close();
+    const me = es = new EventSource("/v1/events");
+    es.onmessage = e => { let ev = {}; try { ev = JSON.parse(e.data); } catch (x) {} if (mine(ev)) poke(); };
+    es.onopen = () => { back = 0; if (down) { down = false; poke(); } };
+    es.onerror = () => {
+      down = true;
+      if (me !== es || me.readyState !== EventSource.CLOSED) return; // the browser is retrying this one
+      again = setTimeout(connect, back = Math.min(back ? back * 2 : 2000, 30000));
+    };
+  };
+  const wake = () => { if (es.readyState === EventSource.CLOSED) connect(); };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { wake(); if (wanted) poke(); } });
+  addEventListener("online", wake);
+  connect();
 })();
 </script>
 {{end}}<script>

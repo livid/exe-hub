@@ -1125,7 +1125,20 @@ hub that carries the post.
     events landed meanwhile; a hidden tab defers the fetch until it is
     shown; and a reconnect after the stream dropped fetches too, which
     absorbs whatever was missed while the line was down (the events
-    design's "refetch the view"). The compose strip calls the same
+    design's "refetch the view").
+  - *A stream the browser gave up on is opened again* (2026-09-21, Livid
+    saw the feed stop following after "some disconnects"). The browser
+    retries a stream that drops or is refused by itself, but an answer
+    that is not the stream closes an `EventSource` for good, and that is
+    what the edge in front of hub.v2core.com says while the hub VM
+    restarts — on every hub deploy and every exe restart: 502. Measured
+    against the live page before the fix: a refused retry was tried
+    every 3 s indefinitely; a 502 left the stream CLOSED with no further
+    attempt, and the page deaf until a reload. Now a closed stream is
+    opened again from the page 2 s, 4 s … 30 s apart, and at once when
+    the tab is shown again or the network comes back (`online`); the
+    reopen fetches like any reconnect. The same rule the Hub app runs
+    since exe a20ff4b. The compose strip calls the same
     refresh for what it just sent (`window.hubRefresh`, with a reply's
     id to land on), without waiting for its event.
   Cursor pages, search and profiles are the past and get no script,
