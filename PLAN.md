@@ -678,14 +678,34 @@ hub that carries the post.
   and a Return that ends an input method's composition, and types its
   change with `execCommand("insertText")`, so one Undo takes it back
   (`~/tools/playwright/exe-hub-list-return-test.js`, `PAGE=1` for the
-  pages). Headings,
-  code, the two links, bold, lists, tables: all of Markdown a
-  post takes. Where a post's words show plain — excerpts, thread titles,
-  preview pictures, stats labels, notifications — a Markdown link is put
-  back to its words (`card.Unlink`), a bold stretch to its own
-  (`card.Unbold`), a bulleted item's marker to a bullet, `•`, since the
-  lines are run together (`card.Unlist`), and a table to its cells' words, a
-  row a line, ` · ` between cells (`card.Untable`). Newlines stay line breaks. Nothing in a post can smuggle markup in. A
+  pages). A fenced code block — a line of three backticks, the lines
+  of code, a line of three backticks — is a block too (`card.FenceAt`,
+  `writeFence`, built 2026-09-23 after Livid saw the ``` lines of a
+  desk-menu entry come through as prose): a `pre` of the code exactly
+  as typed, escaped and nothing more, so a heading mark, a list marker,
+  a pipe, asterisks, backticks, a URL or an id inside it is code, and
+  the two spaces that part a desk-menu label from its action survive
+  where prose folds them. The info string after the opening backticks
+  (Markdown's language name) is read and not shown; a fence never
+  closed runs to the end of the post; the backticks stand at the start
+  of the line, backticks only (no `~~~`), and any line of backticks
+  alone closes the block — stricter than Markdown on purpose. The box
+  is a table's: one black line round it, as wide as the longest line
+  and never wider than the post, scrolling sideways past that, 8px
+  above and below and none on the side that opens or ends the post. The
+  Hub app reads fences with the same rules (`fenceAt`), and
+  `internal/card/testdata/fences.json` holds the cases both parsers are
+  run against. Headings, code spans and fenced blocks, the two links,
+  bold, lists, tables: all of Markdown a post takes. Where a post's
+  words show plain — excerpts, thread titles, preview pictures, stats
+  labels, notifications — a Markdown link is put back to its words
+  (`card.Unlink`), a bold stretch to its own (`card.Unbold`), a
+  bulleted item's marker to a bullet, `•`, since the lines are run
+  together (`card.Unlist`), a table to its cells' words, a row a line,
+  ` · ` between cells (`card.Untable`), and a fenced block to its code
+  as typed, the fences gone (`card.Unfence`, which puts only the words
+  outside the fences through the rest). Newlines stay line breaks.
+  Nothing in a post can smuggle markup in. A
   link opens in a new tab, as in the Hub app, so the reader keeps their
   place in the feed. The sentence's trailing period or comma stays
   outside the link, and so do CJK text and fullwidth punctuation: a URL

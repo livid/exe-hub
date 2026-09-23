@@ -402,6 +402,17 @@ img.idn { box-sizing: content-box; background: #e6e6f5; }
 .text .c { text-align: center; }
 .text .r { text-align: right; }
 .text td.r { white-space: nowrap; }
+/* a fenced code block (```, web.go writeFence): the code as typed,
+   spaces and blank lines and all, in the code span's Monaco, inside a
+   white box with one black line round it like a table's — as wide as
+   its longest line and never wider than the post, past that scrolling
+   sideways, since a code line is not for wrapping. 8px above and below,
+   none on the side that opens (.first) or ends (.last) the post. The Hub
+   app carries the same numbers. */
+.text pre { margin: 8px 0; padding: 4px 6px; width: fit-content; max-width: 100%; box-sizing: border-box;
+  overflow-x: auto; border: 1px solid #262626; background: #fff; tab-size: 4;
+  font: 11px/15px Monaco, "Courier New", monospace; white-space: pre; overflow-wrap: normal; word-break: normal; }
+.text pre.last { margin-bottom: 2px; }
 code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0 2px; }
 /* attached pictures, and the pictures a post's IPFS links name (fetched
    by the hub, see PLAN.md, Linked pictures), drawn alike */

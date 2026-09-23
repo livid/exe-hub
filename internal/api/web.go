@@ -370,8 +370,10 @@ var (
 // when it opens the post and .last when it ends it, for no room on
 // that side — a list (card.ListAt: "- " or "* " items, or numbered
 // ones) a block again, a ul or an ol of its items, each through the
-// inline pipeline, .first and .last as a table has them — and
-// elsewhere [words](url) set as a link on its words,
+// inline pipeline, .first and .last as a table has them — a fenced
+// code block (card.FenceAt, ``` lines) a block once more, a pre of
+// the code as typed, escaped and nothing else, .first and .last the
+// same way — and elsewhere [words](url) set as a link on its words,
 // URLs outside code spans wrapped in anchors that open in a new tab,
 // code spans set in <code>, newlines kept as line breaks.
 func renderText(text string) template.HTML {
@@ -389,7 +391,11 @@ func renderText(text string) template.HTML {
 		}
 	}
 	for i := 0; i < len(lines); i++ {
-		if m := webHeading.FindStringSubmatch(lines[i]); m != nil {
+		if f, n := card.FenceAt(lines, i); f != nil {
+			block()
+			i += n - 1
+			writeFence(&b, f, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "")
+		} else if m := webHeading.FindStringSubmatch(lines[i]); m != nil {
 			block()
 			tag := "h" + strconv.Itoa(len(m[1]))
 			if b.Len() == 0 {
@@ -422,6 +428,25 @@ func renderText(text string) template.HTML {
 		writeInline(&b, plain)
 	}
 	return template.HTML(b.String())
+}
+
+// writeFence sets a fenced code block: a pre holding the code as typed,
+// escaped and nothing more — no spans, no links, no line breaks of the
+// page's own — after a newline of its own, since a browser drops the
+// one newline that follows a <pre> tag and the code's first line, blank
+// or not, is the code's to keep. The info string is not shown.
+func writeFence(b *strings.Builder, f *card.Fence, first, last bool) {
+	class := ""
+	if first {
+		class += " first"
+	}
+	if last {
+		class += " last"
+	}
+	if class != "" {
+		class = ` class="` + class[1:] + `"`
+	}
+	b.WriteString("<pre" + class + ">\n" + html.EscapeString(f.Code) + "</pre>\n")
 }
 
 // writeTable sets a table: the box that scrolls, a head row, the rows
@@ -597,8 +622,9 @@ func writePlain(b *strings.Builder, s string) {
 // profile id that names holds a name for becomes a link to that profile,
 // reading "@" and the name it goes by today (see PLAN.md, Mentions). It
 // goes over renderText's HTML one text node at a time, as markHits does,
-// and leaves what a link or a code span holds alone: an id inside
-// backticks is code, and a link keeps its words and its address. An id
+// and leaves what a link, a code span or a fenced block holds alone:
+// an id inside backticks is code, and a link keeps its words and its
+// address. An id
 // is hex, so nothing in one is ever escaped and the token reads the same
 // in the HTML as in the post; a node's start counts as a free edge, the
 // way the Hub app's chunks begin. An id without a name stays as typed.
@@ -633,9 +659,9 @@ func renderPost(text string, names map[string]string, q string) template.HTML {
 		node(src[last:t[0]])
 		tag := src[t[0]:t[1]]
 		switch {
-		case strings.HasPrefix(tag, "<a ") || tag == "<code>":
+		case strings.HasPrefix(tag, "<a ") || tag == "<code>" || strings.HasPrefix(tag, "<pre"):
 			held++
-		case tag == "</a>" || tag == "</code>":
+		case tag == "</a>" || tag == "</code>" || tag == "</pre>":
 			held--
 		}
 		b.WriteString(tag)
@@ -1120,9 +1146,13 @@ func (s *Server) webError(w http.ResponseWriter, r *http.Request, code int, key 
 // webWords is a post's text as plain words, for where no markup shows —
 // an excerpt, a title, a preview picture: heading marks dropped, a
 // table put back to its cells' words, a bulleted item's marker to a
-// bullet, a Markdown link and a bold stretch to their words.
+// bullet, a Markdown link and a bold stretch to their words, and a
+// fenced block's lines dropped, its code kept as typed (card.Unfence:
+// the code sees none of the rest).
 func webWords(text string) string {
-	return card.Unbold(card.Unlink(card.Unlist(card.Untable(webHeadingMark.ReplaceAllString(text, "")))))
+	return card.Unfence(text, func(s string) string {
+		return card.Unbold(card.Unlink(card.Unlist(card.Untable(webHeadingMark.ReplaceAllString(s, "")))))
+	})
 }
 
 // excerpt is a post's first n characters or so, for the OpenGraph

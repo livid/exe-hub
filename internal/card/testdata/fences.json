@@ -1,0 +1,21 @@
+[
+  {"name": "a block", "text": "```\ncode\n```", "n": 3, "info": "", "code": "code", "plain": "code"},
+  {"name": "an info string names the language, unshown", "text": "```go\nfunc main() {}\n```", "n": 3, "info": "go", "code": "func main() {}", "plain": "func main() {}"},
+  {"name": "spaces round the info string", "text": "``` sh \necho hi\n```", "n": 3, "info": "sh", "code": "echo hi", "plain": "echo hi"},
+  {"name": "two spaces inside a line stay", "text": "```\ngping 8.8.8.8  terminal gping 8.8.8.8\n```", "n": 3, "info": "", "code": "gping 8.8.8.8  terminal gping 8.8.8.8", "plain": "gping 8.8.8.8 terminal gping 8.8.8.8"},
+  {"name": "blank lines inside the block are code", "text": "```\na\n\nb\n```", "n": 5, "info": "", "code": "a\n\nb", "plain": "a b"},
+  {"name": "leading spaces are code", "text": "```\nif x:\n    y()\n```", "n": 4, "info": "", "code": "if x:\n    y()", "plain": "if x: y()"},
+  {"name": "markdown inside the block is code", "text": "```\n# not a heading\n- not an item\n| a | b |\n| - | - |\n**not bold** `not code` [not a link](https://x.y)\n```", "n": 7, "info": "", "code": "# not a heading\n- not an item\n| a | b |\n| - | - |\n**not bold** `not code` [not a link](https://x.y)", "plain": "# not a heading - not an item | a | b | | - | - | **not bold** `not code` [not a link](https://x.y)"},
+  {"name": "words round a block keep their own markup", "text": "**Try:**\n```\n- x\n```\n- one", "n": 0, "plain": "Try: - x • one"},
+  {"name": "a fence never closed runs to the end", "text": "```\na\nb", "n": 3, "info": "", "code": "a\nb", "plain": "a b"},
+  {"name": "an empty block", "text": "```\n```", "n": 2, "info": "", "code": "", "plain": ""},
+  {"name": "a line of backticks with words after it does not close", "text": "```\ncode\n``` end\n```", "n": 4, "info": "", "code": "code\n``` end", "plain": "code ``` end"},
+  {"name": "four backticks open and close", "text": "````\ncode\n````", "n": 3, "info": "", "code": "code", "plain": "code"},
+  {"name": "three close four", "text": "````\ncode\n```", "n": 3, "info": "", "code": "code", "plain": "code"},
+  {"name": "trailing spaces on the fences", "text": "```  \ncode\n```  ", "n": 3, "info": "", "code": "code", "plain": "code"},
+  {"name": "indented backticks are no fence", "text": " ```\ncode\n ```", "n": 0, "plain": "``` code ```"},
+  {"name": "backticks inside a sentence are no fence", "text": "the ``` lines come through\ncode", "n": 0, "plain": "the ``` lines come through code"},
+  {"name": "a code span is no fence", "text": "`code` and ``code``", "n": 0, "plain": "`code` and ``code``"},
+  {"name": "two blocks in a post", "text": "```\none\n```\nand\n```\ntwo\n```", "n": 3, "info": "", "code": "one", "plain": "one and two"},
+  {"name": "a fence ends a list and a table", "text": "- item\n| a |\n| - |\n```\ncode\n```", "n": 0, "plain": "• item a code"}
+]
