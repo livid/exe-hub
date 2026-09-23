@@ -698,15 +698,13 @@ hub that carries the post.
   the code on the clipboard exactly as typed — the `pre`'s text; over a
   plain-http address, which has no clipboard API, a hidden textarea and
   the copy command; when neither can, the code is selected for the
-  reader's own Copy — and the button reads Copied for a moment. Both
-  words are in the button from the start, stacked, the one not showing
-  invisible, so it is as wide as the wider and the swap moves nothing;
-  the words are the page's language's (`copy`, `copied`), and a
-  search's marks and a mention's names pass the button by. On a phone
-  (480px and under; the Hub app's mobile) the word gives way to a 13px
-  pixel glyph, a box on another — the sheets of a copy — and a check
-  mark for the moment after, 8px either side, as the pager's buttons
-  shrink to their arrows; the box beside it gets the room back. The
+  reader's own Copy. The button is 31px and wears a 13px pixel glyph,
+  8px either side: a box on another, the sheets of a copy, which is a
+  check mark for the moment after a press (Livid asked for the glyph on
+  a phone first, then everywhere, the same day). The words Copy and
+  Copied are in it for a screen reader alone, in the page's language
+  (`copy`, `copied`), the one that holds hidden; a search's marks and a
+  mention's names pass the button by. The
   Hub app reads fences with the same rules (`fenceAt`), and
   `internal/card/testdata/fences.json` holds the cases both parsers are
   run against. Headings, code spans and fenced blocks, the two links,
