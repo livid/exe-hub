@@ -229,16 +229,30 @@ func TestPostCards(t *testing.T) {
 	if len(feed) != 2 || feed[0].ID != id || feed[0].Quote == nil || feed[1].Quote != nil {
 		t.Fatalf("feed quotes = %v / %v", feed[0].Quote, feed[1].Quote)
 	}
-	// the quoted post gone: the link stays a link, no card of any kind
+	// two posts quoting one target, the target deleted: both cards stop,
+	// both posts stay, the link stays a link, no card of any kind
+	// (Codex's acceptance case, 2026-09-23)
+	id2 := ingest(t, s, a, "post.create", map[string]any{"text": "and again " + link + " here"})
+	if _, err := s.SetPostCard(id2, link, quoted); err != nil {
+		t.Fatal(err)
+	}
+	if feed, _ := s.Feed("", 10, false); len(feed) != 3 || feed[0].Quote == nil || feed[1].Quote == nil {
+		t.Fatalf("two posts quoting one target: %d posts, quotes %v / %v", len(feed), feed[0].Quote != nil, feed[1].Quote != nil)
+	}
 	raw, sig, e, op := a.msg(t, "post.delete", map[string]any{"post": quoted})
 	if _, _, err := s.Ingest(raw, sig, e, op); err != nil {
 		t.Fatal(err)
 	}
-	p, err = s.Post(id)
+	feed, err = s.Feed("", 10, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Quote != nil || p.Card != nil {
-		t.Fatalf("after the quoted post's delete: quote %+v card %+v", p.Quote, p.Card)
+	if len(feed) != 2 || feed[0].ID != id2 || feed[1].ID != id {
+		t.Fatalf("after the target's delete the quoting posts should stand alone: %+v", feed)
+	}
+	for _, p := range feed {
+		if p.Quote != nil || p.Card != nil {
+			t.Fatalf("after the quoted post's delete, %s: quote %+v card %+v", p.ID[:8], p.Quote, p.Card)
+		}
 	}
 }
