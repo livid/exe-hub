@@ -33,7 +33,7 @@ func TestRenderPostMentions(t *testing.T) {
 	}
 	link := regexp.MustCompile(`<a class="mention" href="/u/([0-9a-f]{16})">@(.*?)</a>`)
 	for _, c := range cases {
-		page := string(renderPost(c.Text, c.Names, ""))
+		page := string(renderPost(c.Text, c.Names, webReading{}))
 		got := []string{}
 		for _, m := range link.FindAllStringSubmatch(page, -1) {
 			if c.Names[m[1]] != html.UnescapeString(m[2]) {
@@ -56,15 +56,15 @@ func TestRenderPostMentions(t *testing.T) {
 		{"`@0123456789abcdef`", "<code>@0123456789abcdef</code>"},
 		{"a &@0123456789abcdef", `a &amp;<a class="mention" href="/u/0123456789abcdef">@Tom &amp; &lt;Co&gt;</a>`},
 	} {
-		if got := string(renderPost(c.in, names, "")); got != c.want {
+		if got := string(renderPost(c.in, names, webReading{})); got != c.want {
 			t.Errorf("renderPost(%q)\n got %s\nwant %s", c.in, got, c.want)
 		}
 	}
 	// no names, no change: the page is renderText's
-	if got, want := string(renderPost("hi @0123456789abcdef", names, "?lang=ja")), `hi <a class="mention" href="/u/0123456789abcdef?lang=ja">@Tom &amp; &lt;Co&gt;</a>`; got != want {
+	if got, want := string(renderPost("hi @0123456789abcdef", names, webReading{Q: "?lang=ja"})), `hi <a class="mention" href="/u/0123456789abcdef?lang=ja">@Tom &amp; &lt;Co&gt;</a>`; got != want {
 		t.Errorf("with ?lang=ja: got %s, want %s", got, want)
 	}
-	if got, want := renderPost("hi @0123456789abcdef", nil, ""), renderText("hi @0123456789abcdef"); got != want {
+	if got, want := renderPost("hi @0123456789abcdef", nil, webReading{}), renderText("hi @0123456789abcdef", nil); got != want {
 		t.Errorf("without names: %s", got)
 	}
 }

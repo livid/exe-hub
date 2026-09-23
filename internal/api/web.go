@@ -375,8 +375,13 @@ var (
 // the code as typed, escaped and nothing else, .first and .last the
 // same way — and elsewhere [words](url) set as a link on its words,
 // URLs outside code spans wrapped in anchors that open in a new tab,
-// code spans set in <code>, newlines kept as line breaks.
-func renderText(text string) template.HTML {
+// code spans set in <code>, newlines kept as line breaks. l is the
+// page's language, for the words of the button a fenced block carries
+// (nil, in a test, reads as English).
+func renderText(text string, l *webLocale) template.HTML {
+	if l == nil {
+		l = webLocales["en"]
+	}
 	var b strings.Builder
 	lines := strings.Split(text, "\n")
 	plain := ""
@@ -394,7 +399,7 @@ func renderText(text string) template.HTML {
 		if f, n := card.FenceAt(lines, i); f != nil {
 			block()
 			i += n - 1
-			writeFence(&b, f, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "")
+			writeFence(&b, f, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "", l)
 		} else if m := webHeading.FindStringSubmatch(lines[i]); m != nil {
 			block()
 			tag := "h" + strconv.Itoa(len(m[1]))
@@ -430,23 +435,26 @@ func renderText(text string) template.HTML {
 	return template.HTML(b.String())
 }
 
-// writeFence sets a fenced code block: a pre holding the code as typed,
-// escaped and nothing more — no spans, no links, no line breaks of the
-// page's own — after a newline of its own, since a browser drops the
-// one newline that follows a <pre> tag and the code's first line, blank
-// or not, is the code's to keep. The info string is not shown.
-func writeFence(b *strings.Builder, f *card.Fence, first, last bool) {
-	class := ""
+// writeFence sets a fenced code block: a .code row of a pre holding the
+// code as typed, escaped and nothing more — no spans, no links, no line
+// breaks of the page's own — after a newline of its own, since a
+// browser drops the one newline that follows a <pre> tag and the code's
+// first line, blank or not, is the code's to keep; and beside the pre
+// the Copy button, whose press (the page's script) puts the pre's text
+// on the clipboard and shows its second word, Copied, for a moment —
+// both words are in the button from the start, stacked, so it is as
+// wide as the wider and the swap moves nothing. The words are the
+// page's language's; the info string is not shown.
+func writeFence(b *strings.Builder, f *card.Fence, first, last bool, l *webLocale) {
+	class := "code"
 	if first {
 		class += " first"
 	}
 	if last {
 		class += " last"
 	}
-	if class != "" {
-		class = ` class="` + class[1:] + `"`
-	}
-	b.WriteString("<pre" + class + ">\n" + html.EscapeString(f.Code) + "</pre>\n")
+	b.WriteString(`<div class="` + class + `"><pre>` + "\n" + html.EscapeString(f.Code) + `</pre><button type="button" class="btn copy"><span>` +
+		html.EscapeString(l.T("copy")) + "</span><span>" + html.EscapeString(l.T("copied")) + "</span></button></div>\n")
 }
 
 // writeTable sets a table: the box that scrolls, a head row, the rows
@@ -622,20 +630,22 @@ func writePlain(b *strings.Builder, s string) {
 // profile id that names holds a name for becomes a link to that profile,
 // reading "@" and the name it goes by today (see PLAN.md, Mentions). It
 // goes over renderText's HTML one text node at a time, as markHits does,
-// and leaves what a link, a code span or a fenced block holds alone:
-// an id inside backticks is code, and a link keeps its words and its
-// address. An id
+// and leaves what a link, a code span, a fenced block or a button holds
+// alone: an id inside backticks is code, a link keeps its words and its
+// address, and a button's words are the page's. An id
 // is hex, so nothing in one is ever escaped and the token reads the same
 // in the HTML as in the post; a node's start counts as a free edge, the
 // way the Hub app's chunks begin. An id without a name stays as typed.
-func renderPost(text string, names map[string]string, q string) template.HTML {
-	page := renderText(text)
+// rd is the reader: the ?lang= its links carry and the page's words.
+func renderPost(text string, names map[string]string, rd webReading) template.HTML {
+	page := renderText(text, rd.L)
 	if len(names) == 0 {
 		return page
 	}
+	q := rd.Q
 	src := string(page)
 	var b strings.Builder
-	held := 0 // inside this many <a> or <code>
+	held := 0 // inside this many <a>, <code>, <pre> or <button>
 	last := 0
 	node := func(s string) {
 		if held > 0 {
@@ -659,9 +669,9 @@ func renderPost(text string, names map[string]string, q string) template.HTML {
 		node(src[last:t[0]])
 		tag := src[t[0]:t[1]]
 		switch {
-		case strings.HasPrefix(tag, "<a ") || tag == "<code>" || strings.HasPrefix(tag, "<pre"):
+		case strings.HasPrefix(tag, "<a ") || tag == "<code>" || strings.HasPrefix(tag, "<pre") || strings.HasPrefix(tag, "<button"):
 			held++
-		case tag == "</a>" || tag == "</code>" || tag == "</pre>":
+		case tag == "</a>" || tag == "</code>" || tag == "</pre>" || tag == "</button>":
 			held--
 		}
 		b.WriteString(tag)
@@ -705,10 +715,21 @@ func markHits(page template.HTML, q string) template.HTML {
 	}
 	src := string(page)
 	var b strings.Builder
-	last := 0
+	last, held := 0, 0 // held: inside a button, whose words are the page's, not the post's
 	for _, m := range webTag.FindAllStringIndex(src, -1) {
-		writeMarked(&b, src[last:m[0]], words)
-		b.WriteString(src[m[0]:m[1]])
+		if held > 0 {
+			b.WriteString(src[last:m[0]])
+		} else {
+			writeMarked(&b, src[last:m[0]], words)
+		}
+		tag := src[m[0]:m[1]]
+		switch {
+		case strings.HasPrefix(tag, "<button"):
+			held++
+		case tag == "</button>":
+			held--
+		}
+		b.WriteString(tag)
 		last = m[1]
 	}
 	writeMarked(&b, src[last:], words)
@@ -789,7 +810,7 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 	trs := s.webTranslations(rd, ids)
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
-		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions, rd.Q), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
+		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions, rd), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
 		if t, ok := trs[p.ID]; ok && p.Text != "" {
 			out[i].Tr = rd.tr(t, p.Mentions)
 		}
@@ -1060,7 +1081,7 @@ func (rd webReading) shows(from string) bool {
 // page's language; names is the post's mentions, which a translation
 // keeps as they were written.
 func (rd webReading) tr(t store.Translation, names map[string]string) *webTr {
-	tr := &webTr{HTML: renderPost(t.Text, names, rd.Q), Lang: rd.Target}
+	tr := &webTr{HTML: renderPost(t.Text, names, rd), Lang: rd.Target}
 	// the language alone: its script tells only a Chinese reader
 	// something, Traditional from the Simplified they are reading
 	from, _, _ := strings.Cut(t.From, "-")

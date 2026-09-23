@@ -24,12 +24,12 @@ func TestRenderTextList(t *testing.T) {
 		{"## T\n- one\n\n| a |\n| - |\n| 1 |", `<h2 class="first">T</h2>` + "\n" + `<ul><li>one</li></ul>` + "\n" + `<div class="tbl last"><table><thead><tr><th>a</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table></div>` + "\n"},
 		{"**bold** first\n-5 degrees\n2026. A year", "<strong>bold</strong> first<br>\n-5 degrees<br>\n2026. A year"},
 	} {
-		if got := string(renderText(c.in)); got != c.want {
+		if got := string(renderText(c.in, nil)); got != c.want {
 			t.Errorf("renderText(%q)\n got %s\nwant %s", c.in, got, c.want)
 		}
 	}
 	// the found words of a search are marked inside items, tags untouched
-	if got, want := string(markHits(renderText("- apple pie\n- cherry"), "pie li")), `<ul class="first last"><li>apple <mark>pie</mark></li><li>cherry</li></ul>`+"\n"; got != want {
+	if got, want := string(markHits(renderText("- apple pie\n- cherry", nil), "pie li")), `<ul class="first last"><li>apple <mark>pie</mark></li><li>cherry</li></ul>`+"\n"; got != want {
 		t.Errorf("markHits over a list\n got %s\nwant %s", got, want)
 	}
 	if got := excerpt("Three things:\n- one\n- **two**\n1. three", 100); got != "Three things: • one • two 1. three" {

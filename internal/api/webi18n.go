@@ -169,6 +169,9 @@ var webStrings = map[string]map[string]string{
 		"zoom":      "Zoom",
 		"loading":   "Loading…",
 		"page.fail": "Could not load the page: {err}",
+		// the button beside a fenced code block, and its word for a moment after a press
+		"copy":   "Copy",
+		"copied": "Copied",
 		// the line under a translated post
 		"tr.from": "Translated from {lang}",
 		"tr.show": "Show Original",
@@ -298,6 +301,8 @@ var webStrings = map[string]map[string]string{
 		"zoom":               "缩放",
 		"loading":            "正在载入…",
 		"page.fail":          "无法载入页面：{err}",
+		"copy":               "复制",
+		"copied":             "已复制",
 		"tr.from":            "译自{lang}",
 		"tr.show":            "显示原文",
 		"tr.back":            "显示译文",
@@ -422,6 +427,8 @@ var webStrings = map[string]map[string]string{
 		"zoom":               "ズーム",
 		"loading":            "読み込み中…",
 		"page.fail":          "ページを読み込めませんでした：{err}",
+		"copy":               "コピー",
+		"copied":             "コピー済み",
 		"tr.from":            "{lang}から翻訳",
 		"tr.show":            "原文を表示",
 		"tr.back":            "翻訳を表示",

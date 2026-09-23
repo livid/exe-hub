@@ -472,7 +472,7 @@ func TestRenderText(t *testing.T) {
 		{"| a | b |\n| --- |\n| 1 | 2 |", "| a | b |<br>\n| --- |<br>\n| 1 | 2 |"},
 	}
 	for _, c := range cases {
-		if got := string(renderText(c.in)); got != c.want {
+		if got := string(renderText(c.in, nil)); got != c.want {
 			t.Errorf("renderText(%q)\n got %s\nwant %s", c.in, got, c.want)
 		}
 	}
@@ -496,7 +496,7 @@ func TestMarkHits(t *testing.T) {
 	mark := regexp.MustCompile(`(?s)<mark>(.*?)</mark>`)
 	tags := regexp.MustCompile(`<[^>]*>`)
 	for _, c := range cases {
-		plain := string(renderText(c.Text))
+		plain := string(renderText(c.Text, nil))
 		page := string(markHits(template.HTML(plain), c.Q))
 		got := []string{}
 		for _, m := range mark.FindAllStringSubmatch(page, -1) {
@@ -522,7 +522,7 @@ func TestMarkHits(t *testing.T) {
 		{"`pie()` and **Pie**", "PIE", "<code><mark>pie</mark>()</code> and <strong><mark>Pie</mark></strong>"},
 		{"target nofollow noopener", "target", "<mark>target</mark> nofollow noopener"},
 	} {
-		if got := string(markHits(renderText(c.in), c.q)); got != c.want {
+		if got := string(markHits(renderText(c.in, nil), c.q)); got != c.want {
 			t.Errorf("markHits(%q, %q)\n got %s\nwant %s", c.in, c.q, got, c.want)
 		}
 	}
@@ -552,7 +552,7 @@ func TestRenderTextBold(t *testing.T) {
 		return out
 	}
 	for _, c := range cases {
-		page := string(renderText(c.Text))
+		page := string(renderText(c.Text, nil))
 		if got := words(page, "strong"); !reflect.DeepEqual(got, c.Strong) {
 			t.Errorf("%s: bold %q, want %q\n%s", c.Name, got, c.Strong, page)
 		}
@@ -570,7 +570,7 @@ func TestRenderTextBold(t *testing.T) {
 		{"**<b>&amp;**", "<strong>&lt;b&gt;&amp;amp;</strong>"},
 		{"## The **new** bar", `<h2 class="first">The <strong>new</strong> bar</h2>` + "\n"},
 	} {
-		if got := string(renderText(c.in)); got != c.want {
+		if got := string(renderText(c.in, nil)); got != c.want {
 			t.Errorf("renderText(%q)\n got %s\nwant %s", c.in, got, c.want)
 		}
 	}

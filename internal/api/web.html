@@ -402,17 +402,26 @@ img.idn { box-sizing: content-box; background: #e6e6f5; }
 .text .c { text-align: center; }
 .text .r { text-align: right; }
 .text td.r { white-space: nowrap; }
-/* a fenced code block (```, web.go writeFence): the code as typed,
-   spaces and blank lines and all, in the code span's Monaco, inside a
-   white box with one black line round it like a table's — as wide as
-   its longest line and never wider than the post, past that scrolling
-   sideways, since a code line is not for wrapping. 8px above and below,
-   none on the side that opens (.first) or ends (.last) the post. The Hub
-   app carries the same numbers. */
-.text pre { margin: 8px 0; padding: 4px 6px; width: fit-content; max-width: 100%; box-sizing: border-box;
+/* a fenced code block (```, web.go writeFence): a .code row — the code
+   as typed, spaces and blank lines and all, in the code span's Monaco,
+   inside a white box with one black line round it like a table's, as
+   wide as its longest line and never wider than the room, past that
+   scrolling sideways, since a code line is not for wrapping — and the
+   Copy button 6px right of the box (the HIG's gap inside a group), its
+   top 2px under the box's top, so a one-line box, 25px, holds it: the
+   push button as everywhere, both its words stacked in it, the one not
+   showing kept invisible, so it is as wide as the wider and the swap
+   to Copied moves nothing. 8px above and below the row, none on the
+   side that opens (.first) or ends (.last) the post. The Hub app
+   carries the same numbers. */
+.text .code { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; }
+.text .code.last { margin-bottom: 2px; }
+.text pre { margin: 0; padding: 4px 6px; min-width: 0; box-sizing: border-box;
   overflow-x: auto; border: 1px solid #262626; background: #fff; tab-size: 4;
   font: 11px/15px Monaco, "Courier New", monospace; white-space: pre; overflow-wrap: normal; word-break: normal; }
-.text pre.last { margin-bottom: 2px; }
+.text .copy { flex: none; margin: 2px 0 0; display: inline-grid; font-family: inherit; cursor: default; user-select: none; }
+.text .copy span { grid-area: 1 / 1; }
+.text .copy:not(.done) span:last-child, .text .copy.done span:first-child { visibility: hidden; }
 code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0 2px; }
 /* attached pictures, and the pictures a post's IPFS links name (fetched
    by the hub, see PLAN.md, Linked pictures), drawn alike */
@@ -789,6 +798,33 @@ document.addEventListener("click", e => {
   line.firstElementChild.hidden = !line.firstElementChild.hidden;
   [a.textContent, a.dataset.other] = [a.dataset.other, a.textContent];
 });
+// The Copy button beside a fenced code block (web.go writeFence): the
+// pre's text — the code exactly as typed, which the browser gives back
+// with its spaces and blank lines — goes on the clipboard, and the
+// button reads Copied for a moment. A plain-http address (the host
+// hub's own) has no clipboard API, so there a hidden textarea and the
+// copy command do it; when neither can, the code is selected instead,
+// for the reader's own Copy. One listener on the document, as above.
+document.addEventListener("click", e => {
+  const b = e.target instanceof Element && e.target.closest("button.copy");
+  if (b) copyCode(b);
+});
+async function copyCode(b) {
+  const pre = b.parentNode.querySelector("pre"), text = pre.textContent;
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.top = "-1000px";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+  }
+  if (!ok) { getSelection().selectAllChildren(pre); return; }
+  b.classList.add("done");
+  clearTimeout(b.tick);
+  b.tick = setTimeout(() => b.classList.remove("done"), 1500);
+}
 // The language menu on the find strip: a choice opens this same page in
 // that language, ?lang= set and everything else in the address kept,
 // and the links carry it from there. Without script the menu shows the

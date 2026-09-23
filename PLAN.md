@@ -692,7 +692,17 @@ hub that carries the post.
   alone closes the block — stricter than Markdown on purpose. The box
   is a table's: one black line round it, as wide as the longest line
   and never wider than the post, scrolling sideways past that, 8px
-  above and below and none on the side that opens or ends the post. The
+  above and below and none on the side that opens or ends the post.
+  Beside the box, 6px to its right with its top 2px under the box's,
+  stands a Copy push button (asked by Livid 2026-09-23): a press puts
+  the code on the clipboard exactly as typed — the `pre`'s text; over a
+  plain-http address, which has no clipboard API, a hidden textarea and
+  the copy command; when neither can, the code is selected for the
+  reader's own Copy — and the button reads Copied for a moment. Both
+  words are in the button from the start, stacked, the one not showing
+  invisible, so it is as wide as the wider and the swap moves nothing;
+  the words are the page's language's (`copy`, `copied`), and a
+  search's marks and a mention's names pass the button by. The
   Hub app reads fences with the same rules (`fenceAt`), and
   `internal/card/testdata/fences.json` holds the cases both parsers are
   run against. Headings, code spans and fenced blocks, the two links,
