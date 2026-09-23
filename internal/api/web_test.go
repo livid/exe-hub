@@ -987,6 +987,11 @@ func TestWebPage(t *testing.T) {
 			t.Errorf("page window CSS lacks %q", want)
 		}
 	}
+	// the title bar is the chrome's flex bar; a grid resolves the title's
+	// max-width: 70% against its own column and truncates every name
+	if strings.Contains(body, `.viewer.pageview .titlebar { display: grid`) {
+		t.Error("the page window's title bar is a grid, so its title is cut to 70% of the name")
+	}
 	// the JSON reads carry the same decision, for the Hub app
 	_, js := get(t, s.Handler(), "/v1/feed")
 	var feed struct {
