@@ -993,10 +993,10 @@ func TestWebPage(t *testing.T) {
 	if strings.Contains(body, `.viewer.pageview .titlebar { display: grid`) {
 		t.Error("the page window's title bar is a grid, so its title is cut to 70% of the name")
 	}
-	// the status line (name · size · CID) must not size the window, or a
-	// phone's window runs past the screen with its zoom box
-	if !strings.Contains(body, `.viewer.pageview .statusbar { width: 0; min-width: 100%; }`) {
-		t.Error("the page window's status line sizes the window, so on a phone the zoom box is off the screen")
+	// neither bar's text (a long name, the name · size · CID) may size the
+	// window, or a phone's window runs past the screen with its zoom box
+	if !strings.Contains(body, `.viewer.pageview .titlebar, .viewer.pageview .statusbar { width: 0; min-width: 100%; }`) {
+		t.Error("the page window's bars size the window, so on a phone the zoom box is off the screen")
 	}
 	// the JSON reads carry the same decision, for the Hub app
 	_, js := get(t, s.Handler(), "/v1/feed")
