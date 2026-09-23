@@ -181,6 +181,9 @@ type webPost struct {
 	// the later ones carry QuoteRun and attach to the card above.
 	Quote    *webQuote
 	QuoteRun bool
+	// the post's first link is a post here: quoted as a post card in the
+	// link card's place (see PLAN.md, Post cards)
+	PostCard *webPostCard
 	// a root with replies: the thread's newest reply, on the foot line —
 	// the feed says what was said last instead of burying it
 	Latest *webLatest
@@ -220,6 +223,21 @@ type webQuote struct {
 	ID   string
 	Name string
 	Text string // an excerpt; "" for a post that is all pictures
+}
+
+// webPostCard is the post a post card quotes, as the card draws it: the
+// author's face and name, the id, the time (as a post's own), a few
+// lines of the words in the reader's language, and the picture the
+// quoted post shows, when it shows one.
+type webPostCard struct {
+	ID     string
+	Author string
+	Name   string
+	Avatar string
+	When   string
+	Stamp  string
+	Text   string // an excerpt; "" for a post that is all pictures
+	Image  string
 }
 
 // webMedia is a video or sound embed for the template: the player box's
@@ -811,6 +829,9 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 		if p.LastReply != nil {
 			ids = append(ids, p.LastReply.ID)
 		}
+		if p.Quote != nil {
+			ids = append(ids, p.Quote.ID)
+		}
 	}
 	trs := s.webTranslations(rd, ids)
 	out := make([]webPost, len(posts))
@@ -829,6 +850,18 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 				said = t.Text
 			}
 			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(card.NameMentions(said, p.Mentions), 90)}
+		}
+		if q := p.Quote; q != nil {
+			name := q.AuthorName
+			if name == "" {
+				name = q.Author
+			}
+			said := q.Text
+			if t, ok := trs[q.ID]; ok {
+				said = t.Text
+			}
+			out[i].PostCard = &webPostCard{ID: q.ID, Author: q.Author, Name: name, Avatar: q.Avatar,
+				When: webWhen(q.TS), Stamp: webStamp(q.TS), Text: excerpt(card.NameMentions(said, p.Mentions), 300), Image: q.Image}
 		}
 		for _, e := range p.Embeds {
 			switch {

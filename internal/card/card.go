@@ -125,6 +125,30 @@ func First(text string) string {
 	return ""
 }
 
+// ---- post links: a link to a post here (PLAN.md, Post cards) ----
+
+// postPath is a hub thread page's path, /p/ and the start of an id —
+// eight hex characters or more, the whole id at most — with nothing
+// after it but the query or fragment; the same shape the pages take.
+var postPath = regexp.MustCompile(`^/p/([0-9a-fA-F]{8,64})/?$`)
+
+// PostLink is the id, or the start of one, that a link to a hub post
+// names, lower-case, or "" for any other link. Only the path says so —
+// a hub does not know the names it is reached by, and a post pulled
+// from a peer links to that peer's pages — so the caller asks the store
+// whether a post here begins that way; one that does is the post the
+// link means, and its card quotes it instead of fetching the page.
+func PostLink(link string) string {
+	pu, err := url.Parse(link)
+	if err != nil || (pu.Scheme != "http" && pu.Scheme != "https") {
+		return ""
+	}
+	if m := postPath.FindStringSubmatch(pu.Path); m != nil {
+		return strings.ToLower(m[1])
+	}
+	return ""
+}
+
 // ---- IPFS links: the pictures a post links to (PLAN.md, Linked pictures) ----
 
 // MaxPictures is how many linked pictures a post gets, the embed cap.

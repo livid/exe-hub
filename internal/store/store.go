@@ -288,6 +288,10 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 			PRIMARY KEY (peer, post, lang))`,
 		`CREATE INDEX IF NOT EXISTS pending_translations_post ON pending_translations(post)`,
 		`ALTER TABLE peer_state ADD COLUMN tr_cursor INTEGER NOT NULL DEFAULT 0`,
+		// a card that quotes a post here instead of unfurling a fetched
+		// page (PLAN.md, Post cards): the quoted post's whole id, '' for
+		// a link card
+		`ALTER TABLE cards ADD COLUMN quote TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
@@ -817,6 +821,7 @@ type FeedPost struct {
 	Received   int64            `json:"received"`
 	Embeds     []envelope.Embed `json:"embeds,omitempty"`
 	Card       *Card            `json:"card,omitempty"`     // the first link, unfurled (see PLAN.md, Link cards)
+	Quote      *QuoteRef        `json:"quote,omitempty"`    // the first link is a post here, quoted (see PLAN.md, Post cards)
 	Pictures   []Picture        `json:"pictures,omitempty"` // the pictures its IPFS links name (see PLAN.md, Linked pictures)
 	PageCIDs   []string         `json:"pages,omitempty"`    // the embeds that open as pages (see PLAN.md, Pages)
 	Replies    int              `json:"replies"`
@@ -838,6 +843,20 @@ type ReplyRef struct {
 	AuthorName string `json:"author_name,omitempty"`
 	Text       string `json:"text"`
 	Received   int64  `json:"received"`
+}
+
+// QuoteRef is the post a post card quotes — the post its first link
+// names, as it stands now — and the picture the card shows for it: the
+// quoted post's first, attached or linked, else a video's poster.
+type QuoteRef struct {
+	ID         string `json:"id"`
+	Author     string `json:"author"`
+	AuthorName string `json:"author_name,omitempty"`
+	Avatar     string `json:"avatar,omitempty"`
+	Text       string `json:"text"`
+	TS         int64  `json:"ts"`
+	Received   int64  `json:"received"`
+	Image      string `json:"image,omitempty"` // pinned CID, served by /v1/embed
 }
 
 // Card is one post's link card as the feed serves it.
@@ -891,7 +910,7 @@ func (c Card) ArchiveDate() string {
 
 const feedCols = `p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.reply_to, p.ts, p.received, p.activity, p.last_reply,
   (SELECT COUNT(*) FROM posts r WHERE r.reply_to = p.id),
-  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,''), IFNULL(cd.archive,''),
+  IFNULL(cd.url,''), IFNULL(cd.host,''), IFNULL(cd.title,''), IFNULL(cd.descr,''), IFNULL(cd.image,''), IFNULL(cd.archive,''), IFNULL(cd.quote,''),
   IFNULL((SELECT lg.lang FROM langs lg WHERE lg.post = p.id AND lg.status = 'ok'),'')`
 
 const feedQuery = `
@@ -901,20 +920,22 @@ LEFT JOIN cards cd ON cd.post = p.id AND cd.status = 'ok' `
 
 func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 	out := []FeedPost{}
-	var lastIDs []string // the last_reply column, resolved to posts below
+	var lastIDs []string  // the last_reply column, resolved to posts below
+	var quoteIDs []string // the card's quote column, the same
 	for rows.Next() {
 		var p FeedPost
 		var c Card
-		var lr string
+		var lr, quote string
 		if err := rows.Scan(&p.ID, &p.Author, &p.AuthorName, &p.Avatar, &p.Text, &p.ReplyTo, &p.TS, &p.Received, &p.Activity, &lr, &p.Replies,
-			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image, &c.Archive, &p.Lang); err != nil {
+			&c.URL, &c.Host, &c.Title, &c.Desc, &c.Image, &c.Archive, &quote, &p.Lang); err != nil {
 			return nil, err
 		}
-		if c.URL != "" {
+		if c.URL != "" && quote == "" {
 			p.Card = &c
 		}
 		out = append(out, p)
 		lastIDs = append(lastIDs, lr)
+		quoteIDs = append(quoteIDs, quote)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -945,6 +966,15 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 				out[i].LastReply = &r
 			}
 		}
+		// a post card quotes its post as it stands now; a quoted post
+		// that is gone leaves the link a link, like a stale pointer
+		if quoteIDs[i] != "" {
+			q, err := s.quoteRef(quoteIDs[i])
+			if err != nil {
+				return nil, err
+			}
+			out[i].Quote = q
+		}
 		embeds, err := s.postEmbeds(out[i].ID)
 		if err != nil {
 			return nil, err
@@ -968,18 +998,60 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 	return out, nil
 }
 
+// quoteRef is the post a card quotes, as it stands now, with the
+// picture its card shows; nil for a post that is gone.
+func (s *Store) quoteRef(id string) (*QuoteRef, error) {
+	var q QuoteRef
+	err := s.db.QueryRow(`SELECT p.id, p.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), p.text, p.ts, p.received
+		FROM posts p LEFT JOIN profiles pr ON pr.id = p.author WHERE p.id=?`, id).
+		Scan(&q.ID, &q.Author, &q.AuthorName, &q.Avatar, &q.Text, &q.TS, &q.Received)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	embeds, err := s.postEmbeds(id)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range embeds {
+		if strings.HasPrefix(e.MIME, "image/") {
+			q.Image = e.CID
+			break
+		}
+		if e.Poster != "" && q.Image == "" {
+			q.Image = e.Poster
+		}
+	}
+	if q.Image == "" {
+		pics, err := s.postPictures(id)
+		if err != nil {
+			return nil, err
+		}
+		if len(pics) > 0 {
+			q.Image = pics[0].CID
+		}
+	}
+	return &q, nil
+}
+
 // nameMentions gives each post the names of the profiles its text
-// mentions, as they are now: one lookup for the page, and none when no
-// post holds an "@".
+// mentions, as they are now — its newest reply's and its quoted
+// post's too: one lookup for the page, and none when no post holds an
+// "@".
 func (s *Store) nameMentions(posts []FeedPost) error {
 	ids := make([][]string, len(posts))
 	var all []string
 	for i, p := range posts {
+		texts := []string{p.Text}
 		if p.LastReply != nil {
-			ids[i] = mention.IDs(p.Text, p.LastReply.Text)
-		} else {
-			ids[i] = mention.IDs(p.Text)
+			texts = append(texts, p.LastReply.Text)
 		}
+		if p.Quote != nil {
+			texts = append(texts, p.Quote.Text)
+		}
+		ids[i] = mention.IDs(texts...)
 		all = append(all, ids[i]...)
 	}
 	if len(all) == 0 {
@@ -1095,6 +1167,19 @@ func (s *Store) SetCard(post string, c Card, imageSize int64, imageMIME string, 
 	if !ok {
 		status, c.Host, c.Title, c.Desc, c.Image = "failed", "", "", "", ""
 	}
+	return s.setCard(post, c, "", status, imageSize, imageMIME)
+}
+
+// SetPostCard records a post card (see PLAN.md, Post cards): the post's
+// first link, link, names quoted, a post here — nothing fetched, nothing
+// to archive. The row keeps the link as its url like any card's, so a
+// later read still knows which link it stands for; a picture an earlier
+// link card held is released like SetCard's.
+func (s *Store) SetPostCard(post, link, quoted string) (unpin []string, err error) {
+	return s.setCard(post, Card{URL: link}, quoted, "ok", 0, "")
+}
+
+func (s *Store) setCard(post string, c Card, quote, status string, imageSize int64, imageMIME string) (unpin []string, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
@@ -1115,10 +1200,11 @@ func (s *Store) SetCard(post string, c Card, imageSize int64, imageMIME string, 
 			return nil, err
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO cards (post, url, host, title, descr, image, status, ts) VALUES (?,?,?,?,?,?,?,?)
+	if _, err := tx.Exec(`INSERT INTO cards (post, url, host, title, descr, image, quote, status, ts) VALUES (?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(post) DO UPDATE SET url=excluded.url, host=excluded.host, title=excluded.title,
-		descr=excluded.descr, image=excluded.image, status=excluded.status, ts=excluded.ts`,
-		post, c.URL, c.Host, c.Title, c.Desc, c.Image, status, time.Now().UnixMilli()); err != nil {
+		descr=excluded.descr, image=excluded.image, quote=excluded.quote, status=excluded.status, ts=excluded.ts,
+		archive='', archive_tries=0, archive_ts=0`,
+		post, c.URL, c.Host, c.Title, c.Desc, c.Image, quote, status, time.Now().UnixMilli()); err != nil {
 		return nil, err
 	}
 	return unpin, tx.Commit()
@@ -1156,6 +1242,29 @@ func (s *Store) CardsMisread(misread func(title, desc string) bool) ([]CardPost,
 
 // CardPost is one backfill candidate: a post never attempted for a card.
 type CardPost struct{ ID, Author, Text string }
+
+// CardsLinkingPosts lists the posts whose card, ok or failed, was made
+// from a link shaped like a hub post's page and quotes nothing: the
+// cards from before post cards, and links to posts that were not here
+// when the card was tried. The backfill derives the ones it can
+// resolve again (see PLAN.md, Post cards).
+func (s *Store) CardsLinkingPosts() ([]CardPost, error) {
+	rows, err := s.db.Query(`SELECT p.id, p.author, p.text FROM cards c JOIN posts p ON p.id = c.post
+		WHERE c.quote = '' AND c.url LIKE '%/p/%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CardPost
+	for rows.Next() {
+		var p CardPost
+		if err := rows.Scan(&p.ID, &p.Author, &p.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
 
 // PostsWithoutCards lists posts with no card attempt yet, newest first —
 // the backfill's worklist. Posts with embeds are out: a card is for a
@@ -1316,7 +1425,7 @@ func (s *Store) PicturesToRetry(maxTries int, before int64, limit int) ([]CardPo
 // nothing to do.
 func (s *Store) BeginArchive(post string, maxTries int, before int64) (link string, err error) {
 	err = s.db.QueryRow(`UPDATE cards SET archive_tries = archive_tries + 1, archive_ts = ?
-		WHERE post = ? AND status = 'ok' AND archive = '' AND archive_tries < ? AND archive_ts < ?
+		WHERE post = ? AND status = 'ok' AND quote = '' AND archive = '' AND archive_tries < ? AND archive_ts < ?
 		RETURNING url`, time.Now().UnixMilli(), post, maxTries, before).Scan(&link)
 	if err == sql.ErrNoRows {
 		return "", nil
@@ -1335,7 +1444,7 @@ func (s *Store) SetArchive(post, archive string) error {
 // oldest round first. Text carries the card's link.
 func (s *Store) CardsToArchive(maxTries int, before int64, limit int) ([]CardPost, error) {
 	rows, err := s.db.Query(`SELECT p.id, p.author, c.url FROM cards c JOIN posts p ON p.id = c.post
-		WHERE c.status = 'ok' AND c.archive = '' AND c.archive_tries < ? AND c.archive_ts < ?
+		WHERE c.status = 'ok' AND c.quote = '' AND c.archive = '' AND c.archive_tries < ? AND c.archive_ts < ?
 		ORDER BY c.archive_ts, p.received DESC LIMIT ?`, maxTries, before, limit)
 	if err != nil {
 		return nil, err
@@ -2031,6 +2140,27 @@ func (s *Store) ResolvePrefix(prefix string) (string, error) {
 		return "", ErrNotFound
 	}
 	return ids[0], nil
+}
+
+// ResolvePost is the whole id of the post a link names (see PLAN.md,
+// Post cards): a whole id, lower-case hex, must be a post here; the
+// start of one resolves as ResolvePrefix does, so a short link means a
+// post only while exactly one ever began that way.
+func (s *Store) ResolvePost(id string) (string, error) {
+	if len(id) < 64 {
+		return s.ResolvePrefix(id)
+	}
+	if len(id) > 64 || strings.Trim(id, "0123456789abcdef") != "" {
+		return "", ErrNotFound
+	}
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE id = ?`, id).Scan(&n); err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", ErrNotFound
+	}
+	return id, nil
 }
 
 // two are enough to know there is more than one

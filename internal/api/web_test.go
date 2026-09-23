@@ -1556,3 +1556,44 @@ func TestWebLangRidesEveryExit(t *testing.T) {
 		t.Errorf("a Japanese browser without ?lang=: %s", statusLine(body))
 	}
 }
+
+// TestWebPostCard: a post whose first link is a post here draws a post
+// card in the link card's place — the quoted author's face, name, id
+// and time, its words, its picture — the whole card opening the thread
+// here, with ?lang= carried; the JSON read carries the quote too.
+func TestWebPostCard(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	apub, apriv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, apriv, apub, 1, "profile.set", map[string]any{"name": "Ann"})
+	quoted := ingest(t, s, apriv, apub, 2, "post.create", map[string]any{"text": "the idea post, in full"})
+	link := "https://hub.v2core.com/p/" + quoted[:12]
+	id := ingest(t, s, apriv, apub, 3, "post.create", map[string]any{"text": "as I said in " + link})
+	if _, err := s.St.SetPostCard(id, link, quoted); err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	feed, _ := s.St.Feed("", 10, true)
+	ann := feed[0].Author
+
+	code, body := get(t, h, "/?lang=ja")
+	if code != 200 {
+		t.Fatalf("GET / = %d", code)
+	}
+	for _, want := range []string{
+		`<div class="card qcard"><a class="cm" href="/p/` + quoted + `?lang=ja">`,
+		`<span class="qav"><img class="idn" src="/v1/identicon/` + ann + `.svg" alt=""></span><b>Ann</b><span class="mono">` + ann + `</span><span class="qw">· <time datetime="`,
+		` UTC</time></span></span><span class="qt">the idea post, in full</span></span></a></div>`,
+		`href="` + link + `"`, // the link stays linked in the text
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("feed page lacks %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `<div class="card"><a class="cm" href="`+link) {
+		t.Error("the post card is drawn as a link card too")
+	}
+	_, js := get(t, h, "/v1/post/"+id)
+	if !strings.Contains(js, `"quote":{"id":"`+quoted+`","author":"`+ann+`","author_name":"Ann","text":"the idea post, in full"`) || strings.Contains(js, `"card":`) {
+		t.Errorf("JSON read lacks the quote or keeps a card:\n%s", js)
+	}
+}

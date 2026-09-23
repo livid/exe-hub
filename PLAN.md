@@ -1349,6 +1349,8 @@ idea; Livid said do it.
   host, title, desc, image}) in every JSON read; the public pages draw
   it under the text, and a `post.card` event (the one event type with no
   envelope behind it) makes the live feed slide a finished card in.
+- **Unless the link is a post here**, which is quoted, not fetched: see
+  Post cards.
 
 ## Archived copies — a card's page kept in the Wayback Machine (built)
 
@@ -1385,6 +1387,56 @@ page and the copy, since a link cannot sit inside another.
   lookup, then a save and its polls), an hour apart: one when its card
   lands, the rest from an hourly sweep, which also gives the cards from
   before this feature their copies.
+
+## Post cards — a link to a post here, quoted (built 2026-09-23)
+
+A post whose first link is another post on this hub grows a post card
+instead of a link card: the quoted post's author — face, name, id — and
+time on one line where a link card's title stands, up to three lines of
+its words under it, and its picture at the left when it shows one; the
+whole card opens that thread here. Asked by Livid 2026-09-23: a link to
+a post unfurled as a page card, the OpenGraph preview of its own thread
+page — the hub quoting itself through a picture of itself.
+
+- **The link's shape, then the store.** A link is a post link when its
+  path is a thread page's, `/p/` and eight to sixty-four hex characters
+  with nothing after but a query or a fragment (`card.PostLink`), on any
+  host: a hub does not know the names it is reached by, and a post
+  pulled from a peer links to that peer's pages. The id then has to be
+  a post here (`store.ResolvePost`: a whole id must exist, a shorter
+  start resolves as the pages' short ids do, so an ambiguous one is no
+  post). A link to a post this hub does not hold — a 404 here — is a
+  page like any other and gets a link card; one it holds is never
+  fetched.
+- **A card row that quotes.** `cards` gains `quote`, the quoted post's
+  whole id (`''` for a link card); the row is `ok` with the link as its
+  url and nothing else, so `HasCard` counts it, the misread pass finds
+  nothing to redo, and the Archive is never asked (`CardsToArchive` and
+  `BeginArchive` take `quote = ''` rows only: the page is here, and the
+  copy would be of this hub). A post card replacing a link card releases
+  its picture like any redo.
+- **Read live, never stored.** At read the row's quote resolves to the
+  post as it stands now — `FeedPost.quote` ({id, author, author_name,
+  avatar, text, ts, received, image}: the quoted post's first picture,
+  attached, linked, or a video's poster) — and `card` is absent; a
+  quoted post since deleted leaves the link a link, no card of either
+  kind, like a stale last_reply. The quoted text's mentions are named
+  into the quoting post's `mentions`, as its newest reply's are. One
+  level only: a quoted post's own quote is not resolved, so two posts
+  quoting each other cost nothing.
+- **Drawn everywhere posts are.** The public pages (`webPostCard`: the
+  name, the id, the time as a post's own, a 300-character excerpt in the
+  reader's language — the quoted post's translation rides the same
+  lookup as the newest reply's — in `.card.qcard`, the link card's
+  chrome; the card links to `/p/{id}` with `?lang=` carried) and the Hub
+  app (`.p-card.p-quote`: the row head's face, name, id and relative
+  time, the words plain, three lines; a click opens the thread in the
+  app). Both hear `post.card` as before, so a quote slides in live.
+- **Backfill.** At start, every card whose link is shaped like a post
+  page and quotes nothing (`CardsLinkingPosts`) is resolved again and,
+  when the post is here now, derived again as a quote: the cards from
+  before this feature, and a link to a post that arrived after its card
+  was tried.
 
 ## Media — video, sound and animated pictures through ffmpeg (built)
 

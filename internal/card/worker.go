@@ -109,6 +109,32 @@ func (w *Worker) Backfill() {
 	if len(misread) > 0 {
 		log.Printf("card backfill: %d misread cards queued again", len(misread))
 	}
+	// a card made from a link to a post here before post cards, or
+	// before the post came, is derived again as a quote — only when the
+	// post resolves now, so nothing is fetched twice for nothing
+	linking, err := w.St.CardsLinkingPosts()
+	if err != nil {
+		log.Printf("card backfill: %v", err)
+		return
+	}
+	n = 0
+	for _, p := range linking {
+		id := PostLink(First(p.Text))
+		if id == "" {
+			continue
+		}
+		if _, err := w.St.ResolvePost(id); err != nil {
+			continue
+		}
+		n++
+		select {
+		case w.queue <- job{post: p.ID, author: p.Author, text: p.Text, card: true, redo: true}:
+		default:
+		}
+	}
+	if n > 0 {
+		log.Printf("card backfill: %d cards quoting posts queued again", n)
+	}
 	untried, err := w.St.PostsWithoutPictures(256)
 	if err != nil {
 		log.Printf("picture backfill: %v", err)
@@ -158,6 +184,15 @@ func (w *Worker) deriveCard(j job) {
 	if link == "" {
 		return
 	}
+	// a link to a post here is quoted, not fetched (PLAN.md, Post
+	// cards); one to a post this hub does not hold, or an ambiguous
+	// short one, is a page like any other
+	if id := PostLink(link); id != "" {
+		if quoted, err := w.St.ResolvePost(id); err == nil {
+			w.storeQuote(j, link, quoted)
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
@@ -184,6 +219,24 @@ func (w *Worker) deriveCard(j job) {
 		}
 	}
 	w.store(j, c, size, mime, true)
+}
+
+// storeQuote records a post card: the post the link names, nothing
+// fetched and nothing sent to the Archive, and live views told.
+func (w *Worker) storeQuote(j job, link, quoted string) {
+	unpin, err := w.St.SetPostCard(j.post, link, quoted)
+	if err != nil {
+		log.Printf("card %s: store: %v", j.post, err)
+		return
+	}
+	for _, cid := range unpin {
+		if err := w.IPFS.Unpin(cid); err != nil {
+			log.Printf("unpin %s: %v", cid, err)
+		}
+	}
+	if w.Bus != nil {
+		w.Bus.Emit(events.Event{Type: "post.card", ID: j.post, Author: j.author})
+	}
 }
 
 func (w *Worker) store(j job, c store.Card, imageSize int64, imageMIME string, ok bool) {

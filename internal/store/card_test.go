@@ -149,3 +149,96 @@ func TestCards(t *testing.T) {
 		t.Fatal("card outlived its post")
 	}
 }
+
+// TestPostCards: a post whose first link is a post here gets a post
+// card (PLAN.md, Post cards) — the quoted post rides the feed as it
+// stands now, the card table's link card readers see none, the Archive
+// is never asked, an old link card to a post is listed for a redo, and
+// a quoted post that is gone leaves the link a link.
+func TestPostCards(t *testing.T) {
+	s := openTest(t)
+	a := newAuthor(t)
+	ingest(t, s, a, "profile.set", map[string]any{"name": "Ann"})
+	if err := s.AddPin("bafytestpic234567", 100, "image/png", false); err != nil {
+		t.Fatal(err)
+	}
+	quoted := ingest(t, s, a, "post.create", map[string]any{"text": "the idea post @" + a.id(), "embeds": []map[string]any{{"cid": "bafytestpic234567", "mime": "image/png"}}})
+	link := "https://hub.v2core.com/p/" + quoted
+	id := ingest(t, s, a, "post.create", map[string]any{"text": "as I said in " + link})
+
+	// the link resolves whole or by its start; a stranger's id does not
+	if got, err := s.ResolvePost(quoted); err != nil || got != quoted {
+		t.Fatalf("ResolvePost(whole) = %q, %v", got, err)
+	}
+	if got, err := s.ResolvePost(quoted[:8]); err != nil || got != quoted {
+		t.Fatalf("ResolvePost(prefix) = %q, %v", got, err)
+	}
+	if _, err := s.ResolvePost("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"); err != ErrNotFound {
+		t.Fatalf("ResolvePost(unknown) err = %v, want ErrNotFound", err)
+	}
+
+	// a link card first (the card from before this feature): it is
+	// listed as one linking a post
+	if _, err := s.SetCard(id, Card{URL: link, Host: "hub.v2core.com", Title: "the idea post", Image: "bafyold"}, 10, "image/png", true); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := s.CardsLinkingPosts(); err != nil || len(l) != 1 || l[0].ID != id {
+		t.Fatalf("CardsLinkingPosts = %+v, %v; want the link card", l, err)
+	}
+	// redone as a post card: the old picture is released, the quote served
+	unpin, err := s.SetPostCard(id, link, quoted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpin) != 1 || unpin[0] != "bafyold" {
+		t.Fatalf("unpin = %v, want the link card's picture", unpin)
+	}
+	p, err := s.Post(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Card != nil {
+		t.Fatalf("a post card still serves a link card: %+v", p.Card)
+	}
+	q := p.Quote
+	if q == nil || q.ID != quoted || q.AuthorName != "Ann" || q.Author != a.id() || q.Text != "the idea post @"+a.id() || q.Image != "bafytestpic234567" || q.TS == 0 {
+		t.Fatalf("quote = %+v", q)
+	}
+	if p.Mentions[a.id()] != "Ann" {
+		t.Fatalf("the quoted post's mention is not named: %v", p.Mentions)
+	}
+	if l, _ := s.CardsLinkingPosts(); len(l) != 0 {
+		t.Fatalf("a post card is still listed for a redo: %+v", l)
+	}
+	if has, _ := s.HasCard(id); !has {
+		t.Fatal("a post card does not count as a card attempt")
+	}
+	// never sent to the Archive
+	far := time.Now().Add(time.Hour).UnixMilli()
+	if todo, _ := s.CardsToArchive(3, far, 10); len(todo) != 0 {
+		t.Fatalf("CardsToArchive lists a post card: %+v", todo)
+	}
+	if l, err := s.BeginArchive(id, 3, far); err != nil || l != "" {
+		t.Fatalf("BeginArchive on a post card = %q, %v", l, err)
+	}
+	// the feed carries it too
+	feed, err := s.Feed("", 10, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(feed) != 2 || feed[0].ID != id || feed[0].Quote == nil || feed[1].Quote != nil {
+		t.Fatalf("feed quotes = %v / %v", feed[0].Quote, feed[1].Quote)
+	}
+	// the quoted post gone: the link stays a link, no card of any kind
+	raw, sig, e, op := a.msg(t, "post.delete", map[string]any{"post": quoted})
+	if _, _, err := s.Ingest(raw, sig, e, op); err != nil {
+		t.Fatal(err)
+	}
+	p, err = s.Post(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Quote != nil || p.Card != nil {
+		t.Fatalf("after the quoted post's delete: quote %+v card %+v", p.Quote, p.Card)
+	}
+}

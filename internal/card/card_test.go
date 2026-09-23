@@ -264,3 +264,28 @@ func pageHandler(body string) http.Handler {
 		io.WriteString(w, body)
 	})
 }
+
+// TestPostLink: a link whose path is a hub thread page's — /p/ and
+// eight to sixty-four hex characters, nothing after but a query or a
+// fragment — names that id, lower-case, whatever the host; anything
+// else is no post link.
+func TestPostLink(t *testing.T) {
+	const id = "1569a4fa6517aded6051b48810545f545b75c8a6f6515cbfcc37b052c03d8e30"
+	for link, want := range map[string]string{
+		"https://hub.v2core.com/p/" + id:                   id,
+		"https://hub.v2core.com/p/1569a4fa":                "1569a4fa",
+		"https://hub.v2core.com/p/1569A4FA6517?lang=ja#x":  "1569a4fa6517",
+		"http://100.116.32.57:7788/p/" + id + "/":          id,
+		"https://hub.v2core.com/p/1569a4f":                 "", // seven: too short
+		"https://hub.v2core.com/p/" + id + "0":             "", // past an id
+		"https://hub.v2core.com/p/1569a4fa/replies":        "",
+		"https://hub.v2core.com/u/1569a4fa6517aded":        "",
+		"https://hub.v2core.com/p/not-a-post-id":           "",
+		"https://hub.v2core.com/":                          "",
+		"ftp://hub.v2core.com/p/" + id:                     "",
+	} {
+		if got := PostLink(link); got != want {
+			t.Errorf("PostLink(%q) = %q, want %q", link, got, want)
+		}
+	}
+}
