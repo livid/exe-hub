@@ -966,7 +966,8 @@ func TestWebPage(t *testing.T) {
 		t.Error("a non-admin's HTML embed should stay a file link")
 	}
 	for _, want := range []string{`sandbox="allow-scripts allow-popups allow-forms allow-modals"`, `closest("a.pic, a.page")`, `#page=`,
-		`'<base href="about:srcdoc">'`, `.srcdoc = withBase(text)`} {
+		`'<base href="about:srcdoc">'`, `.srcdoc = withBase(text)`,
+		`if (!w.classList.contains("pageview")) fit(w);`} { // a page window has no picture to fit
 		if !strings.Contains(body, want) {
 			t.Errorf("page script missing %q", want)
 		}

@@ -888,8 +888,11 @@ document.addEventListener("change", e => {
     img.style.maxWidth = Math.max(80, vw - 40) + "px";
     img.style.maxHeight = Math.max(60, vh - 90) + "px";
   };
+  // every viewer is kept on the screen; a page window has no picture to
+  // fit (its own listener below sizes its frame), and fitting one threw,
+  // which left it and the viewers after it where the old size put them
   addEventListener("resize", () => document.querySelectorAll(".viewer").forEach(w => {
-    fit(w);
+    if (!w.classList.contains("pageview")) fit(w);
     const { clientWidth: vw, clientHeight: vh } = document.documentElement;
     w.style.left = Math.max(0, Math.min(w.offsetLeft, vw - w.offsetWidth)) + "px";
     w.style.top = Math.max(0, Math.min(w.offsetTop, vh - w.offsetHeight)) + "px";
