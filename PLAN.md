@@ -702,7 +702,11 @@ hub that carries the post.
   words are in the button from the start, stacked, the one not showing
   invisible, so it is as wide as the wider and the swap moves nothing;
   the words are the page's language's (`copy`, `copied`), and a
-  search's marks and a mention's names pass the button by. The
+  search's marks and a mention's names pass the button by. On a phone
+  (480px and under; the Hub app's mobile) the word gives way to a 13px
+  pixel glyph, a box on another — the sheets of a copy — and a check
+  mark for the moment after, 8px either side, as the pager's buttons
+  shrink to their arrows; the box beside it gets the room back. The
   Hub app reads fences with the same rules (`fenceAt`), and
   `internal/card/testdata/fences.json` holds the cases both parsers are
   run against. Headings, code spans and fenced blocks, the two links,

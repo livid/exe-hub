@@ -435,6 +435,13 @@ func renderText(text string, l *webLocale) template.HTML {
 	return template.HTML(b.String())
 }
 
+// webCopyGlyphs is the Copy button's art for a phone, where the word
+// gives way to a glyph (web.html, the 480px rule): a box on another —
+// the sheets of a copy — and the check mark it turns into for the
+// moment after a press. 13px pixel glyphs as the Hub app's, black
+// outlines in currentColor, white faces that a pressed button greys.
+const webCopyGlyphs = `<svg class="gl box" viewBox="0 0 13 13" width="13" height="13" aria-hidden="true"><path class="k" d="M0 0h9v1h-9zM0 1h1v1h-1zM8 1h1v1h-1zM0 2h1v1h-1zM8 2h1v1h-1zM0 3h1v1h-1zM8 3h1v1h-1zM0 4h1v1h-1zM4 4h9v1h-9zM0 5h1v1h-1zM4 5h1v1h-1zM12 5h1v1h-1zM0 6h1v1h-1zM4 6h1v1h-1zM12 6h1v1h-1zM0 7h1v1h-1zM4 7h1v1h-1zM12 7h1v1h-1zM0 8h5v1h-5zM12 8h1v1h-1zM4 9h1v1h-1zM12 9h1v1h-1zM4 10h1v1h-1zM12 10h1v1h-1zM4 11h1v1h-1zM12 11h1v1h-1zM4 12h9v1h-9z"/><path class="w" d="M1 1h7v1h-7zM1 2h7v1h-7zM1 3h7v1h-7zM1 4h3v1h-3zM1 5h3v1h-3zM5 5h7v1h-7zM1 6h3v1h-3zM5 6h7v1h-7zM1 7h3v1h-3zM5 7h7v1h-7zM5 8h7v1h-7zM5 9h7v1h-7zM5 10h7v1h-7zM5 11h7v1h-7z"/></svg><svg class="gl ok" viewBox="0 0 13 13" width="13" height="13" aria-hidden="true"><path class="k" d="M11 2h2v1h-2zM10 3h2v1h-2zM9 4h2v1h-2zM8 5h2v1h-2zM1 6h2v1h-2zM7 6h2v1h-2zM2 7h2v1h-2zM6 7h2v1h-2zM3 8h4v1h-4zM4 9h2v1h-2z"/></svg>`
+
 // writeFence sets a fenced code block: a .code row of a pre holding the
 // code as typed, escaped and nothing more — no spans, no links, no line
 // breaks of the page's own — after a newline of its own, since a
@@ -443,8 +450,9 @@ func renderText(text string, l *webLocale) template.HTML {
 // the Copy button, whose press (the page's script) puts the pre's text
 // on the clipboard and shows its second word, Copied, for a moment —
 // both words are in the button from the start, stacked, so it is as
-// wide as the wider and the swap moves nothing. The words are the
-// page's language's; the info string is not shown.
+// wide as the wider and the swap moves nothing; on a phone the glyphs
+// stand in for the words. The words are the page's language's; the
+// info string is not shown.
 func writeFence(b *strings.Builder, f *card.Fence, first, last bool, l *webLocale) {
 	class := "code"
 	if first {
@@ -453,7 +461,7 @@ func writeFence(b *strings.Builder, f *card.Fence, first, last bool, l *webLocal
 	if last {
 		class += " last"
 	}
-	b.WriteString(`<div class="` + class + `"><pre>` + "\n" + html.EscapeString(f.Code) + `</pre><button type="button" class="btn copy"><span>` +
+	b.WriteString(`<div class="` + class + `"><pre>` + "\n" + html.EscapeString(f.Code) + `</pre><button type="button" class="btn copy">` + webCopyGlyphs + `<span>` +
 		html.EscapeString(l.T("copy")) + "</span><span>" + html.EscapeString(l.T("copied")) + "</span></button></div>\n")
 }
 

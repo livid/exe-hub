@@ -419,9 +419,25 @@ img.idn { box-sizing: content-box; background: #e6e6f5; }
 .text pre { margin: 0; padding: 4px 6px; min-width: 0; box-sizing: border-box;
   overflow-x: auto; border: 1px solid #262626; background: #fff; tab-size: 4;
   font: 11px/15px Monaco, "Courier New", monospace; white-space: pre; overflow-wrap: normal; word-break: normal; }
-.text .copy { flex: none; margin: 2px 0 0; display: inline-grid; font-family: inherit; cursor: default; user-select: none; }
+.text .copy { flex: none; margin: 2px 0 0; display: inline-grid; position: relative; font-family: inherit; cursor: default; user-select: none; }
 .text .copy span { grid-area: 1 / 1; }
-.text .copy:not(.done) span:last-child, .text .copy.done span:first-child { visibility: hidden; }
+.text .copy:not(.done) span:last-of-type, .text .copy.done span:first-of-type { visibility: hidden; }
+/* a phone: the word gives way to a 13px pixel glyph (web.go
+   webCopyGlyphs) — a box on another, the sheets of a copy, and a check
+   mark for the moment after a press — 8px either side of it, the words
+   still there for a screen reader, as the pager's buttons do; the box
+   beside it gets the room back. The glyph is currentColor, so a pressed
+   button inverts it with the label; the sheets' white faces go
+   pressed-grey so they never read as holes. */
+.text .copy .gl { display: none; width: 13px; height: 13px; }
+.text .copy .gl .k { fill: currentColor; }
+.text .copy .gl .w { fill: #fff; }
+.text .copy:active .gl .w { fill: #666; }
+@media (max-width: 480px) {
+  .text .copy { min-width: 0; padding: 2px 8px; display: inline-flex; align-items: center; }
+  .text .copy span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .text .copy:not(.done) .gl.box, .text .copy.done .gl.ok { display: block; }
+}
 code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0 2px; }
 /* attached pictures, and the pictures a post's IPFS links name (fetched
    by the hub, see PLAN.md, Linked pictures), drawn alike */
