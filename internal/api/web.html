@@ -526,6 +526,11 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
    stays the chrome's flex bar: as a grid, the title's max-width: 70%
    measured its own column, the name's width, and cut every name short. */
 .viewer.pageview iframe { display: block; border: 0; background: #fff; width: var(--pw, 800px); height: var(--ph, 500px); }
+/* the frame sets the window's width, never the status line: its name ·
+   size · CID is wider than a phone, and as the window's widest content it
+   pushed the zoom box off the screen. Width 0 takes it out of the window's
+   sizing; min-width 100% then fills the frame. */
+.viewer.pageview .statusbar { width: 0; min-width: 100%; }
 .viewer.pageview .statusbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .viewer.pageview.dragging iframe { pointer-events: none; }
 .viewer.pageview .tbox.zoom { cursor: default; }
