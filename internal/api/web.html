@@ -407,13 +407,16 @@ img.idn { box-sizing: content-box; background: #e6e6f5; }
    inside a white box with one black line round it like a table's, as
    wide as its longest line and never wider than the room, past that
    scrolling sideways, since a code line is not for wrapping — and the
-   Copy button 6px right of the box (the HIG's gap inside a group), its
-   top 2px under the box's top, so a one-line box, 25px, holds it: a
-   push button, 31px, wearing a 13px pixel glyph (webCopyGlyphs) 8px
-   either side — a box on another, the sheets of a copy — that is a
-   check mark for the moment after a press. The words Copy and Copied
-   are in the button for a screen reader alone, the one that holds
-   hidden, as the pager's buttons keep their words on a phone. The
+   Copy button 6px right of the box (the HIG's gap inside a group): a
+   push button, 20px by 31px, wearing a 13px pixel glyph
+   (webCopyGlyphs) 8px either side — a box on another, the sheets of a
+   copy — that is a check mark for the moment after a press. A one-line
+   block (.one) is built as the button is, 1px line, 2px in, a 14px
+   line, so box and button stand 20px tall together, top on top; a
+   taller block keeps 4px in and 15px lines, the button 2px under its
+   top. The words Copy and Copied are in the button for a screen reader
+   alone, the one that holds hidden, as the pager's buttons keep their
+   words on a phone. The
    glyph is currentColor, so a pressed button inverts it; the sheets'
    white faces go pressed-grey so they never read as holes. 8px above
    and below the row, none on the side that opens (.first) or ends
@@ -423,8 +426,10 @@ img.idn { box-sizing: content-box; background: #e6e6f5; }
 .text pre { margin: 0; padding: 4px 6px; min-width: 0; box-sizing: border-box;
   overflow-x: auto; border: 1px solid #262626; background: #fff; tab-size: 4;
   font: 11px/15px Monaco, "Courier New", monospace; white-space: pre; overflow-wrap: normal; word-break: normal; }
+.text .code.one pre { padding-top: 2px; padding-bottom: 2px; line-height: 14px; }
 .text .copy { flex: none; margin: 2px 0 0; min-width: 0; padding: 2px 8px; display: inline-flex; align-items: center; position: relative;
   font-family: inherit; cursor: default; user-select: none; }
+.text .code.one .copy { margin-top: 0; }
 .text .copy span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .text .copy:not(.done) span:last-of-type, .text .copy.done span:first-of-type { visibility: hidden; }
 .text .copy .gl { display: none; width: 13px; height: 13px; }

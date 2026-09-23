@@ -693,8 +693,13 @@ hub that carries the post.
   is a table's: one black line round it, as wide as the longest line
   and never wider than the post, scrolling sideways past that, 8px
   above and below and none on the side that opens or ends the post.
-  Beside the box, 6px to its right with its top 2px under the box's,
-  stands a Copy push button (asked by Livid 2026-09-23): a press puts
+  Beside the box, 6px to its right, stands a Copy push button (asked
+  by Livid 2026-09-23), 20px tall: a block of one line is set the
+  button's height too — 2px in, a 14px line, the `.one` class on its
+  row — so the two stand level, and beside a taller block (4px in,
+  15px lines) the button's top sits 2px under the box's (Livid, the
+  same day, after the one-line box stood 25px beside the 20px button;
+  the button's height was not to change). A press puts
   the code on the clipboard exactly as typed — the `pre`'s text; over a
   plain-http address, which has no clipboard API, a hidden textarea and
   the copy command; when neither can, the code is selected for the

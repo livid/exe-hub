@@ -17,33 +17,33 @@ const BTN = "<button type=\"button\" class=\"btn copy\">" + webCopyGlyphs + "<sp
 // button with both its words, the page's language's.
 func TestRenderTextFence(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
-		{"```\ncode\n```", "<div class=\"code first last\"><pre>\ncode</pre>" + BTN + "</div>\n"},
-		{"Entry:\n```\ngping 8.8.8.8  terminal gping 8.8.8.8\n```\nafter", "Entry:<div class=\"code\"><pre>\ngping 8.8.8.8  terminal gping 8.8.8.8</pre>" + BTN + "</div>\nafter"},
-		{"Entry:\n\n```go\nx\n```\n\nafter", "Entry:<div class=\"code\"><pre>\nx</pre>" + BTN + "</div>\nafter"},
+		{"```\ncode\n```", "<div class=\"code one first last\"><pre>\ncode</pre>" + BTN + "</div>\n"},
+		{"Entry:\n```\ngping 8.8.8.8  terminal gping 8.8.8.8\n```\nafter", "Entry:<div class=\"code one\"><pre>\ngping 8.8.8.8  terminal gping 8.8.8.8</pre>" + BTN + "</div>\nafter"},
+		{"Entry:\n\n```go\nx\n```\n\nafter", "Entry:<div class=\"code one\"><pre>\nx</pre>" + BTN + "</div>\nafter"},
 		{"```\n\nblank first\n```", "<div class=\"code first last\"><pre>\n\nblank first</pre>" + BTN + "</div>\n"},
 		{"```\n# h\n- i\n**b** `c` [w](https://x.y) https://x.y\n```", "<div class=\"code first last\"><pre>\n# h\n- i\n**b** `c` [w](https://x.y) https://x.y</pre>" + BTN + "</div>\n"},
-		{"```\n<b>&amp;\n```", "<div class=\"code first last\"><pre>\n&lt;b&gt;&amp;amp;</pre>" + BTN + "</div>\n"},
-		{"```\nopen", "<div class=\"code first last\"><pre>\nopen</pre>" + BTN + "</div>\n"},
-		{"```\n```", "<div class=\"code first last\"><pre>\n</pre>" + BTN + "</div>\n"},
+		{"```\n<b>&amp;\n```", "<div class=\"code one first last\"><pre>\n&lt;b&gt;&amp;amp;</pre>" + BTN + "</div>\n"},
+		{"```\nopen", "<div class=\"code one first last\"><pre>\nopen</pre>" + BTN + "</div>\n"},
+		{"```\n```", "<div class=\"code one first last\"><pre>\n</pre>" + BTN + "</div>\n"},
 		{"the ``` lines\n`a`", "the ``` lines<br>\n<code>a</code>"},
-		{"- one\n```\ntwo\n```", "<ul class=\"first\"><li>one</li></ul>\n<div class=\"code last\"><pre>\ntwo</pre>" + BTN + "</div>\n"},
-		{"## T\n```\nx\n```\n| a |\n| - |", "<h2 class=\"first\">T</h2>\n<div class=\"code\"><pre>\nx</pre>" + BTN + "</div>\n<div class=\"tbl last\"><table><thead><tr><th>a</th></tr></thead></table></div>\n"},
+		{"- one\n```\ntwo\n```", "<ul class=\"first\"><li>one</li></ul>\n<div class=\"code one last\"><pre>\ntwo</pre>" + BTN + "</div>\n"},
+		{"## T\n```\nx\n```\n| a |\n| - |", "<h2 class=\"first\">T</h2>\n<div class=\"code one\"><pre>\nx</pre>" + BTN + "</div>\n<div class=\"tbl last\"><table><thead><tr><th>a</th></tr></thead></table></div>\n"},
 	} {
 		if got := string(renderText(c.in, nil)); got != c.want {
 			t.Errorf("renderText(%q)\n got %s\nwant %s", c.in, got, c.want)
 		}
 	}
 	// the found words of a search are marked inside the code, tags untouched
-	if got, want := string(markHits(renderText("```\napple pie\n```", nil), "pie")), "<div class=\"code first last\"><pre>\napple <mark>pie</mark></pre>"+BTN+"</div>\n"; got != want {
+	if got, want := string(markHits(renderText("```\napple pie\n```", nil), "pie")), "<div class=\"code one first last\"><pre>\napple <mark>pie</mark></pre>"+BTN+"</div>\n"; got != want {
 		t.Errorf("markHits over a fence\n got %s\nwant %s", got, want)
 	}
 	// an id inside a fence is code, not a mention
 	names := map[string]string{"0123456789abcdef": "Ann"}
-	if got, want := string(renderPost("```\n@0123456789abcdef\n```\n@0123456789abcdef", names, webReading{})), "<div class=\"code first\"><pre>\n@0123456789abcdef</pre>"+BTN+"</div>\n<a class=\"mention\" href=\"/u/0123456789abcdef\">@Ann</a>"; got != want {
+	if got, want := string(renderPost("```\n@0123456789abcdef\n```\n@0123456789abcdef", names, webReading{})), "<div class=\"code one first\"><pre>\n@0123456789abcdef</pre>"+BTN+"</div>\n<a class=\"mention\" href=\"/u/0123456789abcdef\">@Ann</a>"; got != want {
 		t.Errorf("renderPost over a fence\n got %s\nwant %s", got, want)
 	}
 	// the search's marks stop at the button: its words are the page's
-	if got, want := string(markHits(renderText("```\ncopy\n```", nil), "copy")), "<div class=\"code first last\"><pre>\n<mark>copy</mark></pre>"+BTN+"</div>\n"; got != want {
+	if got, want := string(markHits(renderText("```\ncopy\n```", nil), "copy")), "<div class=\"code one first last\"><pre>\n<mark>copy</mark></pre>"+BTN+"</div>\n"; got != want {
 		t.Errorf("markHits over the button\n got %s\nwant %s", got, want)
 	}
 	// the phone's glyphs: a box on another, and a check mark

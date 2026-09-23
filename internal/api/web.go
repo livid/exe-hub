@@ -468,8 +468,12 @@ const webCopyGlyphs = `<svg class="gl box" viewBox="0 0 13 13" width="13" height
 // on the clipboard: it wears the glyphs, the sheets and then the check
 // mark for a moment, and holds both words — Copy, Copied — for a
 // screen reader, in the page's language. The info string is not shown.
+// A block of one line is .one: the page sets it the button's height.
 func writeFence(b *strings.Builder, f *card.Fence, first, last bool, l *webLocale) {
 	class := "code"
+	if !strings.Contains(f.Code, "\n") {
+		class += " one"
+	}
 	if first {
 		class += " first"
 	}
