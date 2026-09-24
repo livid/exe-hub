@@ -95,13 +95,41 @@ a.mention { text-decoration: none; }
    has a summary — 20px like every push button (HIG: the standard
    height of a push button is 20 pixels), its word after a sparkle,
    14px pixel art in the bell's yellow, set as Feed sets its arrow,
-   darkened while pressed. It opens the side over the page as a sheet:
-   the Summary window centred in it, 16px from either edge and clear
-   of the phone's safe areas, scrolling on its own when long; the
-   window's close box, a tap beside it or Escape puts it away. From
-   1060px the side stands beside the thread and the button goes. */
+   darkened while pressed. It slides the summary into the feed, under
+   the strip and above the post, laid out as the Hub app lays its own
+   — as a post is: the sparkle in the avatar's place, Summary where
+   the name goes, what it read and who wrote it in the id's grey, the
+   time at the right, the words at the text's size — in 0.12s, and
+   slides it up again (Livid: "do not show it in a window, reuse the
+   same in-feed style as the Hub app … with 0.12s slide down/up").
+   From 1060px the side's window stands beside the thread instead and
+   the button and the in-feed block go. */
 .pager .spark { grid-column: 2; justify-self: center; display: none; align-items: center; gap: 5px; padding: 2px 12px 2px 9px; }
 .pager .spark svg { width: 14px; height: 14px; display: block; shape-rendering: crispEdges; }
+.pager .spark .k, .sumfeed .sgl .k { fill: #262626; } .pager .spark .f, .sumfeed .sgl .f { fill: #ffcc33; } .pager .spark .s, .sumfeed .sgl .s { fill: #cc9933; } .pager .spark .w, .sumfeed .sgl .w { fill: #fff; }
+.pager .spark[aria-pressed=true] { background: #666;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.pager .spark[aria-pressed=true] .f { fill: #997a1f; } .pager .spark[aria-pressed=true] .s { fill: #66511a; } .pager .spark[aria-pressed=true] .w { fill: #ccaa44; }
+.pager .spark:focus { outline: none; }
+.pager .spark:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+/* the slide is the grid row it sits in growing from nothing to its
+   content, a wrapper clipping the post meanwhile (the post's own
+   padding would hold the row open); no height is measured */
+.sumfeed { display: none; grid-template-rows: 0fr; transition: grid-template-rows .12s ease-out; }
+.sumfeed.open { grid-template-rows: 1fr; }
+.sumfeed > .sumwrap { min-height: 0; overflow: hidden; }
+.sumfeed .post.sum { border-bottom: 1px solid #ddd; }
+.sumfeed .sgl { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; }
+.sumfeed .sgl svg { width: 28px; height: 28px; display: block; shape-rendering: crispEdges; }
+/* the head's grey gives way first on a narrow phone, the time stays whole */
+.sumfeed .meta { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.sumfeed .meta .smeta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #999; }
+.sumfeed .meta time { flex: none; }
+.sumfeed .cite { color: #666; text-decoration: none; font-size: 11px; }
+@media (max-width: 1059px) {
+  .pager .spark { display: inline-flex; }
+  .sumfeed { display: grid; }
+}
 /* The language menu stands at the buttons' height. The HIG's layout
    chapter gives a pop-up menu button the push button's 20 pixels, and
    a real Mac OS 9 draws it so — the Monitors panel's Show pop-up,
@@ -114,19 +142,6 @@ a.mention { text-decoration: none; }
    sizes its width, and sets the triangles where the Mac has them. */
 .popup.lang { height: 20px; }
 .popup.lang .well b { background-position: 4px 3px; }
-.pager .spark .k { fill: #262626; } .pager .spark .f { fill: #ffcc33; } .pager .spark .s { fill: #cc9933; } .pager .spark .w { fill: #fff; }
-.pager .spark[aria-pressed=true] { background: #666;
-  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
-.pager .spark[aria-pressed=true] .f { fill: #997a1f; } .pager .spark[aria-pressed=true] .s { fill: #66511a; } .pager .spark[aria-pressed=true] .w { fill: #ccaa44; }
-.pager .spark:focus { outline: none; }
-.pager .spark:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
-.summary .tbox.close { cursor: default; }
-@media (max-width: 1059px) {
-  .pager .spark { display: inline-flex; }
-  .desk .side.open { display: block; position: fixed; inset: 0; z-index: 100; overflow: auto; -webkit-overflow-scrolling: touch;
-    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-  .desk .side.open .window { margin: 0 auto; }
-}
 .summary .sum { padding: 12px 14px; }
 .summary .text { margin-top: 0; }
 .summary .meta { margin-top: 8px; white-space: normal; }
@@ -692,6 +707,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread" data-root="{{.Root}}"{{end}}>
     <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{if .Summary}}<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="{{T "summary"}}">{{template "spark"}}<span>{{T "summarize"}}</span></button>{{end}}{{template "lang" .}}</div>
+    {{with .Summary}}{{template "sumfeed" .}}{{end}}
     {{template "post" .Post}}
     {{if .Pages}}<div class="pager rp">{{template "tpager" .}}</div>{{end}}
     {{range .Replies}}{{template "post" .}}{{end}}
@@ -797,6 +813,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     next.forEach((n, i) => { if (feed.children[i] !== n) feed.insertBefore(n, feed.children[i] || null); });
     // the new posts' times, and a kept post whose day ended since
     localTimes(feed);
+    // the phone's in-feed summary follows its button: a newer step brought in while it was open stays open
+    { const sp = document.getElementById("spark"), sf = document.getElementById("sumfeed"); if (sp && sf) sf.classList.toggle("open", sp.getAttribute("aria-pressed") === "true"); }
     if (pin) scrollBy({ top: pin.getBoundingClientRect().top - at, behavior: "instant" });
     // the reader's own reply: land on it, tinted, as its link would — on
     // this page, or on the page ?at= finds it on (a thread past one page)
@@ -936,22 +954,19 @@ document.addEventListener("click", e => {
   line.firstElementChild.hidden = !line.firstElementChild.hidden;
   [a.textContent, a.dataset.other] = [a.dataset.other, a.textContent];
 });
-// The sparkle on a thread's strip (PLAN.md, Thread summaries — the
-// phone): it opens the side over the page with the Summary window in
-// it and presses in; the window's close box, a tap on the sheet beside
-// the window, or Escape puts it away. One listener on the document, so
-// a strip or a window the live page brings in needs nothing.
+// Summarize on a thread's strip (PLAN.md, Thread summaries — the
+// phone): it slides the summary into the feed under the strip and
+// presses in, and slides it up again; a block the live page brings in
+// follows the button. One listener on the document, so a strip or a
+// block the live page brings in needs nothing.
 document.addEventListener("click", e => {
-  if (!(e.target instanceof Element)) return;
-  const side = document.getElementById("side"), spark = document.getElementById("spark");
-  if (!side) return;
-  const set = open => { side.classList.toggle("open", open); if (spark) spark.setAttribute("aria-pressed", String(open)); };
-  if (e.target.closest("#spark")) { set(!side.classList.contains("open")); return; }
-  if (side.classList.contains("open") && (e.target === side || e.target.closest(".summary .tbox.close"))) { e.preventDefault(); set(false); }
-});
-document.addEventListener("keydown", e => {
-  const side = document.getElementById("side");
-  if (e.key === "Escape" && side && side.classList.contains("open")) { side.classList.remove("open"); const s = document.getElementById("spark"); if (s) s.setAttribute("aria-pressed", "false"); }
+  if (!(e.target instanceof Element) || !e.target.closest("#spark")) return;
+  const spark = document.getElementById("spark"), block = document.getElementById("sumfeed");
+  if (!block) return;
+  const open = !block.classList.contains("open");
+  block.classList.toggle("open", open);
+  spark.setAttribute("aria-pressed", String(open));
+  if (open && block.getBoundingClientRect().top < 0) block.scrollIntoView({ block: "start", behavior: "smooth" });
 });
 // The Copy button beside a fenced code block (web.go writeFence): the
 // pre's text — the code exactly as typed, which the browser gives back
@@ -1995,8 +2010,19 @@ document.addEventListener("change", e => {
      newest step's summary through the page's renderer, the reader's
      translation of it with the same line and control a post has, and
      the meta line: what it read, which model, when */}}
+{{/* the same summary in the feed on a phone (PLAN.md, Thread summaries
+     — the phone): under the strip, above the post, slid in by Summarize */}}
+{{define "sumfeed"}}<div class="sumfeed" id="sumfeed"><div class="sumwrap"><div class="post sum" lang="{{.Lang}}">
+  <span class="sgl">{{template "spark"}}</span>
+  <div>
+    <div class="meta"><b>{{T "summary"}}</b> <span class="smeta">{{.Read}} · {{.Model}}</span> · <time datetime="{{.Stamp}}">{{.When}}</time></div>
+    {{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text" lang="{{.Lang}}"{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>
+    {{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.Root}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}
+  </div>
+</div></div></div>{{end}}
+
 {{define "summary"}}<div class="window summary" lang="{{.Lang}}">
-  <div class="titlebar"><span class="tbox close" title="{{T "close"}}"></span><span class="stripe"></span><span class="title">{{T "summary"}}</span><span class="stripe"></span></div>
+  <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{T "summary"}}</span><span class="stripe"></span></div>
   <div class="frame"><div class="pad sum">
     {{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text" lang="{{.Lang}}"{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>
     {{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.Root}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}

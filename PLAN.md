@@ -2540,6 +2540,26 @@ at a reply on its page.
   (`exe-hub-summary-window-test.js`) presses it at 1000px and on a
   375px phone: the sheet's place, the three ways out, nothing scrolling
   sideways; the strip at DPR 1, 1.5 and 2, the phone at 3.
+  **In the feed, not a window** (Livid, the same day: "do not show it
+  in a window, reuse the same in-feed style as the Hub app in exe
+  webui, with 0.12s slide down/up animation. Summary for exe-hub
+  desktop keeps the window style"): the sheet went. The page carries
+  the summary a second time inside the live frame, under the strip and
+  above the post (`sumfeed`, keyed by its id for the live swap), laid
+  out as the Hub app lays its own — as a post is: the sparkle at 28px
+  in the avatar's place, Summary where the name goes, "the first 20
+  replies · glm-5.3:cloud" in the id's grey (`summary.read`, giving way
+  first on a narrow phone so the time stays whole), the time at the
+  right, the words and cites as the window draws them. Summarize slides
+  it down in 0.12s and up again: the block is a grid whose one row goes
+  from 0fr to 1fr (`transition: grid-template-rows .12s`), a wrapper
+  clipping the post meanwhile, so no height is measured and the post's
+  padding cannot hold the row open. Shown only under 1060px, where the
+  side is hidden; from 1060px the side's window stands and the block
+  and the button go. A newer step the live page brings in stays open
+  while the button is pressed. The browser check presses it at 1000px
+  and on a phone, catches the slide mid-way, and measures the open block
+  against its post and the closed one at nothing.
   **With its word** (Livid, the same day: "We have enough space to show
   text on button: Summarize; ensure Feed, Summarize, Lang controls have
   same height. Confirm details with Apple OS 8/9 HIG"): the button

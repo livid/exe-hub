@@ -1856,8 +1856,28 @@ func TestWebSummaryWindow(t *testing.T) {
 	if f, sp, l := strings.Index(strip, `<span>Feed</span>`), strings.Index(strip, `<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="Summary"><svg viewBox="0 0 14 14"`), strings.Index(strip, `id="lang"`); !(0 < f && f < sp && sp < l) || !strings.Contains(strip, `</svg><span>Summarize</span></button>`) {
 		t.Errorf("the sparkle is not between Feed and the language menu: %q", strip)
 	}
-	if !strings.Contains(win, `<span class="tbox close" title="Close"></span>`) {
-		t.Error("the Summary window's box is not a close box")
+	if strings.Contains(win, `tbox close`) {
+		t.Error("the Summary window's box is a close box: nothing closes on the desktop")
+	}
+	// the phone's copy: the same summary laid out as a post in the frame,
+	// under the strip and above the post, slid in by the button
+	fi, pi := strings.Index(body, `<div class="sumfeed" id="sumfeed"><div class="sumwrap"><div class="post sum" lang="en">`), strings.Index(body, `class="post" id="`+root+`"`)
+	if !(strings.Index(body, `class="pager top"`) < fi && fi < pi) || fi < 0 {
+		t.Errorf("the in-feed summary is not between the strip and the post (%d, %d)", fi, pi)
+	}
+	feed := body[fi:pi]
+	for _, want := range []string{
+		`<span class="sgl"><svg viewBox="0 0 14 14"`,
+		`<div class="meta"><b>Summary</b> <span class="smeta">the first 10 replies · glm-5.3:cloud</span> · <time datetime="`,
+		`<strong>Ten replies in.</strong>`,
+		`<a class="cite" href="/p/` + root + `?at=` + ids[2] + `">#3</a>`,
+	} {
+		if !strings.Contains(feed, want) {
+			t.Errorf("the in-feed summary lacks %q:\n%s", want, feed)
+		}
+	}
+	if strings.Contains(body, `.side.open`) || !strings.Contains(body, `transition: grid-template-rows .12s ease-out`) {
+		t.Error("the sheet is still there, or the slide is not 0.12s")
 	}
 	// a newer step replaces it; the older one is not drawn
 	s.St.SetSummary(root, 20, "en", "**Twenty in.**\n- Still open [#1]", "glm-5.3:cloud", 20, map[int]string{1: ids[0]}, true)

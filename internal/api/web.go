@@ -223,6 +223,7 @@ type webSummary struct {
 	Model         string
 	When, Stamp   string
 	Meta          string // "Summary of the first 10 replies", in the page's language
+	Read          string // "the first 10 replies", for the in-feed head on a phone
 	Tr            *webTr
 	Q             string
 }
@@ -256,7 +257,7 @@ func (s *Server) webSummary(rd webReading, root string) *webSummary {
 		return nil
 	}
 	out := &webSummary{Root: root, Lang: orig.Lang, Step: step, Replies: orig.Replies, Model: orig.Model,
-		When: webWhen(orig.TS), Stamp: webStamp(orig.TS), Meta: rd.L.T("summary.of", "n", orig.Replies), Q: rd.Q}
+		When: webWhen(orig.TS), Stamp: webStamp(orig.TS), Meta: rd.L.T("summary.of", "n", orig.Replies), Read: rd.L.T("summary.read", "n", orig.Replies), Q: rd.Q}
 	out.HTML = citeLinks(renderText(orig.Text, rd.L), orig.Cites, root, rd)
 	if tr != nil && rd.Reader != "orig" && langBase(orig.Lang) != langBase(rd.Reader) && langBase(orig.Lang) != langBase(rd.Target) {
 		out.Tr = rd.tr(store.Translation{Text: tr.Text, From: orig.Lang}, nil, nil)
