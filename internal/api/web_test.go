@@ -1760,8 +1760,8 @@ func TestWebSummaryWindow(t *testing.T) {
 	}
 	h := s.Handler()
 	_, body := get(t, h, "/p/"+root)
-	if strings.Contains(body, `class="window summary"`) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="main">`) {
-		t.Error("a thread without a summary carries the window, or no desk")
+	if strings.Contains(body, `class="window summary"`) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="side"></div>`+"\n"+`<div class="main">`) {
+		t.Error("a thread without a summary carries the window, or no desk with its empty side")
 	}
 	if err := s.St.SetLang(root, "en", "m", true); err != nil {
 		t.Fatal(err)
@@ -1789,13 +1789,13 @@ func TestWebSummaryWindow(t *testing.T) {
 	if strings.Contains(win, "trl") || strings.Contains(win, "[#") {
 		t.Errorf("a translation line without a translation, or a cite left as typed:\n%s", win)
 	}
-	// the window stands after the column, outside the live frame, and the
-	// frame is what it was
+	// the window stands in the side before the column, outside the live
+	// frame, and the frame is what it was
 	if j := strings.Index(body, `</div>`+"\n"+`{{`); j >= 0 {
 		t.Error("template text leaked")
 	}
-	if !(strings.Index(body, `data-live="thread"`) < i) || !strings.Contains(body, `<div class="statusbar"><span>12 replies</span></div>`+"\n  </div>\n</div>\n</div>\n<div class=\"window summary\"") {
-		t.Error("the window is not after the thread's column")
+	if !(i < strings.Index(body, `data-live="thread"`)) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="side"><div class="window summary" lang="en">`) {
+		t.Error("the window is not in the side before the thread's column")
 	}
 	// a newer step replaces it; the older one is not drawn
 	s.St.SetSummary(root, 20, "en", "**Twenty in.**\n- Still open [#1]", "glm-5.3:cloud", 20, map[int]string{1: ids[0]}, true)

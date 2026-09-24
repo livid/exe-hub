@@ -2424,12 +2424,21 @@ at a reply on its page.
   root's delete takes them all.
 - **On the bus**: `post.summary` with the root as its id and `root`, so
   a live thread page (which matches by root) brings it in.
-- **The window (turn 3).** A thread page is a desk now, like the home
-  page: the Reply strip and the thread in the column, and from 1060px
-  the Summary window at the column's right, 360px, sticky 24px under
-  the top the way the join window is at the home page's left, the pair
-  centred as the home page's is. Narrower than that nothing shows: the
-  phone design is Livid's, later. Inside, under a Platinum title bar
+- **The window (turn 3; moved to the left the same day).** A thread
+  page is a desk now, like the home page: the Reply strip and the
+  thread in the column, and from 1060px a side at the column's left,
+  the 360px the join window takes on the home page, sticky 24px under
+  the top the same way, holding the Summary window when the thread has
+  one. The first cut put the window at the column's right, and Livid:
+  "When I click a post from home, the current design is a huge layout
+  change — the whole Post view moves from right to left." So the side
+  is at the left, and it is there on every thread page, empty when the
+  thread has no summary, so the column stands exactly where the feed's
+  does whichever page the reader is on and whatever the thread has (the
+  no-jumps rule); installed as an app, where the join window is gone
+  and the feed centred, an empty side goes too (`:empty`). Narrower
+  than 1060px nothing shows: the phone design is Livid's, later.
+  Inside, under a Platinum title bar
   reading Summary (摘要, 要約), the newest step's summary through the
   page's own renderer, so the bold line and the bullets are the post
   renderer's, each [#n] rewritten after rendering as an 11px grey link
@@ -2451,8 +2460,9 @@ at a reply on its page.
   `TestWebSummaryWindow`, and
   `~/tools/playwright/exe-hub-summary-window-test.js` against a scratch
   hub (rows written into its table; the window's place, width and
-  stickiness, the cites landing tinted, the live replacement, nothing
-  at 1000px or on a phone; DPR 1, 1.5, 2).
+  stickiness, the column at the feed's place with a summary and
+  without, the cites landing tinted, the live replacement, nothing at
+  1000px or on a phone; DPR 1, 1.5, 2).
 - **In the reader's language (turn 4).** A thread's newest summary
   written from the thread is owed each of `lang.Targets` it is not in
   (`SummariesToTranslate`), and the translator puts it there before

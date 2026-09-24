@@ -73,13 +73,22 @@ a.mention { text-decoration: none; }
   .desk .join { display: none; }
 }
 /* a thread page is a desk too (PLAN.md, Thread summaries): the Reply
-   strip and the thread in the column, and the Summary window at the
-   column's right once there is room, sticky like the join window at the
-   home page's left. Narrower than that the window waits for the phone
-   design: nothing shows. */
-.desk .summary { display: none; }
+   strip and the thread in the column, and at the column's left, once
+   there is room, the side the join window takes on the home page —
+   the same 360px, sticky the same — holding the Summary window when
+   the thread has one and standing empty when not, so the column is
+   where the feed's is whichever page the reader is on and whatever the
+   thread has (Livid, 2026-09-24: a thread opened from the feed moved
+   the whole view). Narrower than that the side waits for the phone
+   design: nothing shows. Installed as an app the join window is gone
+   and the feed centred, so an empty side goes too. */
+.desk .side { display: none; }
 @media (min-width: 1060px) {
-  .desk .summary { display: block; flex: 0 0 360px; position: sticky; top: 24px; margin: 0; }
+  .desk .side { display: block; flex: 0 0 360px; position: sticky; top: 24px; }
+  .desk .side .window { margin: 0; }
+}
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .desk .side:empty { display: none; }
 }
 .summary .sum { padding: 12px 14px; }
 .summary .text { margin-top: 0; }
@@ -639,6 +648,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{else if eq .Page "thread"}}
 <div class="desk thread">
+<div class="side">{{with .Summary}}{{template "summary" .}}{{end}}</div>
 <div class="main">
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
@@ -653,7 +663,6 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   </div>
 </div>
 </div>
-{{with .Summary}}{{template "summary" .}}{{end}}
 </div>
 {{else if eq .Page "search"}}
 <div class="window">
@@ -730,7 +739,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     // stands, like a post
     const side = doc.querySelector(".window.summary"), cur = document.querySelector(".window.summary"), html2 = side ? side.outerHTML : "";
     if (html2 !== sideServed) {
-      if (side && cur) cur.replaceWith(side); else if (side) feed.closest(".desk").appendChild(side); else if (cur) cur.remove();
+      if (side && cur) cur.replaceWith(side); else if (side) feed.closest(".desk").querySelector(".side").appendChild(side); else if (cur) cur.remove();
       if (side) localTimes(side);
       sideServed = html2;
     }
