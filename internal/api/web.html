@@ -89,6 +89,31 @@ a.mention { text-decoration: none; }
   .desk .side:empty { display: none; }
   .desk .side .window { margin: 0; }
 }
+/* narrower than that, the Summary is a press away (Livid's phone
+   design, 2026-09-24): a sparkle in a 20px bevel button between Feed
+   and the language menu on the thread's top strip, there only when the
+   thread has a summary, drawn like the bell — the glyph 14px pixel art
+   in the same yellow, darkened while pressed. It opens the side over
+   the page as a sheet: the Summary window centred in it, 16px from
+   either edge and clear of the phone's safe areas, scrolling on its
+   own when long; the window's close box, a tap beside it or Escape
+   puts it away. From 1060px the side stands beside the thread and the
+   button goes. */
+.pager .spark { grid-column: 2; justify-self: center; display: none; width: 20px; min-width: 0; padding: 0; align-items: center; justify-content: center; }
+.pager .spark svg { width: 14px; height: 14px; display: block; shape-rendering: crispEdges; }
+.pager .spark .k { fill: #262626; } .pager .spark .f { fill: #ffcc33; } .pager .spark .s { fill: #cc9933; } .pager .spark .w { fill: #fff; }
+.pager .spark[aria-pressed=true] { background: #666;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.pager .spark[aria-pressed=true] .f { fill: #997a1f; } .pager .spark[aria-pressed=true] .s { fill: #66511a; } .pager .spark[aria-pressed=true] .w { fill: #ccaa44; }
+.pager .spark:focus { outline: none; }
+.pager .spark:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+.summary .tbox.close { cursor: default; }
+@media (max-width: 1059px) {
+  .pager .spark { display: inline-flex; }
+  .desk .side.open { display: block; position: fixed; inset: 0; z-index: 100; overflow: auto; -webkit-overflow-scrolling: touch;
+    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .desk .side.open .window { margin: 0 auto; }
+}
 .summary .sum { padding: 12px 14px; }
 .summary .text { margin-top: 0; }
 .summary .meta { margin-top: 8px; white-space: normal; }
@@ -647,13 +672,13 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 {{else if eq .Page "thread"}}
 <div class="desk thread">
-<div class="side">{{with .Summary}}{{template "summary" .}}{{end}}</div>
+<div class="side" id="side">{{with .Summary}}{{template "summary" .}}{{end}}</div>
 <div class="main">
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
   <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread" data-root="{{.Root}}"{{end}}>
-    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{template "lang" .}}</div>
+    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{if .Summary}}<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="{{T "summary"}}" aria-label="{{T "summary"}}">{{template "spark"}}</button>{{end}}{{template "lang" .}}</div>
     {{template "post" .Post}}
     {{if .Pages}}<div class="pager rp">{{template "tpager" .}}</div>{{end}}
     {{range .Replies}}{{template "post" .}}{{end}}
@@ -897,6 +922,23 @@ document.addEventListener("click", e => {
   for (const t of line.parentNode.querySelectorAll(":scope > .text")) t.hidden = !t.hidden;
   line.firstElementChild.hidden = !line.firstElementChild.hidden;
   [a.textContent, a.dataset.other] = [a.dataset.other, a.textContent];
+});
+// The sparkle on a thread's strip (PLAN.md, Thread summaries — the
+// phone): it opens the side over the page with the Summary window in
+// it and presses in; the window's close box, a tap on the sheet beside
+// the window, or Escape puts it away. One listener on the document, so
+// a strip or a window the live page brings in needs nothing.
+document.addEventListener("click", e => {
+  if (!(e.target instanceof Element)) return;
+  const side = document.getElementById("side"), spark = document.getElementById("spark");
+  if (!side) return;
+  const set = open => { side.classList.toggle("open", open); if (spark) spark.setAttribute("aria-pressed", String(open)); };
+  if (e.target.closest("#spark")) { set(!side.classList.contains("open")); return; }
+  if (side.classList.contains("open") && (e.target === side || e.target.closest(".summary .tbox.close"))) { e.preventDefault(); set(false); }
+});
+document.addEventListener("keydown", e => {
+  const side = document.getElementById("side");
+  if (e.key === "Escape" && side && side.classList.contains("open")) { side.classList.remove("open"); const s = document.getElementById("spark"); if (s) s.setAttribute("aria-pressed", "false"); }
 });
 // The Copy button beside a fenced code block (web.go writeFence): the
 // pre's text — the code exactly as typed, which the browser gives back
@@ -1941,7 +1983,7 @@ document.addEventListener("change", e => {
      translation of it with the same line and control a post has, and
      the meta line: what it read, which model, when */}}
 {{define "summary"}}<div class="window summary" lang="{{.Lang}}">
-  <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{T "summary"}}</span><span class="stripe"></span></div>
+  <div class="titlebar"><span class="tbox close" title="{{T "close"}}"></span><span class="stripe"></span><span class="title">{{T "summary"}}</span><span class="stripe"></span></div>
   <div class="frame"><div class="pad sum">
     {{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text" lang="{{.Lang}}"{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>
     {{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.Root}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}
@@ -2002,6 +2044,8 @@ document.addEventListener("change", e => {
      diagonals — an even size, so it centres on whole pixels in the
      button's 18px face */}}
 {{define "cross"}}<svg class="x" viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path class="k" d="M0 0h1v1h-1zM7 0h1v1h-1zM1 1h1v1h-1zM6 1h1v1h-1zM2 2h1v1h-1zM5 2h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM3 4h1v1h-1zM4 4h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM1 6h1v1h-1zM6 6h1v1h-1zM0 7h1v1h-1zM7 7h1v1h-1z"/></svg>{{end}}
+
+{{define "spark"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M11 0h1v1h-1zM10 1h1v1h-1zM12 1h1v1h-1zM9 2h1v1h-1zM13 2h1v1h-1zM5 3h1v1h-1zM10 3h1v1h-1zM12 3h1v1h-1zM5 4h1v1h-1zM11 4h1v1h-1zM4 5h1v1h-1zM6 5h1v1h-1zM4 6h1v1h-1zM6 6h1v1h-1zM2 7h2v1h-2zM7 7h2v1h-2zM0 8h2v1h-2zM9 8h2v1h-2zM2 9h2v1h-2zM7 9h2v1h-2zM4 10h1v1h-1zM6 10h1v1h-1zM4 11h1v1h-1zM6 11h1v1h-1zM5 12h1v1h-1zM5 13h1v1h-1z"/><path class="f" d="M11 1h1v1h-1zM11 2h1v1h-1zM11 3h1v1h-1zM5 7h2v1h-2zM2 8h4v1h-4z"/><path class="s" d="M12 2h1v1h-1zM6 8h3v1h-3zM4 9h3v1h-3zM5 10h1v1h-1zM5 11h1v1h-1z"/><path class="w" d="M10 2h1v1h-1zM5 5h1v1h-1zM5 6h1v1h-1zM4 7h1v1h-1z"/></svg>{{end}}
 
 {{define "bell"}}<svg viewBox="0 0 14 14" aria-hidden="true"><path class="k" d="M6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM4 2h1v1h-1zM9 2h1v1h-1zM3 3h1v1h-1zM10 3h1v1h-1zM3 4h1v1h-1zM10 4h1v1h-1zM3 5h1v1h-1zM10 5h1v1h-1zM3 6h1v1h-1zM10 6h1v1h-1zM2 7h1v1h-1zM11 7h1v1h-1zM1 8h1v1h-1zM12 8h1v1h-1zM0 9h1v1h-1zM13 9h1v1h-1zM0 10h14v1h-14zM5 11h4v1h-4zM6 12h2v1h-2z"/><path class="s" d="M7 1h1v1h-1zM8 2h1v1h-1zM9 3h1v1h-1zM9 4h1v1h-1zM9 5h1v1h-1zM9 6h1v1h-1zM10 7h1v1h-1zM10 8h2v1h-2zM1 9h12v1h-12z"/><path class="f" d="M6 1h1v1h-1zM6 2h2v1h-2zM5 3h4v1h-4zM5 4h4v1h-4zM5 5h4v1h-4zM4 6h5v1h-5zM3 7h7v1h-7zM2 8h8v1h-8z"/><path class="w" d="M5 2h1v1h-1zM4 3h1v1h-1zM4 4h1v1h-1zM4 5h1v1h-1z"/></svg>{{end}}
 

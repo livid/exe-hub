@@ -2521,4 +2521,23 @@ at a reply on its page.
   the reply's id) and `ts`; a reply, or a thread short of ten, has
   none. The exe desktop's Hub app draws it behind a Summary button on
   the thread's head row. `TestPostSummaryJSON`.
-- **Left**: the mobile design (the window shows nothing under 1060px).
+- **The phone (Livid, 2026-09-24: "show the yellow sparkle button
+  between Feed and Lang if the Post has summary").** Narrower than
+  1060px the side is hidden, and a thread with a summary carries a
+  sparkle on its top strip, midway between Feed and the language menu:
+  a 20px bevel button like the bell, its glyph 14px pixel art in the
+  bell's yellow (a big four-point star and a small one, black outline,
+  a shade and a white highlight), darkened while pressed, there only
+  when the thread has a summary and gone from 1060px, where the side
+  stands beside the thread. A press opens the side over the page as a
+  sheet (`.side.open`: fixed, over everything, scrolling on its own),
+  the Summary window centred in it 16px from either edge and 24px
+  down, clear of a phone's safe areas; the window's box is a close box
+  now (inert on the desktop, where nothing is open), and a tap on the
+  sheet beside the window or Escape puts it away too, the button
+  lifting with it. One listener on the document, so a strip or a
+  window the live page brings in needs nothing. The browser check
+  (`exe-hub-summary-window-test.js`) presses it at 1000px and on a
+  375px phone: the sheet's place, the three ways out, nothing scrolling
+  sideways; the strip at DPR 1, 1.5 and 2, the phone at 3.
+- **Left**: the JSON API says nothing of summaries yet.

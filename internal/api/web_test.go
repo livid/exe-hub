@@ -1813,8 +1813,8 @@ func TestWebSummaryWindow(t *testing.T) {
 	}
 	h := s.Handler()
 	_, body := get(t, h, "/p/"+root)
-	if strings.Contains(body, `class="window summary"`) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="side"></div>`+"\n"+`<div class="main">`) {
-		t.Error("a thread without a summary carries the window, or no desk with its empty side")
+	if strings.Contains(body, `class="window summary"`) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="side" id="side"></div>`+"\n"+`<div class="main">`) || strings.Contains(body, `class="btn spark"`) {
+		t.Error("a thread without a summary carries the window or the sparkle, or no desk with its empty side")
 	}
 	if err := s.St.SetLang(root, "en", "m", true); err != nil {
 		t.Fatal(err)
@@ -1847,8 +1847,17 @@ func TestWebSummaryWindow(t *testing.T) {
 	if j := strings.Index(body, `</div>`+"\n"+`{{`); j >= 0 {
 		t.Error("template text leaked")
 	}
-	if !(i < strings.Index(body, `data-live="thread"`)) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="side"><div class="window summary" lang="en">`) {
+	if !(i < strings.Index(body, `data-live="thread"`)) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="side" id="side"><div class="window summary" lang="en">`) {
 		t.Error("the window is not in the side before the thread's column")
+	}
+	// the phone's way in: the sparkle between Feed and the language menu,
+	// there only with a summary; the window's box is a close box
+	strip := topStrip(body)
+	if f, sp, l := strings.Index(strip, `<span>Feed</span>`), strings.Index(strip, `<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="Summary" aria-label="Summary"><svg viewBox="0 0 14 14"`), strings.Index(strip, `id="lang"`); !(0 < f && f < sp && sp < l) {
+		t.Errorf("the sparkle is not between Feed and the language menu: %q", strip)
+	}
+	if !strings.Contains(win, `<span class="tbox close" title="Close"></span>`) {
+		t.Error("the Summary window's box is not a close box")
 	}
 	// a newer step replaces it; the older one is not drawn
 	s.St.SetSummary(root, 20, "en", "**Twenty in.**\n- Still open [#1]", "glm-5.3:cloud", 20, map[int]string{1: ids[0]}, true)
