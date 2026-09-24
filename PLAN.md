@@ -2515,5 +2515,10 @@ at a reply on its page.
   `post.summary`. Livid's pair as before: the host summarises and
   translates, the public hub takes both. `TestPullSummaries`,
   `TestTranslatorSummaries`.
-- **Left**: the mobile design (the window shows nothing under 1060px),
-  and the JSON API says nothing of summaries yet.
+- **JSON API** (2026-09-24): `GET /v1/post/{id}` carries `summary` when
+  the thread has one — the newest step's original (`LatestSummary`):
+  `step`, `lang`, `text` as written, `model`, `replies`, `cites` (n to
+  the reply's id) and `ts`; a reply, or a thread short of ten, has
+  none. The exe desktop's Hub app draws it behind a Summary button on
+  the thread's head row. `TestPostSummaryJSON`.
+- **Left**: the mobile design (the window shows nothing under 1060px).

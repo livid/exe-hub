@@ -1748,6 +1748,59 @@ func TestWebThreadPaging(t *testing.T) {
 // line naming what it read, the model and when, in the page's language;
 // a thread without one, and a reply's own page, carry none; the live
 // frame stays as it was inside the desk (see PLAN.md, Thread summaries).
+// TestPostSummaryJSON: GET /v1/post/{id} carries the thread's summary —
+// the newest step's original with its cites as ids — once it has one,
+// and nothing before, nor on a reply.
+func TestPostSummaryJSON(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	root := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "the long thread"})
+	var ids []string
+	for i := int64(0); i < 12; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, 2+i, "post.create", map[string]any{"text": fmt.Sprintf("reply %d", i+1), "reply_to": root}))
+	}
+	h := s.Handler()
+	type reply struct {
+		Summary *postSummary `json:"summary"`
+	}
+	read := func(id string) *postSummary {
+		code, body := get(t, h, "/v1/post/"+id)
+		if code != 200 {
+			t.Fatalf("GET /v1/post/%s: %d %s", id, code, body)
+		}
+		var out reply
+		if err := json.Unmarshal([]byte(body), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.Summary
+	}
+	if read(root) != nil {
+		t.Error("a thread with no summary carries one")
+	}
+	if err := s.St.SetLang(root, "en", "m", true); err != nil {
+		t.Fatal(err)
+	}
+	for step, text := range map[int]string{10: "**Ten in.**\n\n- One [#3]", 20: "**Twenty in.**\n\n- One [#3]\n- Two [#12]"} {
+		if _, err := s.St.SetSummary(root, step, "en", text, "glm-5.3:cloud", step, map[int]string{3: ids[2], 12: ids[11]}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.St.SetSummaryTranslation(root, 20, "zh-Hans", "en", "**二十条。**\n\n- 一 [#3]\n- 二 [#12]", "m", 20, map[int]string{3: ids[2], 12: ids[11]}, true); err != nil {
+		t.Fatal(err)
+	}
+	sum := read(root)
+	if sum == nil {
+		t.Fatal("no summary on the thread")
+	}
+	if sum.Step != 20 || sum.Lang != "en" || sum.Text != "**Twenty in.**\n\n- One [#3]\n- Two [#12]" || sum.Model != "glm-5.3:cloud" || sum.Replies != 20 || sum.TS == 0 ||
+		len(sum.Cites) != 2 || sum.Cites[3] != ids[2] || sum.Cites[12] != ids[11] {
+		t.Errorf("the summary: %+v", sum)
+	}
+	if read(ids[2]) != nil {
+		t.Error("a reply carries a summary")
+	}
+}
+
 func TestWebSummaryWindow(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	s.Events = events.New()

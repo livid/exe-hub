@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"exehub/internal/avatar"
-	"exehub/internal/config"
 	"exehub/internal/card"
+	"exehub/internal/config"
 	"exehub/internal/envelope"
 	"exehub/internal/events"
 	"exehub/internal/gate"
@@ -787,7 +787,32 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"post": p, "replies": replies, "thread": thread})
+	out := map[string]any{"post": p, "replies": replies, "thread": thread}
+	// the thread's summary, when it has one (PLAN.md, Thread summaries):
+	// the newest step's, as written from the thread, its [#n] cites
+	// mapped to the replies they point at; a reply has none
+	if sum, err := s.St.LatestSummary(p.ID); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	} else if sum != nil {
+		out["summary"] = postSummary{Step: sum.Step, Lang: sum.Lang, Text: sum.Text, Model: sum.Model,
+			Replies: sum.Replies, Cites: sum.Cites, TS: sum.TS}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// postSummary is a thread's summary in GET /v1/post/{id}: the step of
+// the ladder it was written at (how many replies it read), the language
+// it is in, the words as the model wrote them — a bold first line and
+// bullets, [#n] where it cites a reply — and cites, n to that reply's id.
+type postSummary struct {
+	Step    int            `json:"step"`
+	Lang    string         `json:"lang"`
+	Text    string         `json:"text"`
+	Model   string         `json:"model"`
+	Replies int            `json:"replies"`
+	Cites   map[int]string `json:"cites,omitempty"`
+	TS      int64          `json:"ts"`
 }
 
 // handleEmbed proxies pinned content out of IPFS. Only CIDs in the pins

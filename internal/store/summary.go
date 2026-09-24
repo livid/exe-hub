@@ -157,6 +157,29 @@ func (s *Store) Summaries(post string) ([]Summary, error) {
 	return out, rows.Err()
 }
 
+// LatestSummary is the summary a thread shows: the one written from the
+// thread at its highest step, nil when it has none. A translation only
+// ever stands beside an original, so the highest step always has one.
+func (s *Store) LatestSummary(post string) (*Summary, error) {
+	var m Summary
+	var cites string
+	err := s.db.QueryRow(`SELECT post, step, lang, src, text, model, replies, cites, ts FROM summaries
+		WHERE post = ? AND status = 'ok' AND src = '' ORDER BY step DESC LIMIT 1`, post).
+		Scan(&m.Post, &m.Step, &m.Lang, &m.Src, &m.Text, &m.Model, &m.Replies, &cites, &m.TS)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if cites != "" {
+		if err := json.Unmarshal([]byte(cites), &m.Cites); err != nil {
+			return nil, err
+		}
+	}
+	return &m, nil
+}
+
 // DropSummaries forgets a thread's summaries at a step, the newest step
 // for 0 — every language, tries and all — so the summariser owes it
 // again (exe-hub -resummarize). It returns how many rows went.
