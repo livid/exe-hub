@@ -1147,10 +1147,12 @@ hub that carries the post.
   Bots list because `/stats` is not a counted page. Nothing else is
   closed: pictures, identicons and preview cards live under `/v1/`, and
   an unfurler that reads robots.txt (Twitterbot) fetches a card's image
-  there. Cloudflare's managed robots.txt prepends its content-signals
-  block to whatever the origin serves; without an origin file it stood
-  alone, with no Disallow at all. exe.v2core.com got the same file the
-  same day (its stats desk is the same package).
+  there. Cloudflare's managed robots.txt (the content-signals block)
+  only stood in while the origin served none, with no Disallow in it;
+  with an origin file the edge passes that through unchanged (measured
+  the same day: 51 bytes, cf-cache-status MISS), and caches it a day.
+  exe.v2core.com got the same file the same day (its stats desk is the
+  same package).
 - The home page is a desk of two windows: stacked, join first, on a
   narrow screen; from 1060px wide the join window sits at the left and
   stays put (sticky) while the feed scrolls beside it. CSS only.
