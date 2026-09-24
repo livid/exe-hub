@@ -630,8 +630,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"{{if .Live}} data-live="thread"{{end}}>
     <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{template "lang" .}}</div>
     {{template "post" .Post}}
+    {{if .Pages}}<div class="pager rp">{{template "tpager" .}}</div>{{end}}
     {{range .Replies}}{{template "post" .}}{{end}}
-    <div class="statusbar"><span>{{T "replies" "n" (len .Replies)}}</span></div>
+    {{if .Pages}}<div class="pager rp end">{{template "tpager" .}}</div>{{end}}
+    <div class="statusbar"><span>{{T "replies" "n" .Count}}</span></div>
   </div>
 </div>
 {{else if eq .Page "search"}}
@@ -719,9 +721,13 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     // the new posts' times, and a kept post whose day ended since
     localTimes(feed);
     if (pin) scrollBy({ top: pin.getBoundingClientRect().top - at, behavior: "instant" });
-    // the reader's own reply: land on it, tinted, as its link would
+    // the reader's own reply: land on it, tinted, as its link would — on
+    // this page, or on the page ?at= finds it on (a thread past one page)
     if (land && document.getElementById(land)) { location.replace("#" + land); land = ""; }
+    else if (land) { location.href = atHref(land); land = ""; }
   };
+  // the thread's address for landing on a reply: its page found by the server, the language kept
+  const atHref = id => { const q = new URLSearchParams(location.search); q.delete("page"); q.set("at", id); return location.pathname + "?" + q + "#" + id; };
   let timer, busy = false, wanted = false, wait = 0;
   const refresh = () => {
     if (busy || document.hidden) { wanted = true; return; }
@@ -732,7 +738,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
         return r.ok ? r.text() : Promise.reject(r.status);
       }).then(html => { swap(html); wait = 0; })
       .catch(() => {
-        if (land) { history.replaceState(null, "", "#" + land); location.reload(); } // the reply was sent: show it the plain way
+        if (land) { location.href = atHref(land); } // the reply was sent: show it the plain way, on its page
         // the page is behind and knows it: ask again, later each time. A fetch
         // stays owed for as long as that is so, which the filter below leans on
         else poke(wait = Math.min((wait || 1000) * 2, 60000));
@@ -1698,7 +1704,11 @@ document.addEventListener("change", e => {
       if (target && target.id === to) { target = null; showTarget(); }
       if (verdict.cooldown) until = Date.now() + verdict.cooldown * 1000;
       // a live page brings it in (a reply is landed on); a static one loads again, a thread at the new reply
-      if (!window.hubRefresh) { if (replyTo) history.replaceState(null, "", "#" + id); location.reload(); return; }
+      if (!window.hubRefresh) {
+        if (!replyTo) { location.reload(); return; }
+        const q = new URLSearchParams(location.search); q.delete("page"); q.set("at", id); // the reply's page, found by the server
+        location.href = location.pathname + "?" + q + "#" + id; return;
+      }
       flash = "";
       done(T(replyTo ? "replied" : "posted"));
       window.hubRefresh(replyTo ? id : "");
@@ -1881,6 +1891,11 @@ document.addEventListener("change", e => {
      follow .Page, the query or profile id carried in the links. */}}
 {{define "pager"}}{{if .Prev}}<a class="btn prev back" href="{{template "cursors" .}}after={{.Prev}}">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next fwd" href="{{template "cursors" .}}before={{.Next}}"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 
+{{/* a thread past one page (PLAN.md, Public pages — Thread paging): the
+     feed's strip, Prev and Next by page number, the replies this page
+     holds between them */}}
+{{define "tpager"}}{{if .PrevHref}}<a class="btn prev back" href="{{.PrevHref}}">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{T "replies.range" "a" .From "b" .To "n" .Count}}</span>{{if .NextHref}}<a class="btn next fwd" href="{{.NextHref}}"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
+
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
 {{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
@@ -1936,13 +1951,13 @@ document.addEventListener("change", e => {
   {{with .Quote}}<a class="quote" href="/p/{{.ID}}{{$.Q}}"><b>{{.Name}}</b>{{if .Text}} {{.Text}}{{end}}</a>{{end}}
   <a class="av" href="/u/{{.Author}}{{.Q}}">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Author}}.svg" alt="">{{end}}</a>
   <div>
-    <div class="meta"><a href="/u/{{.Author}}{{.Q}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}{{.Q}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="#{{.ReplyTo}}">{{T "inreply.name" "name" .ParentName}}</a>{{end}}{{else}}{{if not (or .Quote .QuoteRun)}} · <a href="/p/{{.ReplyTo}}{{.Q}}">{{T "inreply"}}</a>{{end}}{{end}}{{end}}</div>
+    <div class="meta"><a href="/u/{{.Author}}{{.Q}}"><b>{{if .AuthorName}}{{.AuthorName}}{{else}}{{.Author}}{{end}}</b></a> <span class="mono">{{.Author}}</span> · <a href="/p/{{.ID}}{{.Q}}"><time datetime="{{.Stamp}}">{{.When}}</time></a>{{if .ReplyTo}}{{if .InThread}}{{if gt .Depth 1}} · <a href="{{.ParentHref}}">{{T "inreply.name" "name" .ParentName}}</a>{{end}}{{else}}{{if not (or .Quote .QuoteRun)}} · <a href="/p/{{.ReplyTo}}{{.Q}}">{{T "inreply"}}</a>{{end}}{{end}}{{end}}</div>
     {{if .Text}}{{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text"{{if .Lang}} lang="{{.Lang}}"{{end}}{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>{{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.ID}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}{{end}}
     {{if .Card}}<div class="card"><a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if .Card.Image}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">{{T "archived"}}{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
     {{with .PostCard}}<div class="card qcard"><a class="cm" href="/p/{{.ID}}{{$.Q}}">{{if .Image}}<span class="ci"><img src="/v1/embed/{{.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="qh"><span class="qav">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Author}}.svg" alt="">{{end}}</span><b>{{.Name}}</b><span class="mono">{{.Author}}</span><span class="qw">· <time datetime="{{.Stamp}}">{{.When}}</time></span></span>{{if .Text}}<span class="qt">{{.Text}}</span>{{end}}</span></a></div>{{end}}
     {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "picture"}}{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}{{T "sound"}}{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "page"}}{{end}}">{{if .Filename}}{{.Filename}}{{else}}{{T "page"}}{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>{{T "download"}}</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
     {{if .InThread}}<div class="foot re"><a class="rlink" role="button" href="/p/{{.ID}}{{.Q}}">{{T "reply"}}</a></div>{{end}}
-    {{if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}{{.Q}}">{{T "replies" "n" .Replies}} ▸</a>{{with .Latest}}<a class="latest" href="/p/{{$.ID}}{{$.Q}}#{{.ID}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}</div>{{end}}
+    {{if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}{{.Q}}">{{T "replies" "n" .Replies}} ▸</a>{{with .Latest}}<a class="latest" href="{{.Href}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}</div>{{end}}
   </div>
 </div>
 {{end}}

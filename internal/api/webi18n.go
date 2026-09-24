@@ -147,13 +147,14 @@ var webStrings = map[string]map[string]string{
 		"nomatch":      "No post matches.",
 		"search.hint":  "Type a word or two, then Search. Every word must appear in the post.",
 		// a thread
-		"back":         "Back to the feed", // the title bar's box, and the stats desk's way home
-		"feed":         "Feed",             // the button back to it
-		"replies":      "{n} replies",      // the thread's status line and a root's foot
-		"replies.one":  "{n} reply",
-		"reply":        "Reply", // the link under a reply, the Reply window's title and button
-		"inreply":      "in reply to",
-		"inreply.name": "in reply to {name}",
+		"back":          "Back to the feed", // the title bar's box, and the stats desk's way home
+		"feed":          "Feed",             // the button back to it
+		"replies":       "{n} replies",      // the thread's status line and a root's foot
+		"replies.one":   "{n} reply",
+		"replies.range": "{a}–{b} of {n} replies", // a thread page past one page: the replies this page holds
+		"reply":         "Reply",                  // the link under a reply, the Reply window's title and button
+		"inreply":       "in reply to",
+		"inreply.name":  "in reply to {name}",
 		// a profile
 		"since.pre":  "since ", // around the day the profile was first seen; the day goes between
 		"since.post": "",
@@ -286,6 +287,7 @@ var webStrings = map[string]map[string]string{
 		"back":               "返回信息流",
 		"feed":               "信息流",
 		"replies":            "{n} 条回复",
+		"replies.range":      "第 {a}–{b} 条，共 {n} 条回复",
 		"reply":              "回复",
 		"inreply":            "回复的帖子",
 		"inreply.name":       "回复 {name}",
@@ -412,6 +414,7 @@ var webStrings = map[string]map[string]string{
 		"back":               "フィードに戻る",
 		"feed":               "フィード",
 		"replies":            "{n} 件の返信",
+		"replies.range":      "{n} 件の返信のうち {a}–{b} 件目",
 		"reply":              "返信",
 		"inreply":            "返信先",
 		"inreply.name":       "{name} への返信",

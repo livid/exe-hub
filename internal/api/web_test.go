@@ -1608,3 +1608,127 @@ func TestWebPostCard(t *testing.T) {
 		t.Errorf("JSON read lacks the quote or keeps a card:\n%s", js)
 	}
 }
+
+// TestWebThreadPaging: a thread past webThreadPage replies is cut into
+// pages in thread order, the post heading every one, the feed's strip
+// between the post and the replies and again under them, the status
+// line keeping the whole count; ?at= sends a reader to a reply's page
+// and lands on it, ?page= past the end is the last page, a link to a
+// reply on another page goes through ?at=, and ?lang= rides every one
+// of them (see PLAN.md, Public pages — Thread paging).
+func TestWebThreadPaging(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
+	root := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "root post"})
+	var ids []string // thread order: every reply direct, oldest first
+	for i := int64(0); i < 2*webThreadPage+50; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, 3+i, "post.create", map[string]any{"text": fmt.Sprintf("reply %d", i+1), "reply_to": root}))
+	}
+	// a reply to the first reply lands right under it, in the middle of
+	// the order, and every later reply moves one down
+	nested := ingest(t, s, priv, pub, 1000, "post.create", map[string]any{"text": "nested under the first", "reply_to": ids[0]})
+	h := s.Handler()
+	redirect := func(path string) (int, string, string) {
+		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Code, w.Header().Get("Location"), w.Header().Get("Cache-Control")
+	}
+	count := func(body string) int { return strings.Count(body, `class="post reply`) }
+
+	code, body := get(t, h, "/p/"+root)
+	if code != 200 || count(body) != webThreadPage || !strings.Contains(body, "root post") || !strings.Contains(body, "reply 1<") || !strings.Contains(body, "nested under the first") || strings.Contains(body, "reply 100<") {
+		t.Errorf("first page: %d, %d replies\n%.600s", code, count(body), body)
+	}
+	strip := func(body, class string) string { return strip(body, `<div class="`+class+`">`) }
+	top, end := strip(body, "pager rp"), strip(body, "pager rp end")
+	if want := `<div class="pager rp"><span class="stats">1–100 of 251 replies</span><a class="btn next fwd" href="/p/` + root + `?page=2"><span>Next</span><svg`; !strings.HasPrefix(top, want) || strings.Contains(top, "Prev") {
+		t.Errorf("first page's strip: %q", top)
+	}
+	if strings.TrimPrefix(end, `<div class="pager rp end">`) != strings.TrimPrefix(top, `<div class="pager rp">`) {
+		t.Errorf("the strip under the replies differs: %q", end)
+	}
+	if i, j, k := strings.Index(body, `class="post"`), strings.Index(body, `class="pager rp"`), strings.Index(body, `class="post reply`); !(i < j && j < k) {
+		t.Error("the strip is not between the post and its replies")
+	}
+	if !strings.Contains(body, `<div class="statusbar"><span>251 replies</span></div>`) {
+		t.Error("the status line is not the whole count")
+	}
+	// the last page: Prev alone, the rest of the replies
+	code, body = get(t, h, "/p/"+root+"?page=3")
+	if code != 200 || count(body) != 51 || !strings.Contains(body, "reply 250<") || strings.Contains(body, "reply 199<") || !strings.Contains(body, "root post") {
+		t.Errorf("last page: %d, %d replies", code, count(body))
+	}
+	if top := strip(body, "pager rp"); !strings.HasPrefix(top, `<div class="pager rp"><a class="btn prev back" href="/p/`+root+`?page=2">`) || !strings.Contains(top, `<span class="stats">201–251 of 251 replies</span></div>`) || strings.Contains(top, "Next") {
+		t.Errorf("last page's strip: %q", top)
+	}
+	// the second page's Prev is the thread's one address
+	_, body = get(t, h, "/p/"+root+"?page=2")
+	if !strings.Contains(body, `<a class="btn prev back" href="/p/`+root+`">`) || count(body) != webThreadPage || !strings.Contains(body, "reply 100<") {
+		t.Errorf("second page: %d replies, %q", count(body), strip(body, "pager rp"))
+	}
+	// past the end is the last page, nonsense the first
+	for _, q := range []string{"?page=9", "?page=-1", "?page=x", "?page=0"} {
+		_, body = get(t, h, "/p/"+root+q)
+		if n := count(body); (q == "?page=9" && n != 51) || (q != "?page=9" && n != webThreadPage) {
+			t.Errorf("%s: %d replies", q, n)
+		}
+	}
+	// ?at= finds the reply's page: the nested one moved reply 200 onto the last page
+	if code, loc, cc := redirect("/p/" + root + "?at=" + ids[199]); code != 302 || loc != "/p/"+root+"?page=3#"+ids[199] || cc != "no-store" {
+		t.Errorf("at a reply on the last page: %d %s %s", code, loc, cc)
+	}
+	if code, loc, _ := redirect("/p/" + root + "?at=" + nested + "&lang=zh"); code != 302 || loc != "/p/"+root+"?lang=zh#"+nested {
+		t.Errorf("at a reply on the first page, in Chinese: %d %s", code, loc)
+	}
+	if code, loc, _ := redirect("/p/" + root + "?lang=ja&at=" + ids[150]); code != 302 || loc != "/p/"+root+"?lang=ja&page=2#"+ids[150] {
+		t.Errorf("at a reply on the second page, in Japanese: %d %s", code, loc)
+	}
+	if code, loc, _ := redirect("/p/" + root + "?at=" + strings.Repeat("0", 64)); code != 302 || loc != "/p/"+root {
+		t.Errorf("at a reply that is gone: %d %s", code, loc)
+	}
+	// the language rides the strip's links and the in-reply link across pages
+	_, body = get(t, h, "/p/"+root+"?page=2&lang=zh")
+	if !strings.Contains(body, `href="/p/`+root+`?lang=zh">`) || !strings.Contains(body, `href="/p/`+root+`?lang=zh&amp;page=3">`) || !strings.Contains(body, `<span class="stats">第 101–200 条，共 251 条回复</span>`) {
+		t.Errorf("Chinese second page: %q", strip(body, "pager rp"))
+	}
+	// a reply answering one on the same page links to it in place; one
+	// whose parent ended the page before goes through ?at=. The order so
+	// far: ids[0], nested, ids[1] … ids[249], so ids[k] is at k+1 and the
+	// first page ends with ids[98]; a reply under it opens the second
+	late := ingest(t, s, priv, pub, 1001, "post.create", map[string]any{"text": "answering reply 250", "reply_to": ids[249]})
+	edge := ingest(t, s, priv, pub, 1002, "post.create", map[string]any{"text": "answering reply 99", "reply_to": ids[98]})
+	_, body = get(t, h, "/p/"+root+"?page=3")
+	if !strings.Contains(body, `<a href="#`+ids[249]+`">in reply to Ann</a>`) || strings.Contains(body, `?at=`+ids[249]) || !strings.Contains(body, `id="`+late+`"`) {
+		t.Error("a reply on the same page as its parent does not link to it in place")
+	}
+	_, body = get(t, h, "/p/"+root+"?page=2&lang=en")
+	if i := strings.Index(body, `class="post reply`); i < 0 || !strings.Contains(body[i:i+800], `id="`+edge+`"`) || !strings.Contains(body, `<a href="/p/`+root+`?at=`+ids[98]+`&amp;lang=en">in reply to Ann</a>`) {
+		t.Errorf("the second page's first reply and its parent link: %q", strip(body, "pager rp"))
+	}
+	_, body = get(t, h, "/p/"+root)
+	if !strings.Contains(body, `<a href="#`+ids[0]+`">in reply to Ann</a>`) || strings.Contains(body, `?at=`+ids[0]) || strings.Contains(body, `id="`+edge+`"`) {
+		t.Error("the first page: the nested reply's parent is on it, or the edge reply is")
+	}
+	// the feed's newest-reply link goes through ?at= on a thread past one
+	// page, and stays a fragment on one that fits
+	_, body = get(t, h, "/?lang=en")
+	if !strings.Contains(body, `<a class="latest" href="/p/`+root+`?at=`) {
+		t.Errorf("the feed's latest link: %q", body[strings.Index(body, `class="latest"`):][:160])
+	}
+	small := ingest(t, s, priv, pub, 1003, "post.create", map[string]any{"text": "a small thread"})
+	one := ingest(t, s, priv, pub, 1004, "post.create", map[string]any{"text": "its one reply", "reply_to": small})
+	_, body = get(t, h, "/")
+	if !strings.Contains(body, `<a class="latest" href="/p/`+small+`#`+one+`">`) {
+		t.Errorf("a small thread's latest link: %q", body[strings.Index(body, `class="latest"`):][:160])
+	}
+	// a thread that fits one page has no strip
+	if _, body = get(t, h, "/p/"+small); strings.Contains(body, `class="pager rp`) || !strings.Contains(body, `<div class="statusbar"><span>1 reply</span></div>`) {
+		t.Error("a one-page thread carries the strip")
+	}
+	// the JSON keeps its own bound
+	if _, body = get(t, h, "/v1/post/"+root); strings.Count(body, `"depth":`) != 253 {
+		t.Errorf("the JSON thread: %d entries", strings.Count(body, `"depth":`))
+	}
+}

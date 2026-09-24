@@ -176,6 +176,7 @@ type webPost struct {
 	// a nested reply links to it in place, by the name it was posted under
 	InThread   bool
 	ParentName string
+	ParentHref string // "#id" on the same page, else the thread's ?at= for it
 	// on a profile page: the post this reply answers, quoted as the head
 	// of its card. A run of replies under one parent shares one head —
 	// the later ones carry QuoteRun and attach to the card above.
@@ -215,6 +216,9 @@ type webLatest struct {
 	ID   string
 	Name string
 	Text string
+	// where the link lands: on the reply in the thread, by fragment when
+	// the thread is one page, else through ?at=, which finds its page
+	Href string
 }
 
 // webQuote is the quoted parent above a reply on a profile page: the
@@ -344,11 +348,16 @@ type webData struct {
 	Compose        *webCompose // the wallet strip: the home page's first page and every thread
 	Post           *webPost
 	Replies        []webPost
-	Profile        *store.Profile
-	Since          string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
-	SinceStamp     string
-	Members, Count int
-	Message        string
+	// a thread past one page (see PLAN.md, Public pages — Thread paging):
+	// how many pages, the replies this one holds as 1-based positions in
+	// the thread, and the neighbouring pages' numbers, 0 at either end
+	Pages, From, To    int
+	PrevHref, NextHref string
+	Profile            *store.Profile
+	Since              string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
+	SinceStamp         string
+	Members, Count     int
+	Message            string
 	// the pages' analytics: the feed's pager links "N online" to /stats
 	// on a hub that counts, and /stats itself carries its page
 	StatsOn   bool
@@ -879,7 +888,11 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 			if t, ok := trs[p.LastReply.ID]; ok {
 				said = t.Text
 			}
-			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(card.NameMentions(said, p.Mentions), 90)}
+			href := "/p/" + p.ID + rd.Q + "#" + p.LastReply.ID
+			if p.Replies > webThreadPage {
+				href = "/p/" + p.ID + rd.with("at", p.LastReply.ID)
+			}
+			out[i].Latest = &webLatest{ID: p.LastReply.ID, Name: name, Text: excerpt(card.NameMentions(said, p.Mentions), 90), Href: href}
 		}
 		if q := p.Quote; q != nil {
 			name := q.AuthorName
@@ -1108,6 +1121,20 @@ func webReadingOf(r *http.Request) webReading {
 		rd.Target = webTarget(rd.Reader)
 	}
 	return rd
+}
+
+// with is a query string of the pairs given and the reader's ?lang=,
+// when the request said one, for a link that carries a query of its own
+// (Q is for one that carries none): "?at=…&lang=zh".
+func (rd webReading) with(pairs ...string) string {
+	q := url.Values{}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		q.Set(pairs[i], pairs[i+1])
+	}
+	if rd.Lang != "" {
+		q.Set("lang", rd.Lang)
+	}
+	return "?" + q.Encode()
 }
 
 // webTarget is the language a reader of reader is given translations
@@ -1467,6 +1494,11 @@ func webShortID(id string) (string, bool) {
 	return low, true
 }
 
+// webThreadPage is how many replies a thread page holds (see PLAN.md,
+// Public pages — Thread paging): the tree in thread order, cut into
+// pages of this many, the post heading every one of them.
+const webThreadPage = 100
+
 // handleThreadPage: /p/{id} is a post and the thread under it. The start
 // of an id, eight characters or more, is sent on to the whole one (see
 // PLAN.md, Public pages — a short id finds its post), the query carried
@@ -1510,29 +1542,80 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "err.post")
 		return
 	}
-	// the whole tree, a reply to a reply under the reply it answers
-	thread, err := s.St.Thread(p.ID, 500)
+	// the whole tree, a reply to a reply under the reply it answers, cut
+	// into pages of webThreadPage in that order
+	thread, err := s.St.Thread(p.ID, 0)
 	if err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "err.thread")
 		return
 	}
 	rd := webReadingOf(r)
+	pages := max((len(thread)+webThreadPage-1)/webThreadPage, 1)
+	// ?at= is a reply: the reader is sent to its page and lands on it. A
+	// link carries the reply and not its page, since a reply to an early
+	// reply lands in the middle of the order and moves every later one
+	// down; a reply that is gone opens the thread's first page. Never
+	// cached: which page a reply is on changes.
+	if at := r.URL.Query().Get("at"); at != "" {
+		w.Header().Set("Cache-Control", "no-store")
+		to := "/p/" + p.ID + rd.Q
+		for i, t := range thread {
+			if t.ID == at {
+				to = "/p/" + p.ID + rd.Q
+				if n := i/webThreadPage + 1; n > 1 {
+					to = "/p/" + p.ID + rd.with("page", strconv.Itoa(n))
+				}
+				to += "#" + at
+				break
+			}
+		}
+		http.Redirect(w, r, to, http.StatusFound)
+		return
+	}
+	// the page asked for, the first without one and the last past the end:
+	// a live page asks for its own number again after a delete, and the
+	// last page is the right answer then, not a 404
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	page = min(max(page, 1), pages)
+	from, to := (page-1)*webThreadPage, min(page*webThreadPage, len(thread))
 	post := s.webPosts(rd, []store.FeedPost{*p})[0]
 	post.Replies = 0 // the replies are right below; no link to this same page
-	replies := s.webPosts(rd, thread)
+	replies := s.webPosts(rd, thread[from:to])
 	names := map[string]string{p.ID: authorLabel(*p)}
 	for _, t := range thread {
 		names[t.ID] = authorLabel(t)
 	}
+	onPage := map[string]bool{}
+	for _, t := range thread[from:to] {
+		onPage[t.ID] = true
+	}
 	for i := range replies {
 		replies[i].InThread = true
 		replies[i].ParentName = names[replies[i].ReplyTo]
+		// the reply it answers: in place on this page, else on its own
+		if onPage[replies[i].ReplyTo] {
+			replies[i].ParentHref = "#" + replies[i].ReplyTo
+		} else {
+			replies[i].ParentHref = "/p/" + p.ID + rd.with("at", replies[i].ReplyTo)
+		}
 	}
 	d := &webData{
 		Page: "thread", Title: threadTitle(*p, r.Host, rd.L), Desc: excerpt(named(*p), 200),
-		Post: &post, Replies: replies, Compose: &webCompose{ReplyTo: p.ID},
+		Post: &post, Replies: replies, Count: len(thread), Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 		Live: s.Events != nil, Lang: rd.Lang, Q: rd.Q,
+	}
+	if pages > 1 {
+		d.Pages, d.From, d.To = pages, from+1, to
+		if page > 1 {
+			d.PrevHref = "/p/" + p.ID + rd.Q // the first page has one address
+			if page > 2 {
+				d.PrevHref = "/p/" + p.ID + rd.with("page", strconv.Itoa(page-1))
+			}
+		}
+		if page < pages {
+			d.NextHref = "/p/" + p.ID + rd.with("page", strconv.Itoa(page+1))
+		}
 	}
 	if d.Desc == "" {
 		d.Desc = previewNoWords(*p) + " By " + authorLabel(*p) + " on " + r.Host + "."

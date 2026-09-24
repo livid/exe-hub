@@ -570,6 +570,42 @@ hub that carries the post.
   2026-09-19, after a link of mine cut to eight characters came up
   404; that link, `/p/9c2cd7cd`, and `/p/9c2cd7cdf0b6?lang=zh` are the
   fixture (`TestWebShortIDFixture`), and both resolve.
+- **Thread paging (built 2026-09-24).** A thread page held every reply
+  up to 500, the first 500 in arrival order, and then stopped, which
+  cut a long thread at the wrong end: the newest replies, the half a
+  reader comes back for, were the ones dropped. Now the whole tree is
+  read (`Thread` with no limit; the walk still stops at 32 levels) and
+  cut into pages of 100 replies (`webThreadPage`) in thread order, a
+  reply under the reply it answers, the post heading every page. A
+  thread that fits one page looks as it did. Past one, the feed's strip
+  stands between the post and its replies and again under them — Prev,
+  the replies this page holds ("101–200 of 234 replies",
+  `replies.range`, in the three languages), Next — and the status line
+  keeps the whole count. Prev from the second page is the thread's one
+  address, `/p/{id}`, not `?page=1`; the canonical link is that address
+  on every page. `?page=` past the end is the last page and nonsense
+  the first, never a 404: a live page asks for its own number again
+  after a delete, and the last page is the right answer then. **A link
+  carries the reply, not its page**: a reply to an early reply lands in
+  the middle of the order and moves every later one down a place, so a
+  page number in a link goes stale. `/p/{root}?at={reply}` is answered
+  with a 302 to the reply's page and `#reply`, `no-store` since which
+  page it is on changes, and to the first page when the reply is gone.
+  The feed's newest-reply link goes that way when the thread is past a
+  page (the root's count is the tree's) and stays a fragment when it
+  fits; "in reply to" under a nested reply is `#parent` when the parent
+  is on the same page and `?at=parent` when it ended the page before;
+  a reader's own reply, landed on by the live script or by the compose
+  strip on a page without it, goes through `?at=` when it is not on the
+  page. `?lang=` rides all of them (`webReading.with`). The JSON API's
+  thread keeps its bound of 500 for now; the Hub app pages nothing. Asked by
+  Livid 2026-09-24, the first piece of the thread summaries (below),
+  whose 500 and 1000 steps would otherwise summarise replies the page
+  could not show. `TestWebThreadPaging`, and
+  `~/tools/playwright/exe-hub-thread-paging-test.js` against a scratch
+  hub (a 133-reply thread: the strips, `?at=` landing tinted on the
+  second page, the language kept, the phone's glyph buttons, no page
+  error).
 - **A reader, and a signed client when a wallet signs in.** Every write
   is still a signature made in the browser (see Posting from a wallet);
   the pages carry no session, cookie or state-changing form (the search

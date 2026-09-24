@@ -2289,8 +2289,13 @@ func (s *Store) Replies(id, after string, limit int) ([]FeedPost, error) {
 // or a client that wants to show a reply under the reply it answers. The
 // walk stops at limit posts and 32 levels; a reply whose parent fell past
 // the limit (or arrived by replication before its parent) is kept at the
-// end as a direct reply rather than lost.
+// end as a direct reply rather than lost. A limit of 0 or less is no
+// limit: the thread page takes the whole tree and cuts its own pages
+// (see PLAN.md, Public pages — Thread paging).
 func (s *Store) Thread(id string, limit int) ([]FeedPost, error) {
+	if limit <= 0 {
+		limit = -1
+	}
 	rows, err := s.db.Query(`WITH RECURSIVE sub(id, depth) AS (
   SELECT c.id, 1 FROM posts c WHERE c.reply_to = ?
   UNION ALL
