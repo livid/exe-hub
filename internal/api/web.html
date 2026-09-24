@@ -627,7 +627,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
   <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
-  <div class="frame"{{if .Live}} data-live="thread"{{end}}>
+  <div class="frame"{{if .Live}} data-live="thread" data-root="{{.Root}}"{{end}}>
     <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{template "lang" .}}</div>
     {{template "post" .Post}}
     {{if .Pages}}<div class="pager rp">{{template "tpager" .}}</div>{{end}}
@@ -755,10 +755,16 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   // event goes out after its post is stored); one already in the air may
   // have been drawn before them, so while one is, every event counts and
   // one more fetch follows it (Codex's catch, 2026-09-17).
+  // A paged thread is a window on its tree (PLAN.md, Thread paging), so
+  // the page cannot tell from what it shows whether a reply under a parent
+  // on another page, or a delete there, moved its boundaries: the event
+  // names the thread's root (Codex's catch, 2026-09-24), and the frame
+  // names its own, so those match exactly and the rest ask the page.
   const shown = id => { const n = id && document.getElementById(id); return !!n && n.parentNode === feed; };
+  const root = feed.dataset.root;
   const mine = ev => !thread || busy || (ev.type === "profile.set"
     ? [...feed.querySelectorAll(".av")].some(a => a.getAttribute("href") === "/u/" + ev.author)
-    : shown(ev.id) || shown(ev.reply_to));
+    : (root && (ev.root === root || ev.id === root)) || shown(ev.id) || shown(ev.reply_to));
   // The browser retries a stream that drops or is refused by itself, but
   // an answer that is not the stream closes an EventSource for good —
   // and that is what the edge says while the hub restarts: 502. So a

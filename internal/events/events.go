@@ -18,6 +18,7 @@ type Event struct {
 	Type    string `json:"type"`               // "post.create" | "post.delete" | "post.mark" | "profile.set" | "post.card" | "post.translation"
 	ID      string `json:"id"`                 // post id
 	ReplyTo string `json:"reply_to,omitempty"` // parent post id when the post is a reply
+	Root    string `json:"root,omitempty"`     // the thread's root, for post.create of a reply, post.delete and post.summary: a thread page filters by it
 	Author  string `json:"author"`             // author profile id
 	Mark    *Mark  `json:"mark,omitempty"`     // post.mark: the box and its new state
 }

@@ -1046,7 +1046,7 @@ func TestWebLive(t *testing.T) {
 	}
 	// a thread, and a reply's own page (the tree under it)
 	for _, id := range []string{ids[0], reply} {
-		if _, body := get(t, h, "/p/"+id); !strings.Contains(body, live) || !strings.Contains(body, `<div class="frame" data-live="thread">`) {
+		if _, body := get(t, h, "/p/"+id); !strings.Contains(body, live) || !strings.Contains(body, `<div class="frame" data-live="thread" data-root="`+ids[0]+`">`) {
 			t.Errorf("/p/%s lacks the live script or its frame's mark", id[:8])
 		}
 	}
@@ -1618,6 +1618,7 @@ func TestWebPostCard(t *testing.T) {
 // of them (see PLAN.md, Public pages — Thread paging).
 func TestWebThreadPaging(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	s.Events = events.New() // a thread page is live: its frame names the thread for the filter
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
 	root := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "root post"})
@@ -1726,6 +1727,14 @@ func TestWebThreadPaging(t *testing.T) {
 	// a thread that fits one page has no strip
 	if _, body = get(t, h, "/p/"+small); strings.Contains(body, `class="pager rp`) || !strings.Contains(body, `<div class="statusbar"><span>1 reply</span></div>`) {
 		t.Error("a one-page thread carries the strip")
+	}
+	// the live frame names its thread, on the root's page and on a reply's
+	// (a window on the same tree), so the filter can match an event's root
+	if _, body = get(t, h, "/p/"+root); !strings.Contains(body, `data-live="thread" data-root="`+root+`"`) || !strings.Contains(body, `ev.root === root || ev.id === root`) {
+		t.Error("the root's page does not name its root for the live filter")
+	}
+	if _, body = get(t, h, "/p/"+ids[0]); !strings.Contains(body, `data-live="thread" data-root="`+root+`"`) {
+		t.Error("a reply's page does not name the thread's root")
 	}
 	// the JSON keeps its own bound
 	if _, body = get(t, h, "/v1/post/"+root); strings.Count(body, `"depth":`) != 253 {

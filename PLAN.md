@@ -598,7 +598,19 @@ hub that carries the post.
   a reader's own reply, landed on by the live script or by the compose
   strip on a page without it, goes through `?at=` when it is not on the
   page. `?lang=` rides all of them (`webReading.with`). The JSON API's
-  thread keeps its bound of 500 for now; the Hub app pages nothing. Asked by
+  thread keeps its bound of 500 for now; the Hub app pages nothing.
+  **The live filter names the thread** (Codex's catch, the same day): a
+  paged thread is a window on its tree, and the page's filter, written
+  when the page held the whole thread, asked the page whether an event's
+  post or parent was on it — so a reply under a parent on another page,
+  or a delete anywhere else in the tree, was turned away though either
+  moves the page's boundaries and its count. The store reads the root a
+  reply or a delete touches before it applies the message (`rootOf`, a
+  walk up `reply_to`, forty levels like the activity bump) and hands it
+  to the `OnMessage` hook, so `post.create` of a reply and `post.delete`
+  carry `root` on the bus; the live frame names its own
+  (`data-root`, the post or the root above a reply's page) and the
+  filter matches the two exactly, the rest asking the page as before. Asked by
   Livid 2026-09-24, the first piece of the thread summaries (below),
   whose 500 and 1000 steps would otherwise summarise replies the page
   could not show. `TestWebThreadPaging`, and
@@ -2338,3 +2350,84 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   mock wallet signs in so the Post window's signed-in row, status line
   and Profile dialog show in each language; a token-gated second hub
   for the gate sentence; DPR 1, 1.5, 2 and a phone).
+
+## Thread summaries — a quick read of a long thread (building 2026-09-24)
+
+Asked by Livid 2026-09-24: a thread with ten or more replies gets a
+summary by the translation model, written again at 20, 50, 100, 200,
+500 and 1000 replies and never after; in the post's language and then
+translated; for the root only, never off a reply; a block at the right
+of the desktop thread page, the mobile design later; every step's
+summary kept, the block showing the newest with when it was written and
+how many replies it read; a quick, useful read in the shape of
+github.com/ayghri/i-have-adhd. The plan is post `6bcf1b38` on the hub,
+ticked as pieces land. Paging (above) came first, so a summary can point
+at a reply on its page.
+
+- **What is built (turn 2).** The `summaries` table, keyed (post,
+  step, lang): `src` is "" for the one written from the thread and, to
+  come, the language a translation was made from; `replies` how many it
+  read, `cites` the replies it points at ([#n] to the reply's id, JSON),
+  `model`, `status`, `tries`, `ts`, and `origin` and `rev` for the
+  replication to come. Derived like translations: beside the post,
+  outside the envelope, kept across Rebuild with orphans dropped, gone
+  with its root. **Every step reached has its own summary** (Livid: "for
+  each milestone reached, there is a summary"; Codex's point that the
+  jobs must not share one snapshot): a step's summary always reads the
+  first that many replies in thread order (`Thread(root, step)`, whose
+  bound is by arrival), so the 10-reply summary of a thread found at 55
+  is the one it would have had at 10, and "the first 20 replies" on the
+  page is exactly true. Steps only go up: a thread that lost replies
+  keeps what it has, and 1000 is the last one written.
+- **The queue is the table** (`Summarizer`, `internal/lang/summary.go`,
+  on the workers' `drain`): one recursive walk counts every thread's
+  tree, and every root with a language and words owes each step of
+  `lang.Steps` its count has reached that has no summary written from
+  the thread (`src = ''`) — the threads touched last first, a thread's
+  steps lowest first — never tried, or a spent try an hour old with
+  tries left, three to a step like a translation. It is woken by a reply
+  landing (a reply may bring its thread to a step), by a delete (below),
+  by the language worker naming a post and by the reload signal; the
+  hub that translates is the one that summarises (the `ollama` block's
+  `translate`), the same model at the same effort, one summary at a
+  time. A thread that lost replies below its step since the list was
+  read is stepped over. Counted the day it was built: 16 threads at 10,
+  4 at 20, so 20 summaries owed at first start.
+- **What the model reads and writes.** The post, then each reply
+  numbered in thread order, by name, "to the post" or "to reply #n",
+  as data under a system prompt that asks for the shape a quick read
+  needs: a first line in bold saying where the thread stands, then at
+  most five one-line bullets, the most useful first, the last one what
+  is still open, about 120 words (200 characters in Chinese, 250 in
+  Japanese), no preamble, no heading, no closing line; a bullet may end
+  in [#n] for the reply it rests on. The whole thread every time, never
+  the last summary plus what is new, so a mistake never carries forward;
+  the model's context (1,048,576 tokens) holds a 1000-reply thread at
+  this hub's average post length. Written in the post's language
+  (`langs`); a post with no words owes nothing yet (a picture post's
+  language is the next turn's).
+- **The check** (`CheckSummary`) holds the answer to the shape and to
+  the thread: not empty, a bold line first, then only bullets and blank
+  lines, five bullets at most, no heading and no code block, its words
+  not over twice the length asked (1500 runes, 700 for Chinese,
+  Japanese and Korean), in the script of the language (`inScript`, the
+  translation check's test), every [#n] one of the replies read (kept
+  as cites) and no link the thread does not hold — so a made-up link, or
+  a reply's instruction to the model, is a spent try. The text is drawn
+  by the page's own renderer, never signed, and the block will name the
+  model. `exe-hub -resummarize <post>` forgets a thread's newest step,
+  every language of it, and wakes the daemon, like `-retranslate`.
+- **A delete.** A reply's delete takes only the summary of its thread
+  that cites it (`cites LIKE`), which is then owed again at the same
+  step — that holds past 1000 without a new step; any other delete
+  leaves the summaries standing, the block telling what each read. A
+  root's delete takes them all.
+- **On the bus**: `post.summary` with the root as its id and `root`, so
+  a live thread page (which matches by root now) brings it in once the
+  block exists.
+- **Left**: the translations of a summary owed from its newest step
+  (keyed by step, so an earlier step's translations stay with it —
+  Codex's point), a picture post's language from its replies,
+  `/v1/summaries` beside `/v1/translations` for the public hub to take,
+  the Summary window from 1060px with its meta line and live swap, and
+  the mobile design after that.

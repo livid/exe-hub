@@ -44,6 +44,7 @@ func main() {
 	redo := flag.String("retranslate", "", "forget one post's kept translations so the running daemon makes them again: the post's id, or the first 12 characters or more of it")
 	redoTo := flag.String("to", "", "with -retranslate: only the translation into this language ("+strings.Join(lang.Targets, ", ")+")")
 	redoNote := flag.String("note", "", "with -retranslate: an editor's note on the post for its translator, kept with the post — what a terse or ambiguous line means")
+	resum := flag.String("resummarize", "", "forget one thread's newest summary so the running daemon writes it again: the root post's id, or the first 12 characters or more of it")
 	flag.Parse()
 
 	if *stateDir == "" {
@@ -59,11 +60,25 @@ func main() {
 	pidPath := filepath.Join(*stateDir, "exe-hub.pid")
 
 	if *redo != "" {
+		if *resum != "" {
+			log.Fatal("-retranslate and -resummarize are two commands")
+		}
 		if err := retranslate(filepath.Join(*stateDir, "hub.db"), *redo, *redoTo, *redoNote); err != nil {
 			log.Fatal(err)
 		}
 		// the reload signal also wakes the language workers; with no
 		// daemon up the translations are simply owed at its next start
+		if pid, err := signalDaemon(pidPath); err != nil {
+			fmt.Printf("no running daemon (%v): owed at its next start\n", err)
+		} else {
+			fmt.Printf("woke the daemon (SIGHUP to %d)\n", pid)
+		}
+		return
+	}
+	if *resum != "" {
+		if err := resummarize(filepath.Join(*stateDir, "hub.db"), *resum); err != nil {
+			log.Fatal(err)
+		}
 		if pid, err := signalDaemon(pidPath); err != nil {
 			fmt.Printf("no running daemon (%v): owed at its next start\n", err)
 		} else {
@@ -101,6 +116,35 @@ func signalDaemon(pidPath string) (int, error) {
 		return 0, fmt.Errorf("bad pidfile: %w", err)
 	}
 	return pid, syscall.Kill(pid, syscall.SIGHUP)
+}
+
+// resummarize forgets a thread's newest summary, every language of it,
+// so the summariser writes it again (PLAN.md, Thread summaries): for a
+// summary a reader found wrong. Like retranslate it opens the database
+// beside the running daemon.
+func resummarize(dbPath, post string) error {
+	if _, err := os.Stat(dbPath); err != nil {
+		return err
+	}
+	st, err := store.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	id := strings.ToLower(strings.TrimSpace(post))
+	if len(id) != 64 {
+		if id, err = st.ResolvePrefix(id); err != nil {
+			return fmt.Errorf("%s: %w", post, err)
+		}
+	} else if _, err := st.Post(id); err != nil {
+		return fmt.Errorf("%s: %w", post, err)
+	}
+	n, err := st.DropSummaries(id, 0)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s: forgot %d summary rows (the newest step)\n", id, n)
+	return nil
 }
 
 // retranslate forgets what one post was put into — every language, or
@@ -205,6 +249,7 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Each table is its worker's queue, so a first pass is the backfill,
 	// and an Ollama that is away only makes the posts wait.
 	var langs *lang.Worker
+	var sum *lang.Summarizer
 	wakeLangs := func() {} // what the reload signal also does: see below
 	if o := cfg.Ollama; o != nil {
 		model := lang.NewModel(o.BaseURL, o.APIKey, o.Model, o.Effort)
@@ -222,23 +267,34 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		if o.Translates() {
 			tr := lang.NewTranslator(st, model, bus)
 			tr.Parallel = o.Parallel
-			langs.Named = tr.Wake
-			wakeLangs = func() { langs.Wake(); tr.Wake() }
+			// and a summary of every thread at each step of the ladder it
+			// reaches (PLAN.md, Thread summaries), by the same model; the
+			// hub that translates is the one that summarises
+			sum = lang.NewSummarizer(st, model, bus)
+			langs.Named = func() { tr.Wake(); sum.Wake() }
+			wakeLangs = func() { langs.Wake(); tr.Wake(); sum.Wake() }
 			go tr.Run()
+			go sum.Run()
 		}
 		go langs.Run()
 	}
-	st.OnMessage = func(e *envelope.Envelope, op any, id string) {
+	st.OnMessage = func(e *envelope.Envelope, op any, id, root string) {
 		switch o := op.(type) {
 		case *envelope.PostCreate:
-			bus.Emit(events.Event{Type: "post.create", ID: id, ReplyTo: o.ReplyTo, Author: e.ProfileID()})
+			bus.Emit(events.Event{Type: "post.create", ID: id, ReplyTo: o.ReplyTo, Root: root, Author: e.ProfileID()})
 			// a card is for a bare link; a post already showing something needs none
 			cards.Enqueue(id, e.ProfileID(), o.Text, len(o.Embeds) == 0)
 			if langs != nil {
 				langs.Wake()
 			}
+			if sum != nil && o.ReplyTo != "" {
+				sum.Wake() // a reply may have brought its thread to a step
+			}
 		case *envelope.PostDelete:
-			bus.Emit(events.Event{Type: "post.delete", ID: o.Post, Author: e.ProfileID()})
+			bus.Emit(events.Event{Type: "post.delete", ID: o.Post, Root: root, Author: e.ProfileID()})
+			if sum != nil {
+				sum.Wake() // a cited reply's going owes its summary again
+			}
 		case *envelope.PostMark:
 			bus.Emit(events.Event{Type: "post.mark", ID: o.Post, Author: e.ProfileID(), Mark: &events.Mark{Box: o.Box, Done: o.Done}})
 		case *envelope.ProfileSet:

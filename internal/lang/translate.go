@@ -128,6 +128,13 @@ func Check(text, out, to string) error {
 	if ra >= 20 && (rb*7 < ra || rb > ra*6+40) {
 		return fmt.Errorf("%d characters for a post of %d", rb, ra)
 	}
+	return inScript(out, to)
+}
+
+// inScript says why out is not in the language to by its script, or
+// nil: Chinese has Han and no kana to speak of, Japanese has kana,
+// English neither. A language the rule does not know passes.
+func inScript(out, to string) error {
 	letters, han, kana := 0, 0, 0
 	for _, r := range out {
 		if unicode.IsLetter(r) {
@@ -140,8 +147,6 @@ func Check(text, out, to string) error {
 			}
 		}
 	}
-	// the script says whether it was put into the language at all: Chinese
-	// has Han and no kana to speak of, Japanese has kana, English neither
 	switch {
 	case strings.HasPrefix(to, "zh") && letters >= 40 && han == 0:
 		return fmt.Errorf("no Chinese in it")

@@ -38,7 +38,11 @@ type Store struct {
 	// ingest (direct or replicated; never for duplicates or Rebuild
 	// replays) — the live-events hook. It runs on the ingesting
 	// goroutine, so it must not block.
-	OnMessage func(e *envelope.Envelope, op any, id string)
+	// root is the thread the message touches, for the live pages' filter
+	// (PLAN.md, Thread paging): the root under which a post.create's
+	// reply or a post.delete's post stood, "" when it is not a reply or
+	// the chain is broken.
+	OnMessage func(e *envelope.Envelope, op any, id, root string)
 	// PageAuthor, when set, says whose HTML embeds are pages — read in a
 	// sandboxed window instead of downloaded (PLAN.md, Pages). It is asked
 	// at read time, so a demoted key's pages turn back into files.
@@ -299,6 +303,26 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 			ts INTEGER NOT NULL, seen INTEGER NOT NULL,
 			PRIMARY KEY (peer, post, lang))`,
 		`CREATE INDEX IF NOT EXISTS pending_translations_post ON pending_translations(post)`,
+		// a thread's summaries (PLAN.md, Thread summaries): one per step
+		// of the ladder reached, in the post's language (src '') and in
+		// the languages it was put into (src = the language it came from);
+		// derived like translations, beside the post, outside the envelope
+		`CREATE TABLE IF NOT EXISTS summaries (
+			post    TEXT NOT NULL,
+			step    INTEGER NOT NULL,
+			lang    TEXT NOT NULL,
+			src     TEXT NOT NULL DEFAULT '',
+			text    TEXT NOT NULL DEFAULT '',
+			model   TEXT NOT NULL DEFAULT '',
+			replies INTEGER NOT NULL DEFAULT 0,
+			cites   TEXT NOT NULL DEFAULT '',
+			status  TEXT NOT NULL,
+			tries   INTEGER NOT NULL DEFAULT 0,
+			ts      INTEGER NOT NULL,
+			origin  TEXT NOT NULL DEFAULT '',
+			rev     INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (post, step, lang))`,
+		`CREATE INDEX IF NOT EXISTS summaries_rev ON summaries(rev) WHERE rev > 0`,
 		`ALTER TABLE peer_state ADD COLUMN tr_cursor INTEGER NOT NULL DEFAULT 0`,
 		// a card that quotes a post here instead of unfurling a fetched
 		// page (PLAN.md, Post cards): the quoted post's whole id, '' for
@@ -421,6 +445,21 @@ func (s *Store) ingest(raw, sig []byte, e *envelope.Envelope, op any, origin str
 		}
 	}
 
+	// the thread a reply or a delete touches, read before the delete
+	// takes its post away
+	root := ""
+	switch v := op.(type) {
+	case *envelope.PostCreate:
+		if v.ReplyTo != "" {
+			if root, err = rootOf(tx, v.ReplyTo); err != nil {
+				return "", nil, err
+			}
+		}
+	case *envelope.PostDelete:
+		if root, err = rootOf(tx, v.Post); err != nil {
+			return "", nil, err
+		}
+	}
 	if unpin, err = apply(tx, id, e, op, now, origin != ""); err != nil {
 		return "", nil, err
 	}
@@ -439,10 +478,33 @@ func (s *Store) ingest(raw, sig []byte, e *envelope.Envelope, op any, origin str
 		return "", nil, err
 	}
 	if s.OnMessage != nil {
-		s.OnMessage(e, op, id)
+		s.OnMessage(e, op, id, root)
 	}
 	return id, unpin, nil
 }
+
+// rootOf is the root of the thread id stands in: id itself when it is
+// a root, "" when it is no post here or its chain up is broken (a reply
+// that came by replication before its parent). Forty levels, like the
+// walk that bumps a thread's activity.
+func rootOf(q interface {
+	QueryRow(string, ...any) *sql.Row
+}, id string) (string, error) {
+	var root string
+	err := q.QueryRow(`WITH RECURSIVE up(id, reply_to, n) AS (
+		SELECT id, reply_to, 0 FROM posts WHERE id = ?
+		UNION ALL
+		SELECT p.id, p.reply_to, up.n + 1 FROM posts p JOIN up ON p.id = up.reply_to WHERE up.n < 40)
+		SELECT id FROM up WHERE reply_to = '' LIMIT 1`, id).Scan(&root)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return root, err
+}
+
+// Root is rootOf for a caller outside a transaction: the thread page
+// says which thread it shows.
+func (s *Store) Root(id string) (string, error) { return rootOf(s.db, id) }
 
 // apply materializes one op into the derived tables. Shared by Ingest and
 // Rebuild so replay can never drift from live ingestion. replay relaxes
@@ -634,6 +696,19 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		}
 		if _, err := tx.Exec(`DELETE FROM translation_notes WHERE post=?`, v.Post); err != nil {
 			return nil, err
+		}
+		// a root takes its summaries with it; a reply takes only the
+		// summary of its thread that cites it, which is owed again at the
+		// same step (PLAN.md, Thread summaries)
+		if _, err := tx.Exec(`DELETE FROM summaries WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
+		if root, err := rootOf(tx, v.Post); err != nil {
+			return nil, err
+		} else if root != "" && root != v.Post {
+			if _, err := tx.Exec(`DELETE FROM summaries WHERE post=? AND cites LIKE '%' || ? || '%'`, root, v.Post); err != nil {
+				return nil, err
+			}
 		}
 		// the thread whose newest reply this was: after the delete its
 		// pointer moves back to the newest remaining reply in the tree
@@ -839,6 +914,9 @@ func (s *Store) Rebuild() error {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM translation_notes WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM summaries WHERE post NOT IN (SELECT id FROM posts)`); err != nil {
 		return err
 	}
 	return tx.Commit()

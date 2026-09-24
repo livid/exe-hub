@@ -353,6 +353,7 @@ type webData struct {
 	// the thread, and the neighbouring pages' numbers, 0 at either end
 	Pages, From, To    int
 	PrevHref, NextHref string
+	Root               string // the thread's root, which the live frame names for its filter
 	Profile            *store.Profile
 	Since              string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
 	SinceStamp         string
@@ -1599,11 +1600,18 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 			replies[i].ParentHref = "/p/" + p.ID + rd.with("at", replies[i].ReplyTo)
 		}
 	}
+	// the thread this page is a window on, for the live script's filter:
+	// the post itself, or the root above it when the post is a reply
 	d := &webData{
 		Page: "thread", Title: threadTitle(*p, r.Host, rd.L), Desc: excerpt(named(*p), 200),
-		Post: &post, Replies: replies, Count: len(thread), Compose: &webCompose{ReplyTo: p.ID},
+		Post: &post, Replies: replies, Count: len(thread), Root: p.ID, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 		Live: s.Events != nil, Lang: rd.Lang, Q: rd.Q,
+	}
+	if p.ReplyTo != "" {
+		if root, err := s.St.Root(p.ID); err == nil && root != "" {
+			d.Root = root
+		}
 	}
 	if pages > 1 {
 		d.Pages, d.From, d.To = pages, from+1, to
