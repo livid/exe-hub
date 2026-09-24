@@ -76,19 +76,18 @@ a.mention { text-decoration: none; }
    strip and the thread in the column, and at the column's left, once
    there is room, the side the join window takes on the home page —
    the same 360px, sticky the same — holding the Summary window when
-   the thread has one and standing empty when not, so the column is
-   where the feed's is whichever page the reader is on and whatever the
-   thread has (Livid, 2026-09-24: a thread opened from the feed moved
-   the whole view). Narrower than that the side waits for the phone
-   design: nothing shows. Installed as an app the join window is gone
-   and the feed centred, so an empty side goes too. */
+   the thread has one, so a thread opened from the feed keeps its
+   column where the feed's was (Livid, 2026-09-24: with the window at
+   the right "the whole Post view moves"). A thread with no summary has
+   no side and its column is centred, as it always was: an empty side
+   left the page unbalanced (Livid, the same day); something may stand
+   there later. Narrower than 1060px the side waits for the phone
+   design: nothing shows. */
 .desk .side { display: none; }
 @media (min-width: 1060px) {
   .desk .side { display: block; flex: 0 0 360px; position: sticky; top: 24px; }
-  .desk .side .window { margin: 0; }
-}
-@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
   .desk .side:empty { display: none; }
+  .desk .side .window { margin: 0; }
 }
 .summary .sum { padding: 12px 14px; }
 .summary .text { margin-top: 0; }

@@ -2444,12 +2444,14 @@ at a reply on its page.
   one. The first cut put the window at the column's right, and Livid:
   "When I click a post from home, the current design is a huge layout
   change — the whole Post view moves from right to left." So the side
-  is at the left, and it is there on every thread page, empty when the
-  thread has no summary, so the column stands exactly where the feed's
-  does whichever page the reader is on and whatever the thread has (the
-  no-jumps rule); installed as an app, where the join window is gone
-  and the feed centred, an empty side goes too (`:empty`). Narrower
-  than 1060px nothing shows: the phone design is Livid's, later.
+  is at the left, and a thread with a summary keeps its column where
+  the feed's is. A first cut kept the side on every thread page, empty
+  when the thread had none, for the column never to move; Livid: "now
+  we have a blank area in the post page, i felt that makes the page
+  unbalanced" — so a thread without a summary has no side (`:empty`)
+  and its column is centred as it always was, and something may stand
+  in the side later. Narrower than 1060px nothing shows: the phone
+  design is Livid's, later.
   Inside, under a Platinum title bar
   reading Summary (摘要, 要約), the newest step's summary through the
   page's own renderer, so the bold line and the bullets are the post
