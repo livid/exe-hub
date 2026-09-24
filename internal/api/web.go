@@ -210,6 +210,80 @@ type webTr struct {
 	Orig bool
 }
 
+// webSummary is a thread's newest summary as the window beside the
+// thread draws it (PLAN.md, Thread summaries): the text through the
+// page's renderer with each [#n] a link to the reply it cites, the
+// reader's translation of it when there is one, and the meta line's
+// parts — which replies it read, the model, when.
+type webSummary struct {
+	Root          string
+	HTML          template.HTML
+	Lang          string
+	Step, Replies int
+	Model         string
+	When, Stamp   string
+	Meta          string // "Summary of the first 10 replies", in the page's language
+	Tr            *webTr
+	Q             string
+}
+
+// webSummary is the newest summary of root for this reader, nil when
+// the thread has none: the one written from the thread at its highest
+// step, and beside it the reader's language's translation of that step
+// when one is kept and the summary is not already in a language they
+// read. A store that cannot be read leaves the window off: the page
+// stands.
+func (s *Server) webSummary(rd webReading, root string) *webSummary {
+	rows, err := s.St.Summaries(root)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	step := rows[0].Step
+	var orig, tr *store.Summary
+	for i := range rows {
+		r := &rows[i]
+		if r.Step != step {
+			break
+		}
+		switch {
+		case r.Src == "":
+			orig = r
+		case r.Lang == rd.Target:
+			tr = r
+		}
+	}
+	if orig == nil {
+		return nil
+	}
+	out := &webSummary{Root: root, Lang: orig.Lang, Step: step, Replies: orig.Replies, Model: orig.Model,
+		When: webWhen(orig.TS), Stamp: webStamp(orig.TS), Meta: rd.L.T("summary.of", "n", orig.Replies), Q: rd.Q}
+	out.HTML = citeLinks(renderText(orig.Text, rd.L), orig.Cites, root, rd)
+	if tr != nil && rd.Reader != "orig" && langBase(orig.Lang) != langBase(rd.Reader) && langBase(orig.Lang) != langBase(rd.Target) {
+		out.Tr = rd.tr(store.Translation{Text: tr.Text, From: orig.Lang}, nil, nil)
+		out.Tr.HTML = citeLinks(out.Tr.HTML, orig.Cites, root, rd)
+	}
+	return out
+}
+
+// langBase is a tag's language alone: zh for zh-Hans and zh-TW.
+func langBase(tag string) string {
+	base, _, _ := strings.Cut(tag, "-")
+	return base
+}
+
+// citeLinks sets each [#n] the summary cites as a link to that reply,
+// through ?at= so it opens on the reply's page (PLAN.md, Thread paging).
+// The token survives the renderer as it is, since nothing in it is
+// escaped, so the rendered HTML is what is rewritten.
+func citeLinks(html template.HTML, cites map[int]string, root string, rd webReading) template.HTML {
+	s := string(html)
+	for n, id := range cites {
+		tok := "[#" + strconv.Itoa(n) + "]"
+		s = strings.ReplaceAll(s, tok, `<a class="cite" href="`+template.HTMLEscapeString("/p/"+root+rd.with("at", id))+`">#`+strconv.Itoa(n)+`</a>`)
+	}
+	return template.HTML(s)
+}
+
 // webLatest is the newest reply in a post's thread, as the foot shows
 // it: the name, a line of the text, and the anchor to land on it.
 type webLatest struct {
@@ -353,7 +427,8 @@ type webData struct {
 	// the thread, and the neighbouring pages' numbers, 0 at either end
 	Pages, From, To    int
 	PrevHref, NextHref string
-	Root               string // the thread's root, which the live frame names for its filter
+	Root               string      // the thread's root, which the live frame names for its filter
+	Summary            *webSummary // the thread's newest summary, in the window beside it (PLAN.md, Thread summaries)
 	Profile            *store.Profile
 	Since              string // the profile's first day as a UTC date, and SinceStamp its RFC 3339 form for the <time> element
 	SinceStamp         string
@@ -1612,6 +1687,8 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		if root, err := s.St.Root(p.ID); err == nil && root != "" {
 			d.Root = root
 		}
+	} else {
+		d.Summary = s.webSummary(rd, p.ID)
 	}
 	if pages > 1 {
 		d.Pages, d.From, d.To = pages, from+1, to

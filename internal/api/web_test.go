@@ -1741,3 +1741,74 @@ func TestWebThreadPaging(t *testing.T) {
 		t.Errorf("the JSON thread: %d entries", strings.Count(body, `"depth":`))
 	}
 }
+
+// TestWebSummaryWindow: a thread with a summary carries the Summary
+// window beside it — the newest step alone, its text through the
+// renderer with each cite a link to the reply through ?at=, the meta
+// line naming what it read, the model and when, in the page's language;
+// a thread without one, and a reply's own page, carry none; the live
+// frame stays as it was inside the desk (see PLAN.md, Thread summaries).
+func TestWebSummaryWindow(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	s.Events = events.New()
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
+	root := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "the long thread"})
+	var ids []string
+	for i := int64(0); i < 12; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, 3+i, "post.create", map[string]any{"text": fmt.Sprintf("reply %d", i+1), "reply_to": root}))
+	}
+	h := s.Handler()
+	_, body := get(t, h, "/p/"+root)
+	if strings.Contains(body, `class="window summary"`) || !strings.Contains(body, `<div class="desk thread">`+"\n"+`<div class="main">`) {
+		t.Error("a thread without a summary carries the window, or no desk")
+	}
+	if err := s.St.SetLang(root, "en", "m", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.St.SetSummary(root, 10, "en", "**Ten replies in.**\n\n- One point [#3]\n- Open: the rest [#10]", "glm-5.3:cloud", 10, map[int]string{3: ids[2], 10: ids[9]}, true); err != nil {
+		t.Fatal(err)
+	}
+	_, body = get(t, h, "/p/"+root)
+	i := strings.Index(body, `<div class="window summary" lang="en">`)
+	if i < 0 {
+		t.Fatalf("no Summary window:\n%.800s", body)
+	}
+	win := body[i : strings.Index(body[i:], "</div></div>\n</div>")+i]
+	for _, want := range []string{
+		`<span class="title">Summary</span>`,
+		`<div class="text" lang="en"><strong>Ten replies in.</strong>`,
+		`<li>One point <a class="cite" href="/p/` + root + `?at=` + ids[2] + `">#3</a></li>`,
+		`<li>Open: the rest <a class="cite" href="/p/` + root + `?at=` + ids[9] + `">#10</a></li>`,
+		`<div class="meta">Summary of the first 10 replies · glm-5.3:cloud · <time datetime="`,
+	} {
+		if !strings.Contains(win, want) {
+			t.Errorf("the window lacks %q:\n%s", want, win)
+		}
+	}
+	if strings.Contains(win, "trl") || strings.Contains(win, "[#") {
+		t.Errorf("a translation line without a translation, or a cite left as typed:\n%s", win)
+	}
+	// the window stands after the column, outside the live frame, and the
+	// frame is what it was
+	if j := strings.Index(body, `</div>`+"\n"+`{{`); j >= 0 {
+		t.Error("template text leaked")
+	}
+	if !(strings.Index(body, `data-live="thread"`) < i) || !strings.Contains(body, `<div class="statusbar"><span>12 replies</span></div>`+"\n  </div>\n</div>\n</div>\n<div class=\"window summary\"") {
+		t.Error("the window is not after the thread's column")
+	}
+	// a newer step replaces it; the older one is not drawn
+	s.St.SetSummary(root, 20, "en", "**Twenty in.**\n- Still open [#1]", "glm-5.3:cloud", 20, map[int]string{1: ids[0]}, true)
+	_, body = get(t, h, "/p/"+root+"?lang=zh")
+	if !strings.Contains(body, `<strong>Twenty in.</strong>`) || strings.Contains(body, "Ten replies in") || !strings.Contains(body, `<span class="title">摘要</span>`) || !strings.Contains(body, `<div class="meta">前 20 条回复的摘要 · glm-5.3:cloud · <time`) || !strings.Contains(body, `href="/p/`+root+`?at=`+ids[0]+`&amp;lang=zh">#1</a>`) {
+		t.Errorf("the Chinese page's window: %.300s", body[strings.Index(body, `class="window summary"`):])
+	}
+	// a reply's own page shows no summary; the JSON says nothing of it yet
+	if _, body = get(t, h, "/p/"+ids[0]); strings.Contains(body, `class="window summary"`) {
+		t.Error("a reply's page carries the thread's summary")
+	}
+	// the live script knows the side window
+	if !strings.Contains(body, `doc.querySelector(".window.summary")`) {
+		t.Error("the live script does not swap the Summary window")
+	}
+}

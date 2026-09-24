@@ -2423,11 +2423,39 @@ at a reply on its page.
   leaves the summaries standing, the block telling what each read. A
   root's delete takes them all.
 - **On the bus**: `post.summary` with the root as its id and `root`, so
-  a live thread page (which matches by root now) brings it in once the
-  block exists.
+  a live thread page (which matches by root) brings it in.
+- **The window (turn 3).** A thread page is a desk now, like the home
+  page: the Reply strip and the thread in the column, and from 1060px
+  the Summary window at the column's right, 360px, sticky 24px under
+  the top the way the join window is at the home page's left, the pair
+  centred as the home page's is. Narrower than that nothing shows: the
+  phone design is Livid's, later. Inside, under a Platinum title bar
+  reading Summary (摘要, 要約), the newest step's summary through the
+  page's own renderer, so the bold line and the bullets are the post
+  renderer's, each [#n] rewritten after rendering as an 11px grey link
+  to its reply through `?at=` (`citeLinks`; the token holds no
+  character the escaper touches, so the rendered HTML is what is
+  rewritten, the query escaped for the attribute), then a grey meta
+  line: "Summary of the first 10 replies · glm-5.3:cloud · 8:31 AM",
+  the time set to the reader's clock like a post's, in the three
+  languages (`summary`, `summary.of`). The reader's translation of that
+  step, once one is kept (src set, the reader's target, the summary not
+  already in a language they read), stands with the same "Translated
+  from · Show Original" line and control a post has; the one written
+  from the thread is what shows until then. Only the root's page
+  carries it; a reply's page, a window on the same tree, does not. The
+  live script brings the window in, replaces it or takes it away whole
+  when the served HTML changed (`sideServed`), so a `post.summary`
+  event, or a newer step, reaches an open page without a reload, and a
+  reader who turned it to the original keeps it turned meanwhile.
+  `TestWebSummaryWindow`, and
+  `~/tools/playwright/exe-hub-summary-window-test.js` against a scratch
+  hub (rows written into its table; the window's place, width and
+  stickiness, the cites landing tinted, the live replacement, nothing
+  at 1000px or on a phone; DPR 1, 1.5, 2).
 - **Left**: the translations of a summary owed from its newest step
   (keyed by step, so an earlier step's translations stay with it —
   Codex's point), a picture post's language from its replies,
-  `/v1/summaries` beside `/v1/translations` for the public hub to take,
-  the Summary window from 1060px with its meta line and live swap, and
-  the mobile design after that.
+  `/v1/summaries` beside `/v1/translations` for the public hub to take
+  (until then only the host hub, which summarises, shows the window),
+  and the mobile design after that.

@@ -72,6 +72,20 @@ a.mention { text-decoration: none; }
 @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
   .desk .join { display: none; }
 }
+/* a thread page is a desk too (PLAN.md, Thread summaries): the Reply
+   strip and the thread in the column, and the Summary window at the
+   column's right once there is room, sticky like the join window at the
+   home page's left. Narrower than that the window waits for the phone
+   design: nothing shows. */
+.desk .summary { display: none; }
+@media (min-width: 1060px) {
+  .desk .summary { display: block; flex: 0 0 360px; position: sticky; top: 24px; margin: 0; }
+}
+.summary .sum { padding: 12px 14px; }
+.summary .text { margin-top: 0; }
+.summary .meta { margin-top: 8px; white-space: normal; }
+.summary .cite { color: #666; text-decoration: none; font-size: 11px; }
+.summary .cite:hover { text-decoration: underline; }
 .title a { color: inherit; text-decoration: none; }
 /* the exe desktop's status line, inside the frame along its bottom: a
    15px platinum strip under a black rule, 11px text — the thread page's
@@ -624,6 +638,8 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 </div>
 </div>
 {{else if eq .Page "thread"}}
+<div class="desk thread">
+<div class="main">
 {{with .Compose}}{{template "compose" .}}{{end}}
 <div class="window">
   <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
@@ -635,6 +651,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     {{if .Pages}}<div class="pager rp end">{{template "tpager" .}}</div>{{end}}
     <div class="statusbar"><span>{{T "replies" "n" .Count}}</span></div>
   </div>
+</div>
+</div>
+{{with .Summary}}{{template "summary" .}}{{end}}
 </div>
 {{else if eq .Page "search"}}
 <div class="window">
@@ -700,9 +719,21 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   const key = n => n.id || n.className; // a post's id; "pager top", "statusbar" for the chrome around them
   const sent = root => new Map([...root.children].map(n => [key(n), n.outerHTML]));
   let served = sent(feed), land = "";
+  let sideServed = (document.querySelector(".window.summary") || {}).outerHTML || "";
   const swap = html => {
-    const fresh = new DOMParser().parseFromString(html, "text/html").querySelector(".frame[data-live]");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const fresh = doc.querySelector(".frame[data-live]");
     if (!fresh) return;
+    // the Summary window beside a thread (PLAN.md, Thread summaries) is
+    // brought in, replaced or taken away whole, as served: a reader who
+    // turned it to the original keeps it turned while the served HTML
+    // stands, like a post
+    const side = doc.querySelector(".window.summary"), cur = document.querySelector(".window.summary"), html2 = side ? side.outerHTML : "";
+    if (html2 !== sideServed) {
+      if (side && cur) cur.replaceWith(side); else if (side) feed.closest(".desk").appendChild(side); else if (cur) cur.remove();
+      if (side) localTimes(side);
+      sideServed = html2;
+    }
     const now = sent(fresh);
     const have = new Map([...feed.children].map(n => [key(n), n]));
     const next = [...fresh.children].map(n => {
@@ -1896,6 +1927,19 @@ document.addEventListener("change", e => {
      of a list. Which list is the page: the cursor links and the counts
      follow .Page, the query or profile id carried in the links. */}}
 {{define "pager"}}{{if .Prev}}<a class="btn prev back" href="{{template "cursors" .}}after={{.Prev}}">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{template "counts" .}}</span>{{if .Next}}<a class="btn next fwd" href="{{template "cursors" .}}before={{.Next}}"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
+
+{{/* the Summary window beside a thread (PLAN.md, Thread summaries): the
+     newest step's summary through the page's renderer, the reader's
+     translation of it with the same line and control a post has, and
+     the meta line: what it read, which model, when */}}
+{{define "summary"}}<div class="window summary" lang="{{.Lang}}">
+  <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{T "summary"}}</span><span class="stripe"></span></div>
+  <div class="frame"><div class="pad sum">
+    {{with .Tr}}<div class="text" lang="{{.Lang}}"{{if .Orig}} hidden{{end}}>{{.HTML}}</div>{{end}}<div class="text" lang="{{.Lang}}"{{if and .Tr (not .Tr.Orig)}} hidden{{end}}>{{.HTML}}</div>
+    {{with .Tr}}<div class="trl"><span{{if .Orig}} hidden{{end}}>{{.Note}} · </span><a class="tro" role="button" href="/p/{{$.Root}}{{if .Orig}}{{$.Q}}{{else}}?lang=orig{{end}}" data-other="{{if .Orig}}{{.Show}}{{else}}{{.Back}}{{end}}">{{if .Orig}}{{.Back}}{{else}}{{.Show}}{{end}}</a></div>{{end}}
+    <div class="meta">{{.Meta}} · {{.Model}} · <time datetime="{{.Stamp}}">{{.When}}</time></div>
+  </div></div>
+</div>{{end}}
 
 {{/* a thread past one page (PLAN.md, Public pages — Thread paging): the
      feed's strip, Prev and Next by page number, the replies this page
