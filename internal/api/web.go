@@ -152,6 +152,22 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// webRobots is the pages' robots.txt. Crawlers are welcome on the
+// feed, the threads and the profiles, and kept off the stats desk and
+// its JSON: there every row is a filter and every state a URL, an
+// endless space to walk, and on 2026-09-24 one GPTBot address walked it
+// some 7,000 times an hour for a day, most of the hub's traffic. Only
+// those two paths are closed — pictures, identicons and preview cards
+// stay open, because an unfurler that reads robots.txt (Twitterbot)
+// fetches a card's image from /v1/.
+const webRobots = "User-agent: *\nDisallow: /stats\nDisallow: /v1/stats\n"
+
+func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write([]byte(webRobots))
+}
+
 // webPage is the page size of the feed and profile pages; the next page
 // is a plain link carrying the last post's id as the keyset cursor.
 const webPage = 30

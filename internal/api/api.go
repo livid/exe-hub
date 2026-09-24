@@ -185,6 +185,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/preview/profile/{id}", s.handlePreviewProfile)
 	mux.HandleFunc("GET /v1/preview/home.png", s.handlePreviewHome)
 	mux.HandleFunc("GET /manifest.webmanifest", s.handleManifest)
+	mux.HandleFunc("GET /robots.txt", s.handleRobots)
 	mux.HandleFunc("GET /sw.js", s.handleSW)
 	mux.HandleFunc("POST /v1/push/subscribe", s.handlePushSubscribe)
 	mux.HandleFunc("POST /v1/push/unsubscribe", s.handlePushUnsubscribe)

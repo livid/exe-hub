@@ -186,6 +186,23 @@ func TestWebHome(t *testing.T) {
 
 // TestWebLocale: the page's language is ?lang= when it names one the
 // pages speak, else the browser's highest-q tag, else English.
+// TestWebRobots: robots.txt keeps crawlers off the stats desk and its
+// JSON, an endless space of filter links, and off nothing else.
+func TestWebRobots(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example/robots.txt", nil))
+	if w.Code != 200 {
+		t.Fatalf("GET /robots.txt = %d", w.Code)
+	}
+	if got := w.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("type %q", got)
+	}
+	if got := w.Body.String(); got != "User-agent: *\nDisallow: /stats\nDisallow: /v1/stats\n" {
+		t.Errorf("robots.txt = %q", got)
+	}
+}
+
 func TestWebLocale(t *testing.T) {
 	for path, want := range map[string]string{
 		"/": "zh", "/?lang=zh": "zh", "/?lang=ZH-TW": "zh", "/?lang=en": "en", "/?lang=en-GB": "en",

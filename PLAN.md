@@ -1137,6 +1137,20 @@ hub that carries the post.
   fullscreen, minimal-ui) hides the join window; the same URL in a
   browser tab shows it. The HTML is the same either way (a request
   carries no display mode), so the live feed's swap is untouched.
+- **robots.txt (2026-09-24).** `/robots.txt` welcomes crawlers to the
+  feed, the threads and the profiles and closes two paths, `/stats` and
+  `/v1/stats`: the stats desk links every filter, range and view, and
+  its JSON, an endless space to walk. Found from Cloudflare's edge
+  analytics when Livid asked whether hub.v2core.com was under attack:
+  one GPTBot address had fetched those two paths some 7,000 times an
+  hour for a day, most of the hub's traffic, unseen by the hub's own
+  Bots list because `/stats` is not a counted page. Nothing else is
+  closed: pictures, identicons and preview cards live under `/v1/`, and
+  an unfurler that reads robots.txt (Twitterbot) fetches a card's image
+  there. Cloudflare's managed robots.txt prepends its content-signals
+  block to whatever the origin serves; without an origin file it stood
+  alone, with no Disallow at all. exe.v2core.com got the same file the
+  same day (its stats desk is the same package).
 - The home page is a desk of two windows: stacked, join first, on a
   narrow screen; from 1060px wide the join window sits at the left and
   stays put (sticky) while the feed scrolls beside it. CSS only.
