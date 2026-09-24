@@ -72,38 +72,50 @@ func (s *Store) PostsToSummarize(steps []int, maxTries int, before int64, limit 
 // SetSummary records a thread's summary at a step, written by model
 // from the first `replies` replies in lang, the post's own language,
 // citing the replies in cites ([#n] to the reply's id) — or, with ok
-// false, one more answer that was none. A root deleted meanwhile gets
-// no row.
-func (s *Store) SetSummary(post string, step int, lang, text, model string, replies int, cites map[int]string, ok bool) error {
+// false, one more answer that was none. It says whether it wrote: a
+// root deleted while the model read gets no row, and neither does a
+// summary citing a reply that has left the thread meanwhile (deleted,
+// or under a deleted parent, which stays in posts but falls out of the
+// walk) — checked in the transaction that would keep it (Codex's
+// catch, 2026-09-24), the tries left alone since nothing failed.
+func (s *Store) SetSummary(post string, step int, lang, text, model string, replies int, cites map[int]string, ok bool) (bool, error) {
 	status, c := "ok", ""
 	if !ok {
 		status, text = "failed", ""
 	} else if len(cites) > 0 {
 		b, err := json.Marshal(cites)
 		if err != nil {
-			return err
+			return false, err
 		}
 		c = string(b)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
+	if root, err := rootOf(tx, post); err != nil || root != post {
+		return false, err // gone, or no root
+	}
+	for _, id := range cites {
+		if root, err := rootOf(tx, id); err != nil || root != post {
+			return false, err // the cited reply has left the thread
+		}
+	}
 	var rev int64
 	if ok {
 		if rev, err = nextRev(tx); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if _, err := tx.Exec(`INSERT INTO summaries (post, step, lang, src, text, model, replies, cites, status, tries, ts, origin, rev)
-		SELECT ?,?,?,'',?,?,?,?,?,1,?,'',? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+		VALUES (?,?,?,'',?,?,?,?,?,1,?,'',?)
 		ON CONFLICT(post, step, lang) DO UPDATE SET text=excluded.text, model=excluded.model, replies=excluded.replies,
 		cites=excluded.cites, status=excluded.status, tries=summaries.tries+1, ts=excluded.ts, origin='', rev=excluded.rev`,
-		post, step, lang, text, model, replies, c, status, time.Now().UnixMilli(), rev, post); err != nil {
-		return err
+		post, step, lang, text, model, replies, c, status, time.Now().UnixMilli(), rev); err != nil {
+		return false, err
 	}
-	return tx.Commit()
+	return true, tx.Commit()
 }
 
 // Summary is one kept summary of a thread.
@@ -223,37 +235,47 @@ func (s *Store) SummariesToTranslate(targets []string, maxTries int, before int6
 // SetSummaryTranslation records a thread's summary at a step put into
 // lang from src, the language it was written in, keeping the cites of
 // the one it was made from — or, with ok false, one more answer that
-// was none.
-func (s *Store) SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) error {
+// was none. It says whether it wrote: a root gone meanwhile, or the
+// original it translates gone (a cited reply's delete took it), gets
+// no row.
+func (s *Store) SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) (bool, error) {
 	status, c := "ok", ""
 	if !ok {
 		status, text = "failed", ""
 	} else if len(cites) > 0 {
 		b, err := json.Marshal(cites)
 		if err != nil {
-			return err
+			return false, err
 		}
 		c = string(b)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
+	var n int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM summaries m JOIN posts p ON p.id = m.post
+		WHERE m.post = ? AND m.step = ? AND m.src = '' AND m.status = 'ok'`, post, step).Scan(&n); err != nil {
+		return false, err
+	}
+	if n == 0 {
+		return false, nil
+	}
 	var rev int64
 	if ok {
 		if rev, err = nextRev(tx); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if _, err := tx.Exec(`INSERT INTO summaries (post, step, lang, src, text, model, replies, cites, status, tries, ts, origin, rev)
-		SELECT ?,?,?,?,?,?,?,?,?,1,?,'',? WHERE EXISTS (SELECT 1 FROM posts WHERE id=?)
+		VALUES (?,?,?,?,?,?,?,?,?,1,?,'',?)
 		ON CONFLICT(post, step, lang) DO UPDATE SET src=excluded.src, text=excluded.text, model=excluded.model, replies=excluded.replies,
 		cites=excluded.cites, status=excluded.status, tries=summaries.tries+1, ts=excluded.ts, origin='', rev=excluded.rev`,
-		post, step, lang, src, text, model, replies, c, status, time.Now().UnixMilli(), rev, post); err != nil {
-		return err
+		post, step, lang, src, text, model, replies, c, status, time.Now().UnixMilli(), rev); err != nil {
+		return false, err
 	}
-	return tx.Commit()
+	return true, tx.Commit()
 }
 
 // ---- one hub pays, its peers take (PLAN.md, Thread summaries) ----

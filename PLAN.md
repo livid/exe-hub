@@ -2422,6 +2422,18 @@ at a reply on its page.
   step — that holds past 1000 without a new step; any other delete
   leaves the summaries standing, the block telling what each read. A
   root's delete takes them all.
+  **And the in-flight hole** (Codex's catch, the same day: a reply
+  deleted while the model was reading it had no row to take yet, and
+  the answer landed citing it): `SetSummary` checks, in the
+  transaction that would keep the row, that the root is still a root
+  and that every cited reply is still in its tree — membership by the
+  walk up, not the row merely standing, since a delete does not cascade
+  and a reply under a deleted parent stays in `posts` while falling out
+  of the thread — and says whether it wrote; the worker announces a
+  summary only when it did, and a discarded answer spends no try, the
+  step read again next pass with the thread as it is. A translation
+  of a summary is kept only while the one it translates is (the same
+  hole one level up, which the daemon's hub agent pointed at).
 - **On the bus**: `post.summary` with the root as its id and `root`, so
   a live thread page (which matches by root) brings it in.
 - **The window (turn 3; moved to the left the same day).** A thread

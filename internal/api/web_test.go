@@ -1766,7 +1766,7 @@ func TestWebSummaryWindow(t *testing.T) {
 	if err := s.St.SetLang(root, "en", "m", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.St.SetSummary(root, 10, "en", "**Ten replies in.**\n\n- One point [#3]\n- Open: the rest [#10]", "glm-5.3:cloud", 10, map[int]string{3: ids[2], 10: ids[9]}, true); err != nil {
+	if _, err := s.St.SetSummary(root, 10, "en", "**Ten replies in.**\n\n- One point [#3]\n- Open: the rest [#10]", "glm-5.3:cloud", 10, map[int]string{3: ids[2], 10: ids[9]}, true); err != nil {
 		t.Fatal(err)
 	}
 	_, body = get(t, h, "/p/"+root)

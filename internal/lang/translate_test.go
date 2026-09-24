@@ -150,11 +150,11 @@ func (o *fakeOwed) SummariesToTranslate(targets []string, maxTries int, before i
 	return out, nil
 }
 
-func (o *fakeOwed) SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) error {
+func (o *fakeOwed) SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) (bool, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.rows[post+" "+fmt.Sprint(step)+" "+lang] = fakeRow{text, model, ok, 1}
-	return nil
+	return true, nil
 }
 
 func (o *fakeOwed) KeptTranslations(lang string) ([]store.KeptTranslation, error) {

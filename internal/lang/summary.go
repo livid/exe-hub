@@ -25,7 +25,7 @@ type Summaries interface {
 	PostsToSummarize(steps []int, maxTries int, before int64, limit int) ([]store.OwedSummary, error)
 	Post(id string) (*store.FeedPost, error)
 	Thread(id string, limit int) ([]store.FeedPost, error)
-	SetSummary(post string, step int, lang, text, model string, replies int, cites map[int]string, ok bool) error
+	SetSummary(post string, step int, lang, text, model string, replies int, cites map[int]string, ok bool) (bool, error)
 }
 
 // Summarizer writes each thread's summary at every step of the ladder
@@ -89,9 +89,17 @@ func (z *Summarizer) pass() (up bool) {
 					return noAnswer
 				}
 			}
-			if err := z.St.SetSummary(o.ID, o.Step, o.Lang, text, z.M.Name, len(replies), cites, err == nil); err != nil {
-				log.Printf("summarize %s at %d: store: %v", o.ID, o.Step, err)
+			written, serr := z.St.SetSummary(o.ID, o.Step, o.Lang, text, z.M.Name, len(replies), cites, err == nil)
+			if serr != nil {
+				log.Printf("summarize %s at %d: store: %v", o.ID, o.Step, serr)
 				return stop
+			}
+			if !written {
+				// the root went, or a cited reply left the thread, while the
+				// model read: nothing kept, nothing announced, no try spent;
+				// the next pass reads the thread as it is now
+				log.Printf("summarize %s at %d: the thread changed under the model, discarded", o.ID, o.Step)
+				return noAnswer
 			}
 			if err == nil {
 				n++

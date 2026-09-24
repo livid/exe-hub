@@ -248,7 +248,7 @@ type Owed interface {
 	// a thread's newest summary is owed the same languages (PLAN.md,
 	// Thread summaries)
 	SummariesToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedSummaryTranslation, error)
-	SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) error
+	SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) (bool, error)
 }
 
 // Translator puts every post into the languages the hub keeps it in
@@ -391,9 +391,13 @@ func (t *Translator) passSummaries() (up bool) {
 					return noAnswer
 				}
 			}
-			if err := t.St.SetSummaryTranslation(o.Post, o.Step, o.To, o.From, out, t.M.Name, o.Replies, o.Cites, err == nil); err != nil {
-				log.Printf("translate summary %s at %d to %s: store: %v", o.Post, o.Step, o.To, err)
+			written, serr := t.St.SetSummaryTranslation(o.Post, o.Step, o.To, o.From, out, t.M.Name, o.Replies, o.Cites, err == nil)
+			if serr != nil {
+				log.Printf("translate summary %s at %d to %s: store: %v", o.Post, o.Step, o.To, serr)
 				return stop
+			}
+			if !written {
+				return noAnswer // the summary it translates went meanwhile: nothing kept, nothing announced
 			}
 			if err == nil {
 				mu.Lock()

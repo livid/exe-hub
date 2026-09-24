@@ -441,7 +441,7 @@ func TestPullSummaries(t *testing.T) {
 		}
 		shortR = append(shortR, id)
 	}
-	if err := peer.st.SetSummary(whole, 10, "en", "**Whole.**\n- One [#3]", "glm", 10, map[int]string{3: wholeR[2]}, true); err != nil {
+	if _, err := peer.st.SetSummary(whole, 10, "en", "**Whole.**\n- One [#3]", "glm", 10, map[int]string{3: wholeR[2]}, true); err != nil {
 		t.Fatal(err)
 	}
 	peer.st.SetSummaryTranslation(whole, 10, "zh-Hans", "en", "**完整。**\n- 一 [#3]", "glm", 10, map[int]string{3: wholeR[2]}, true)

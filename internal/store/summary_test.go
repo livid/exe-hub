@@ -58,10 +58,10 @@ func TestSummaries(t *testing.T) {
 		t.Fatalf("owed = %+v", owed)
 	}
 	// the 10-reply one lands with a cite; the 20 one fails its first try
-	if err := s.SetSummary(big, 10, "en", "**Ten.**\n- one [#3]", "m", 10, map[int]string{3: replies[2]}, true); err != nil {
+	if _, err := s.SetSummary(big, 10, "en", "**Ten.**\n- one [#3]", "m", 10, map[int]string{3: replies[2]}, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetSummary(big, 20, "en", "garbage", "m", 20, nil, false); err != nil {
+	if _, err := s.SetSummary(big, 20, "en", "garbage", "m", 20, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if owed, _ = s.PostsToSummarize(steps, 3, 0, 10); len(owed) != 0 {
@@ -76,7 +76,7 @@ func TestSummaries(t *testing.T) {
 	if owed, _ = s.PostsToSummarize(steps, 3, soon, 10); len(owed) != 0 {
 		t.Fatalf("owed after three misses = %+v", owed)
 	}
-	if err := s.SetSummary(big, 20, "en", "**Twenty.**", "m", 20, nil, true); err != nil {
+	if _, err := s.SetSummary(big, 20, "en", "**Twenty.**", "m", 20, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.Summaries(big)
@@ -100,7 +100,35 @@ func TestSummaries(t *testing.T) {
 	if owed, _ = s.PostsToSummarize(steps, 3, 0, 10); len(owed) != 1 || owed[0].Step != 10 || owed[0].Replies != 21 {
 		t.Fatalf("owed after the cited reply went = %+v", owed)
 	}
-	if n, err := s.DropSummaries(big, 0); err != nil || n != 1 {
+	// the in-flight hole (Codex's catch): a summary the model wrote while a
+	// cited reply left the thread — deleted, or under a deleted parent —
+	// is refused in the transaction that would keep it, no row, no try
+	// spent; so is one whose root went; a translation of one that is gone
+	// is refused too
+	if wrote, err := s.SetSummary(big, 10, "en", "**Stale.**\n- cites the deleted [#3]", "m", 10, map[int]string{3: replies[2]}, true); err != nil || wrote {
+		t.Errorf("a summary citing a deleted reply: wrote %v, %v", wrote, err)
+	}
+	if wrote, _ := s.SetSummary(big, 10, "en", "**Stale.**\n- cites the orphan [#4]", "m", 10, map[int]string{4: replies[11]}, true); wrote {
+		t.Error("a summary citing a reply under a deleted parent was kept")
+	}
+	if got, _ = s.Summaries(big); len(got) != 1 || got[0].Step != 20 {
+		t.Fatalf("after the refused rows: %+v", got)
+	}
+	var tries int
+	s.db.QueryRow(`SELECT IFNULL(MAX(tries), 0) FROM summaries WHERE post = ? AND step = 10`, big).Scan(&tries)
+	if tries != 0 {
+		t.Errorf("a refused row spent a try: %d", tries)
+	}
+	if wrote, _ := s.SetSummaryTranslation(big, 10, "zh-Hans", "en", "**十。**", "m", 10, nil, true); wrote {
+		t.Error("a translation of a summary that is gone was kept")
+	}
+	if wrote, err := s.SetSummaryTranslation(big, 20, "zh-Hans", "en", "**二十。**", "m", 20, nil, true); err != nil || !wrote {
+		t.Errorf("a translation of a kept summary: wrote %v, %v", wrote, err)
+	}
+	if got, _ = s.Summaries(big); len(got) != 2 || got[1].Lang != "zh-Hans" || got[1].Src != "en" {
+		t.Fatalf("with the translation: %+v", got)
+	}
+	if n, err := s.DropSummaries(big, 0); err != nil || n != 2 {
 		t.Fatalf("DropSummaries = %d, %v", n, err)
 	}
 	if owed, _ = s.PostsToSummarize(steps, 3, 0, 10); len(owed) != 2 {
@@ -117,6 +145,9 @@ func TestSummaries(t *testing.T) {
 	ingest(t, s, a, "post.delete", map[string]any{"post": big})
 	if got, _ = s.Summaries(big); len(got) != 0 {
 		t.Fatalf("the root went and its summaries stayed: %+v", got)
+	}
+	if wrote, _ := s.SetSummary(big, 10, "en", "**Late.**", "m", 10, nil, true); wrote {
+		t.Error("a summary of a deleted root was kept")
 	}
 	if r, err := s.Root(replies[0]); err != nil || r != "" {
 		t.Errorf("Root of an orphaned reply = %q, %v", r, err)

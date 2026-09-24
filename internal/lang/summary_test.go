@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"exehub/internal/events"
 	"exehub/internal/store"
 )
 
@@ -72,6 +74,7 @@ type fakeSummaries struct {
 	trees map[string][]store.FeedPost
 	rows  map[string]string // "post step" -> text, "" for a failed try
 	cites map[string]map[int]string
+	gone  map[string]bool // roots whose thread changed under the model: the store refuses the row
 }
 
 func (f *fakeSummaries) PostsToSummarize(steps []int, maxTries int, before int64, limit int) ([]store.OwedSummary, error) {
@@ -99,10 +102,13 @@ func (f *fakeSummaries) Thread(id string, limit int) ([]store.FeedPost, error) {
 	}
 	return t, nil
 }
-func (f *fakeSummaries) SetSummary(post string, step int, lang, text, model string, replies int, cites map[int]string, ok bool) error {
+func (f *fakeSummaries) SetSummary(post string, step int, lang, text, model string, replies int, cites map[int]string, ok bool) (bool, error) {
+	if f.gone[post] {
+		return false, nil // the thread changed under the model
+	}
 	f.rows[post+" "+fmt.Sprint(step)] = text
 	f.cites[post+" "+fmt.Sprint(step)] = cites
-	return nil
+	return true, nil
 }
 
 // TestSummarizerPass: the thread goes to the model numbered in order,
@@ -122,23 +128,48 @@ func TestSummarizerPass(t *testing.T) {
 		}
 		return 200, "**Where it stands.**\n\n- One point [#2]\n- Open: the rest [#10]\n"
 	}}
-	st := &fakeSummaries{rows: map[string]string{}, cites: map[string]map[int]string{},
+	st := &fakeSummaries{rows: map[string]string{}, cites: map[string]map[int]string{}, gone: map[string]bool{"stale": true},
 		posts: map[string]*store.FeedPost{
+			"stale": {ID: "stale", AuthorName: "Ann", Text: "changes under the model"},
 			"ok":    {ID: "ok", AuthorName: "Ann", Text: "the post"},
 			"bad":   {ID: "bad", AuthorName: "Ann", Text: "short answer"},
 			"r":     {ID: "r", AuthorName: "Ann", Text: "refuse me"},
 			"thin":  {ID: "thin", AuthorName: "Ann", Text: "lost replies"},
 			"twice": {ID: "twice", AuthorName: "Ann", Text: "the other post"},
 		},
-		trees: map[string][]store.FeedPost{"ok": replies(12), "bad": replies(10), "r": replies(10), "thin": replies(7), "twice": replies(25)},
+		trees: map[string][]store.FeedPost{"ok": replies(12), "bad": replies(10), "r": replies(10), "thin": replies(7), "twice": replies(25), "stale": replies(10)},
 		owed: []store.OwedSummary{
+			{ID: "stale", Lang: "en", Step: 10, Replies: 10},
 			{ID: "r", Lang: "en", Step: 10, Replies: 10}, {ID: "ok", Lang: "en", Step: 10, Replies: 12},
 			{ID: "bad", Lang: "en", Step: 10, Replies: 10}, {ID: "thin", Lang: "en", Step: 10, Replies: 10},
 			{ID: "twice", Lang: "en", Step: 10, Replies: 25}, {ID: "twice", Lang: "en", Step: 20, Replies: 25},
 		}}
-	z := NewSummarizer(st, newFake(t, f), nil)
+	bus := events.New()
+	sub := bus.Subscribe()
+	defer bus.Unsubscribe(sub)
+	z := NewSummarizer(st, newFake(t, f), bus)
 	if !z.pass() {
 		t.Fatal("pass = false with one refused thread, want true")
+	}
+	// what landed was announced, with the root; the one the store refused
+	// (the thread changed under the model) was not
+	announced := map[string]int{}
+	for done := false; !done; {
+		select {
+		case ev := <-sub:
+			if ev.Type != "post.summary" || ev.Root != ev.ID {
+				t.Errorf("event %+v", ev)
+			}
+			announced[ev.ID]++
+		case <-time.After(200 * time.Millisecond):
+			done = true
+		}
+	}
+	if announced["ok"] != 1 || announced["twice"] != 2 || announced["stale"] != 0 || announced["bad"] != 0 || len(announced) != 2 {
+		t.Errorf("announced = %v", announced)
+	}
+	if _, there := st.rows["stale 10"]; there {
+		t.Error("the thread that changed under the model wrote a row")
 	}
 	if len(st.rows) != 4 || st.rows["ok 10"] == "" || st.rows["bad 10"] != "" || st.rows["twice 10"] == "" || st.rows["twice 20"] == "" {
 		t.Fatalf("rows = %+v", st.rows)
