@@ -462,7 +462,7 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 		if v.Avatar != "" {
 			p.mirrorNow(base, hub, v.Avatar, true)
 		}
-	case *envelope.PostDelete:
+	case *envelope.PostDelete, *envelope.PostMark:
 		// no preparation needed
 	default:
 		// moderation and peer ops never replicate; the server filters

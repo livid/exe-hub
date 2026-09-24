@@ -253,3 +253,42 @@ func TestHealLeavesASilentPeerAlone(t *testing.T) {
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// TestMarkReplicates: a post.mark travels between hubs like the post it
+// ticks — the puller keeps it (its type switch dropped every op it did
+// not name, which lost the first marks on the public hub, 2026-09-24)
+// and the box shows ticked here after the pull.
+func TestMarkReplicates(t *testing.T) {
+	r := newRig(t)
+	peer := newServingHub(t)
+	raw, sig, e, op := r.signed("- [ ] one\n- [ ] two")
+	id, _, err := peer.st.Ingest(raw, sig, e, op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.seq++
+	mraw, _ := json.Marshal(map[string]any{
+		"type": "post.mark", "author": base64.StdEncoding.EncodeToString(r.pub), "seq": r.seq, "ts": 1756500000001,
+		"body": map[string]any{"post": id, "box": 1, "done": true},
+	})
+	me, err := envelope.Parse(mraw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mop, err := me.Op()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := peer.st.Ingest(mraw, ed25519.Sign(r.priv, append([]byte(envelope.Prefix), mraw...)), me, mop); err != nil {
+		t.Fatal(err)
+	}
+	r.st.Ingest(peerAdd(t, r, peer))
+	r.p.round()
+	p, err := r.st.Post(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Boxes[1] {
+		t.Fatalf("after the pull, boxes %v: want box 1 ticked", p.Boxes)
+	}
+}
