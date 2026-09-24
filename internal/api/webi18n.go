@@ -154,7 +154,8 @@ var webStrings = map[string]map[string]string{
 		"replies.range": "{a}–{b} of {n} replies", // a thread page past one page: the replies this page holds
 		"summary":       "Summary",                // the window beside a long thread, and its meta line
 		"summary.of":    "Summary of the first {n} replies",
-		"reply":         "Reply", // the link under a reply, the Reply window's title and button
+		"summarize":     "Summarize", // the strip's button on a phone, which opens the window
+		"reply":         "Reply",     // the link under a reply, the Reply window's title and button
 		"inreply":       "in reply to",
 		"inreply.name":  "in reply to {name}",
 		// a profile
@@ -292,6 +293,7 @@ var webStrings = map[string]map[string]string{
 		"replies.range":      "第 {a}–{b} 条，共 {n} 条回复",
 		"summary":            "摘要",
 		"summary.of":         "前 {n} 条回复的摘要",
+		"summarize":          "总结",
 		"reply":              "回复",
 		"inreply":            "回复的帖子",
 		"inreply.name":       "回复 {name}",
@@ -421,6 +423,7 @@ var webStrings = map[string]map[string]string{
 		"replies.range":      "{n} 件の返信のうち {a}–{b} 件目",
 		"summary":            "要約",
 		"summary.of":         "最初の {n} 件の返信の要約",
+		"summarize":          "要約",
 		"reply":              "返信",
 		"inreply":            "返信先",
 		"inreply.name":       "{name} への返信",

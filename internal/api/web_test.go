@@ -1853,7 +1853,7 @@ func TestWebSummaryWindow(t *testing.T) {
 	// the phone's way in: the sparkle between Feed and the language menu,
 	// there only with a summary; the window's box is a close box
 	strip := topStrip(body)
-	if f, sp, l := strings.Index(strip, `<span>Feed</span>`), strings.Index(strip, `<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="Summary" aria-label="Summary"><svg viewBox="0 0 14 14"`), strings.Index(strip, `id="lang"`); !(0 < f && f < sp && sp < l) {
+	if f, sp, l := strings.Index(strip, `<span>Feed</span>`), strings.Index(strip, `<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="Summary"><svg viewBox="0 0 14 14"`), strings.Index(strip, `id="lang"`); !(0 < f && f < sp && sp < l) || !strings.Contains(strip, `</svg><span>Summarize</span></button>`) {
 		t.Errorf("the sparkle is not between Feed and the language menu: %q", strip)
 	}
 	if !strings.Contains(win, `<span class="tbox close" title="Close"></span>`) {

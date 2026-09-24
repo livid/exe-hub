@@ -90,17 +90,30 @@ a.mention { text-decoration: none; }
   .desk .side .window { margin: 0; }
 }
 /* narrower than that, the Summary is a press away (Livid's phone
-   design, 2026-09-24): a sparkle in a 20px bevel button between Feed
-   and the language menu on the thread's top strip, there only when the
-   thread has a summary, drawn like the bell — the glyph 14px pixel art
-   in the same yellow, darkened while pressed. It opens the side over
-   the page as a sheet: the Summary window centred in it, 16px from
-   either edge and clear of the phone's safe areas, scrolling on its
-   own when long; the window's close box, a tap beside it or Escape
-   puts it away. From 1060px the side stands beside the thread and the
-   button goes. */
-.pager .spark { grid-column: 2; justify-self: center; display: none; width: 20px; min-width: 0; padding: 0; align-items: center; justify-content: center; }
+   design, 2026-09-24): Summarize, a push button between Feed and the
+   language menu on the thread's top strip, there only when the thread
+   has a summary — 20px like every push button (HIG: the standard
+   height of a push button is 20 pixels), its word after a sparkle,
+   14px pixel art in the bell's yellow, set as Feed sets its arrow,
+   darkened while pressed. It opens the side over the page as a sheet:
+   the Summary window centred in it, 16px from either edge and clear
+   of the phone's safe areas, scrolling on its own when long; the
+   window's close box, a tap beside it or Escape puts it away. From
+   1060px the side stands beside the thread and the button goes. */
+.pager .spark { grid-column: 2; justify-self: center; display: none; align-items: center; gap: 5px; padding: 2px 12px 2px 9px; }
 .pager .spark svg { width: 14px; height: 14px; display: block; shape-rendering: crispEdges; }
+/* The language menu stands at the buttons' height. The HIG's layout
+   chapter gives a pop-up menu button the push button's 20 pixels, and
+   a real Mac OS 9 draws it so — the Monitors panel's Show pop-up,
+   sampled from the daemon's own Mac (~/.exe/mac-os9/modes-control-
+   panel.png, 2026-09-24): 20 rows, black, white, sixteen of face, #aaa,
+   black, the two triangles on rows 5–8 and 11–14 — where the HIG's
+   figure 2-7, which the shared block was drawn from, is one row short
+   at 19. Until the block itself moves to 20 (exe-stats popup.css, for
+   Weather and Blue Pencil too), the hub sizes its own menu the way it
+   sizes its width, and sets the triangles where the Mac has them. */
+.popup.lang { height: 20px; }
+.popup.lang .well b { background-position: 4px 3px; }
 .pager .spark .k { fill: #262626; } .pager .spark .f { fill: #ffcc33; } .pager .spark .s { fill: #cc9933; } .pager .spark .w { fill: #fff; }
 .pager .spark[aria-pressed=true] { background: #666;
   box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
@@ -678,7 +691,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 <div class="window">
   <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title"><a href="/{{.Q}}">{{.Host}}</a></span><span class="stripe"></span></div>
   <div class="frame"{{if .Live}} data-live="thread" data-root="{{.Root}}"{{end}}>
-    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{if .Summary}}<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="{{T "summary"}}" aria-label="{{T "summary"}}">{{template "spark"}}</button>{{end}}{{template "lang" .}}</div>
+    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{if .Summary}}<button type="button" class="btn spark" id="spark" aria-pressed="false" aria-controls="side" title="{{T "summary"}}">{{template "spark"}}<span>{{T "summarize"}}</span></button>{{end}}{{template "lang" .}}</div>
     {{template "post" .Post}}
     {{if .Pages}}<div class="pager rp">{{template "tpager" .}}</div>{{end}}
     {{range .Replies}}{{template "post" .}}{{end}}

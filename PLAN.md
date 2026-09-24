@@ -2540,4 +2540,22 @@ at a reply on its page.
   (`exe-hub-summary-window-test.js`) presses it at 1000px and on a
   375px phone: the sheet's place, the three ways out, nothing scrolling
   sideways; the strip at DPR 1, 1.5 and 2, the phone at 3.
+  **With its word** (Livid, the same day: "We have enough space to show
+  text on button: Summarize; ensure Feed, Summarize, Lang controls have
+  same height. Confirm details with Apple OS 8/9 HIG"): the button
+  reads Summarize (总结, 要約) after the sparkle, set as Feed sets its
+  arrow, a 20px push button like Feed (HIG thig-52: the standard height
+  of a push button is 20 pixels, a pop-up menu button's too). The
+  language menu was 19px, the HIG figure 2-7's rows, and sat half a
+  pixel off the buttons' line in the centred grid row, its lines
+  blurred at DPR 1. A real Mac OS 9 settles it: the Monitors panel's
+  Show pop-up, sampled from the daemon's own Mac
+  (`~/.exe/mac-os9/modes-control-panel.png`), is 20 rows — black,
+  white, sixteen of face, #aaa, black — with the triangles on rows 5–8
+  and 11–14 and no shadow row (the TCP/IP panel's small-font pop-up is
+  16 rows the same way). So the hub's menu is 20px (`.popup.lang`, the
+  triangles at `4px 3px`), the three controls one height on one
+  whole-pixel line; the shared block in exe-stats is due the same move
+  for Weather and Blue Pencil (not this hub's tree). The browser check
+  measures the three heights and tops, the word, and the triangles.
 - **Left**: the JSON API says nothing of summaries yet.
