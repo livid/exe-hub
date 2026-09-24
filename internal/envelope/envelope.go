@@ -89,6 +89,16 @@ type PostDelete struct {
 	Post string `json:"post"`
 }
 
+// PostMark ticks or clears one to-do box of the author's own post
+// (PLAN.md, To-do marks): Box counts the post's boxes as a page reads
+// them, from nought, and Done is the state asked for, never a toggle,
+// so two hubs taking the same marks in a different order agree.
+type PostMark struct {
+	Post string `json:"post"`
+	Box  int    `json:"box"`
+	Done bool   `json:"done"`
+}
+
 // BanSet / BanLift target a profile id (pubkey fingerprint), admin-only.
 type BanSet struct {
 	Target string `json:"target"`
@@ -168,6 +178,7 @@ func MsgID(raw []byte) string {
 // Content limits. Bytes, not runes — they bound storage, not typography.
 const (
 	MaxText     = 8 << 10
+	MaxBoxes    = 1000 // a mark's box is below this; a post's text holds far fewer
 	MaxName     = 64
 	MaxBio      = 1024
 	MaxAlt      = 512
@@ -242,6 +253,18 @@ func (e *Envelope) Op() (any, error) {
 		}
 		if !validMsgID(v.Post) {
 			return nil, errors.New("post: not a post id")
+		}
+		return v, nil
+	case "post.mark":
+		v := &PostMark{}
+		if err := strictBody(e.Body, v); err != nil {
+			return nil, err
+		}
+		if !validMsgID(v.Post) {
+			return nil, errors.New("post: not a post id")
+		}
+		if v.Box < 0 || v.Box >= MaxBoxes {
+			return nil, fmt.Errorf("box: 0 to %d", MaxBoxes-1)
 		}
 		return v, nil
 	case "ban.set":

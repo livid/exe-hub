@@ -1,6 +1,11 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"exehub/internal/store"
+)
 
 // a list is a block like a heading or a table: the breaks around it and
 // one blank line on either side go with it, .first when it opens the
@@ -17,8 +22,8 @@ func TestRenderTextList(t *testing.T) {
 		{"9. nine\n1. ten", `<ol class="w2 first last" style="--n:8"><li>nine</li><li>ten</li></ol>` + "\n"},
 		{"0. nought", `<ol class="first last" style="--n:-1"><li>nought</li></ol>` + "\n"},
 		{"100. a", `<ol class="w3 first last" style="--n:99"><li>a</li></ol>` + "\n"},
-		{"- [ ] open\n- [x] done\n- plain", `<ul class="first last"><li class="box">open</li><li class="box done">done</li><li>plain</li></ul>` + "\n"},
-		{"- [X] **Done:** it\n1. [ ] not a box", `<ul class="first"><li class="box done"><strong>Done:</strong> it</li></ul>` + "\n" + `<ol class="last"><li>[ ] not a box</li></ol>` + "\n"},
+		{"- [ ] open\n- [x] done\n- plain", `<ul class="first last"><li class="box" data-box="0">open</li><li class="box done" data-box="1">done</li><li>plain</li></ul>` + "\n"},
+		{"- [X] **Done:** it\n1. [ ] not a box", `<ul class="first"><li class="box done" data-box="0"><strong>Done:</strong> it</li></ul>` + "\n" + `<ol class="last"><li>[ ] not a box</li></ol>` + "\n"},
 		{"1. one\n\n2. two", `<ol class="first"><li>one</li></ol>` + "\n" + `<ol class="last" style="--n:1"><li>two</li></ol>` + "\n"},
 		{"- one\n1. two", `<ul class="first"><li>one</li></ul>` + "\n" + `<ol class="last"><li>two</li></ol>` + "\n"},
 		{"- **The bar:** a `field` and [Docs](https://x.y)", `<ul class="first last"><li><strong>The bar:</strong> a <code>field</code> and <a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">Docs</a></li></ul>` + "\n"},
@@ -36,5 +41,32 @@ func TestRenderTextList(t *testing.T) {
 	}
 	if got := excerpt("Three things:\n- one\n- **two**\n1. three", 100); got != "Three things: • one • two 1. three" {
 		t.Errorf("excerpt: %q", got)
+	}
+}
+
+// a post's marks (store.FeedPost.Boxes) lay over its boxes by ordinal,
+// counted across the post with fences skipped: a marked box shows its
+// mark's state, an unmarked one the text's; a translated view takes
+// the marks only when it kept the post's box count
+func TestRenderMarked(t *testing.T) {
+	text := "- [ ] one\n- [x] two\n\n```\n- [ ] code\n```\n- [ ] three"
+	got := string(renderMarked(text, nil, map[int]bool{0: true, 1: false}))
+	for _, want := range []string{`<li class="box done" data-box="0">one</li>`, `<li class="box" data-box="1">two</li>`, `<li class="box" data-box="2">three</li>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderMarked lacks %s:\n%s", want, got)
+		}
+	}
+	if got, want := string(renderMarked(text, nil, nil)), string(renderText(text, nil)); got != want {
+		t.Errorf("no marks: renderMarked differs from renderText")
+	}
+	p := store.FeedPost{Text: text, Boxes: map[int]bool{0: true}}
+	if m := trMarks(p, store.Translation{Text: "- [ ] uno\n- [x] dos\n- [ ] tres"}); len(m) != 1 || !m[0] {
+		t.Errorf("a translation with the post's box count takes its marks, got %v", m)
+	}
+	if m := trMarks(p, store.Translation{Text: "- [ ] uno\n- [x] dos"}); m != nil {
+		t.Errorf("a translation short a box takes no marks, got %v", m)
+	}
+	if m := trMarks(store.FeedPost{Text: text}, store.Translation{Text: text}); m != nil {
+		t.Errorf("no marks, none to lay: got %v", m)
 	}
 }

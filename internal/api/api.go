@@ -22,6 +22,7 @@ import (
 
 	"exehub/internal/avatar"
 	"exehub/internal/config"
+	"exehub/internal/card"
 	"exehub/internal/envelope"
 	"exehub/internal/events"
 	"exehub/internal/gate"
@@ -445,6 +446,18 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if m, ok := op.(*envelope.PostMark); ok {
+		// a mark names a box the post has (the store checks the author)
+		text, _, found, err := s.St.PostText(m.Post)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if n := card.Boxes(text); found && m.Box >= n {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("the post has %d boxes, no box %d", n, m.Box))
+			return
+		}
+	}
 	id, unpin, err := s.St.Ingest(in.Envelope, in.Sig, e, op)
 	switch {
 	case errors.Is(err, store.ErrDuplicate):
@@ -492,6 +505,16 @@ func (s *Server) policy(e *envelope.Envelope) error {
 	case "peer.add", "peer.remove":
 		if !admin {
 			return errors.New("peer curation requires an admin key")
+		}
+	case "post.mark":
+		// one's own boxes, no cooldown and no gate (it is no post), but
+		// not from a banned key — the tick shows on the page like words
+		banned, err := s.St.Banned(pid)
+		if err != nil {
+			return err
+		}
+		if banned {
+			return errors.New("this key is banned from posting here")
 		}
 	case "post.create", "profile.set":
 		banned, err := s.St.Banned(pid)

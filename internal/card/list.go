@@ -102,3 +102,27 @@ func Unlist(text string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// Boxes counts a text's to-do boxes as a page reads them, in reading
+// order, the fenced blocks skipped (a "- [ ]" inside a fence is code):
+// a mark (envelope.PostMark) names its box by this count, from nought,
+// and the page and the Hub app count the same way as they draw.
+func Boxes(text string) int {
+	lines := strings.Split(text, "\n")
+	n := 0
+	for i := 0; i < len(lines); i++ {
+		if f, k := FenceAt(lines, i); f != nil {
+			i += k - 1
+			continue
+		}
+		if l, k := ListAt(lines, i); l != nil {
+			for _, b := range l.Boxes {
+				if b != "" {
+					n++
+				}
+			}
+			i += k - 1
+		}
+	}
+	return n
+}

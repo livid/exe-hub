@@ -18,6 +18,7 @@ type author struct {
 	priv ed25519.PrivateKey
 	pub  ed25519.PublicKey
 	seq  int64
+	ts   int64 // the next message's ts claim, when set
 }
 
 func newAuthor(t *testing.T) *author {
@@ -34,7 +35,7 @@ func (a *author) msg(t *testing.T, typ string, body any) ([]byte, []byte, *envel
 	a.seq++
 	raw, err := json.Marshal(map[string]any{
 		"type": typ, "author": base64.StdEncoding.EncodeToString(a.pub),
-		"seq": a.seq, "ts": 1756500000000, "body": body,
+		"seq": a.seq, "ts": a.tsClaim(), "body": body,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +56,13 @@ func (a *author) msg(t *testing.T, typ string, body any) ([]byte, []byte, *envel
 }
 
 func (a *author) id() string { return identity.Fingerprint(a.pub) }
+
+func (a *author) tsClaim() int64 {
+	if a.ts != 0 {
+		return a.ts
+	}
+	return 1756500000000
+}
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
@@ -444,5 +452,81 @@ func TestRebuild(t *testing.T) {
 	n, _ := s.Seq(base64.StdEncoding.EncodeToString(a.pub))
 	if n != 4 {
 		t.Fatalf("seq after rebuild %d, want 4", n)
+	}
+}
+
+// TestMarks: a post.mark ticks or clears one box of the author's own
+// post, the newest by (ts, id) holding a box whatever order the marks
+// came in; a stranger's mark and one for a post that is not here are
+// refused; a delete takes the marks with the post; Rebuild lands on the
+// same state.
+func TestMarks(t *testing.T) {
+	s := openTest(t)
+	alice, mallory := newAuthor(t), newAuthor(t)
+	ingest(t, s, alice, "profile.set", map[string]string{"name": "Alice"})
+	p := ingest(t, s, alice, "post.create", map[string]string{"text": "- [ ] one\n- [x] two\n- [ ] three"})
+
+	raw, sig, e, op := mallory.msg(t, "post.mark", map[string]any{"post": p, "box": 0, "done": true})
+	if _, _, err := s.Ingest(raw, sig, e, op); !errors.Is(err, ErrNotOwner) {
+		t.Fatalf("mallory's mark: want ErrNotOwner, got %v", err)
+	}
+	raw, sig, e, op = alice.msg(t, "post.mark", map[string]any{"post": fmt.Sprintf("%064x", 7), "box": 0, "done": true})
+	if _, _, err := s.Ingest(raw, sig, e, op); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("mark on no post: want ErrNotFound, got %v", err)
+	}
+	alice.seq-- // the rejected message consumed no seq
+
+	boxes := func(want map[int]bool) {
+		t.Helper()
+		got, err := s.Post(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Boxes) != len(want) {
+			t.Fatalf("boxes %v, want %v", got.Boxes, want)
+		}
+		for k, v := range want {
+			if b, ok := got.Boxes[k]; !ok || b != v {
+				t.Fatalf("boxes %v, want %v", got.Boxes, want)
+			}
+		}
+	}
+	boxes(nil)
+	ingest(t, s, alice, "post.mark", map[string]any{"post": p, "box": 0, "done": true})
+	ingest(t, s, alice, "post.mark", map[string]any{"post": p, "box": 1, "done": false})
+	boxes(map[int]bool{0: true, 1: false})
+	// a mark that arrives later but was made earlier loses the box
+	alice.ts = 1756400000000
+	ingest(t, s, alice, "post.mark", map[string]any{"post": p, "box": 0, "done": false})
+	boxes(map[int]bool{0: true, 1: false})
+	// a newer one takes it
+	alice.ts = 1756600000000
+	ingest(t, s, alice, "post.mark", map[string]any{"post": p, "box": 0, "done": false})
+	boxes(map[int]bool{0: false, 1: false})
+	alice.ts = 0
+
+	if err := s.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	boxes(map[int]bool{0: false, 1: false})
+
+	ingest(t, s, alice, "post.delete", map[string]string{"post": p})
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM marks WHERE post=?`, p).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("marks after delete: %d, %v", n, err)
+	}
+	// and a mark travels between hubs like a post
+	page, _, err := s.ReplicationPage(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marks := 0
+	for _, m := range page {
+		if e, err := envelope.Parse(m.Envelope); err == nil && e.Type == "post.mark" {
+			marks++
+		}
+	}
+	if marks != 4 {
+		t.Fatalf("replication page carries %d marks, want 4", marks)
 	}
 }

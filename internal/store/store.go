@@ -104,6 +104,18 @@ CREATE TABLE IF NOT EXISTS posts (
 CREATE INDEX IF NOT EXISTS posts_author ON posts(author, received);
 CREATE INDEX IF NOT EXISTS posts_reply ON posts(reply_to, received);
 
+-- a to-do box's state as its author last set it by a post.mark (PLAN.md,
+-- To-do marks): box counts the post's boxes as a page reads them, ts and
+-- id are the winning mark's, so a later mark with an older ts loses
+CREATE TABLE IF NOT EXISTS marks (
+  post TEXT NOT NULL,
+  box  INTEGER NOT NULL,
+  done INTEGER NOT NULL,
+  ts   INTEGER NOT NULL,
+  id   TEXT NOT NULL,
+  PRIMARY KEY (post, box)
+);
+
 CREATE TABLE IF NOT EXISTS embeds (
   post     TEXT NOT NULL,
   idx      INTEGER NOT NULL,
@@ -574,6 +586,9 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM embeds WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
+		if _, err := tx.Exec(`DELETE FROM marks WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
 		// The post's link card goes with it, its picture's pin released.
 		var cimg string
 		if err := tx.QueryRow(`SELECT image FROM cards WHERE post=?`, v.Post).Scan(&cimg); err != nil && err != sql.ErrNoRows {
@@ -651,6 +666,28 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 			}
 		}
 		return unpin, err
+	case *envelope.PostMark:
+		var owner string
+		err = tx.QueryRow(`SELECT author FROM posts WHERE id=?`, v.Post).Scan(&owner)
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		if owner != pid {
+			return nil, ErrNotOwner
+		}
+		// The newest mark holds a box, by the mark's own ts and then its
+		// id — never by arrival — so two hubs taking the same marks in a
+		// different order, and a replay, land on the same state.
+		if _, err := tx.Exec(`INSERT INTO marks (post, box, done, ts, id) VALUES (?,?,?,?,?)
+			ON CONFLICT(post, box) DO UPDATE SET done=excluded.done, ts=excluded.ts, id=excluded.id
+			WHERE excluded.ts > marks.ts OR (excluded.ts = marks.ts AND excluded.id > marks.id)`,
+			v.Post, v.Box, v.Done, e.TS, id); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	case *envelope.BanSet:
 		_, err = tx.Exec(`INSERT INTO bans (target, reason, by, ts) VALUES (?,?,?,?)
 			ON CONFLICT(target) DO UPDATE SET reason=excluded.reason, by=excluded.by, ts=excluded.ts`,
@@ -732,7 +769,7 @@ func (s *Store) Rebuild() error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, t := range []string{"profiles", "posts", "embeds", "bans", "seqs", "peers"} {
+	for _, t := range []string{"profiles", "posts", "embeds", "marks", "bans", "seqs", "peers"} {
 		if _, err := tx.Exec(`DELETE FROM ` + t); err != nil {
 			return err
 		}
@@ -834,6 +871,11 @@ type FeedPost struct {
 	// name each goes by today — its newest reply's too (see PLAN.md,
 	// Mentions)
 	Mentions map[string]string `json:"mentions,omitempty"`
+	// the to-do boxes its author has ticked or cleared since posting,
+	// box ordinal (as a page counts them, from nought) to its state;
+	// a box with no mark stands as the text has it (see PLAN.md, To-do
+	// marks)
+	Boxes map[int]bool `json:"boxes,omitempty"`
 }
 
 // ReplyRef is the newest reply in a thread, as the root carries it.
@@ -995,7 +1037,44 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 	if err := s.nameMentions(out); err != nil {
 		return nil, err
 	}
+	if err := s.postBoxes(out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// postBoxes fills each post's Boxes from its marks: one lookup for the
+// page, and a post no mark has touched carries none.
+func (s *Store) postBoxes(posts []FeedPost) error {
+	if len(posts) == 0 {
+		return nil
+	}
+	args := make([]any, len(posts))
+	for i, p := range posts {
+		args[i] = p.ID
+	}
+	rows, err := s.db.Query(`SELECT post, box, done FROM marks WHERE post IN (?`+strings.Repeat(",?", len(posts)-1)+`)`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	by := map[string]map[int]bool{}
+	for rows.Next() {
+		var post string
+		var box int
+		var done bool
+		if err := rows.Scan(&post, &box, &done); err != nil {
+			return err
+		}
+		if by[post] == nil {
+			by[post] = map[int]bool{}
+		}
+		by[post][box] = done
+	}
+	for i := range posts {
+		posts[i].Boxes = by[posts[i].ID]
+	}
+	return rows.Err()
 }
 
 // quoteRef is the post a card quotes, as it stands now, with the
@@ -2474,7 +2553,7 @@ type ReplMsg struct {
 
 // replicated content ops; moderation and peer curation are local policy
 // and never leave the hub
-var contentTypes = map[string]bool{"profile.set": true, "post.create": true, "post.delete": true}
+var contentTypes = map[string]bool{"profile.set": true, "post.create": true, "post.delete": true, "post.mark": true}
 
 // ReplicationPage returns local-origin content messages after the given
 // rowid cursor. limit bounds rows scanned, not returned, so a stretch of

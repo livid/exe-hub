@@ -8,16 +8,25 @@ import "sync"
 
 // Event is one feed-visible change. Type is the envelope op that caused
 // it; ID is the post id it concerns (for post.delete, the deleted post,
-// not the delete message's own id; for profile.set, the message itself —
-// Author names the profile that changed). post.card is the one type with
+// not the delete message's own id; for post.mark, the post whose box
+// changed, Mark saying which and how; for profile.set, the message
+// itself — Author names the profile that changed). post.card is the one type with
 // no envelope behind it: something the hub derived for the post landed —
 // its link card, the card's archived copy, or a linked picture (none of
 // them signed) — so live pages refetch the post and draw it in.
 type Event struct {
-	Type    string `json:"type"`               // "post.create" | "post.delete" | "profile.set" | "post.card" | "post.translation"
+	Type    string `json:"type"`               // "post.create" | "post.delete" | "post.mark" | "profile.set" | "post.card" | "post.translation"
 	ID      string `json:"id"`                 // post id
 	ReplyTo string `json:"reply_to,omitempty"` // parent post id when the post is a reply
 	Author  string `json:"author"`             // author profile id
+	Mark    *Mark  `json:"mark,omitempty"`     // post.mark: the box and its new state
+}
+
+// Mark is one to-do box's change: which box, counted as a page reads
+// them, and whether it is done now.
+type Mark struct {
+	Box  int  `json:"box"`
+	Done bool `json:"done"`
 }
 
 type Broadcaster struct {

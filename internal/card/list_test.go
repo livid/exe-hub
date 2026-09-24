@@ -41,3 +41,24 @@ func TestListAt(t *testing.T) {
 		}
 	}
 }
+
+// Boxes counts a text's boxes the way a page draws them: across every
+// list, a fenced "- [ ]" not among them, a numbered item's brackets
+// no box
+func TestBoxes(t *testing.T) {
+	for _, c := range []struct {
+		text string
+		n    int
+	}{
+		{"- [ ] a\n- [x] b", 2},
+		{"- [ ] a\n- b\n\nwords\n- [X] c", 2},
+		{"```\n- [ ] code\n```\n- [ ] a", 1},
+		{"1. [ ] a", 0},
+		{"plain - [ ] words", 0},
+		{"", 0},
+	} {
+		if got := Boxes(c.text); got != c.n {
+			t.Errorf("Boxes(%q) = %d, want %d", c.text, got, c.n)
+		}
+	}
+}

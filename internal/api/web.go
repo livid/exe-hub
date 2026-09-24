@@ -397,12 +397,21 @@ var (
 // page's language, for the words of the button a fenced block carries
 // (nil, in a test, reads as English).
 func renderText(text string, l *webLocale) template.HTML {
+	return renderMarked(text, l, nil)
+}
+
+// renderMarked is renderText with a post's marks (store.FeedPost.Boxes)
+// laid over its to-do boxes: the k-th box as the text is read, fences
+// skipped, shows its mark's state when it has one and the text's when
+// not; every box carries its count in data-box, for a click to name.
+func renderMarked(text string, l *webLocale, marks map[int]bool) template.HTML {
 	if l == nil {
 		l = webLocales["en"]
 	}
 	var b strings.Builder
 	lines := strings.Split(text, "\n")
 	plain := ""
+	box := 0 // boxes drawn so far, the next one's ordinal
 	// block closes the words before a block: the break before it and one
 	// blank line above it go with it
 	block := func() {
@@ -435,7 +444,7 @@ func renderText(text string, l *webLocale) template.HTML {
 		} else if l, n := card.ListAt(lines, i); l != nil {
 			block()
 			i += n - 1
-			writeList(&b, l, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "")
+			writeList(&b, l, b.Len() == 0, strings.TrimSpace(strings.Join(lines[i+1:], "")) == "", marks, &box)
 		} else {
 			plain += lines[i]
 			if i < len(lines)-1 {
@@ -525,9 +534,11 @@ func writeTable(b *strings.Builder, t *card.Table, first, last bool) {
 // counter begun at --n, one under the first number), so that number
 // rides in the style, and the class w2 or w3 says how many digits the
 // widest marker has, for the room it needs left of the words. A to-do
-// item (card.List.Boxes) is li.box, .done when its box is ticked: the
+// item (card.List.Boxes) is li.box, .done when its box is ticked — as
+// typed, or as its author's newest mark has it (marks, by the box's
+// ordinal in the post, which box counts up and data-box carries): the
 // page draws the box where the bullet would stand.
-func writeList(b *strings.Builder, l *card.List, first, last bool) {
+func writeList(b *strings.Builder, l *card.List, first, last bool, marks map[int]bool, box *int) {
 	tag, class, style := "ul", "", ""
 	if l.Ordered {
 		tag = "ol"
@@ -551,11 +562,16 @@ func writeList(b *strings.Builder, l *card.List, first, last bool) {
 	for k, item := range l.Items {
 		b.WriteString("<li")
 		if l.Boxes != nil && l.Boxes[k] != "" {
+			done := l.Boxes[k] == "x"
+			if v, ok := marks[*box]; ok {
+				done = v
+			}
 			b.WriteString(` class="box`)
-			if l.Boxes[k] == "x" {
+			if done {
 				b.WriteString(" done")
 			}
-			b.WriteString(`"`)
+			b.WriteString(`" data-box="` + strconv.Itoa(*box) + `"`)
+			*box++
 		}
 		b.WriteString(">")
 		writeInline(b, item)
@@ -674,8 +690,8 @@ func writePlain(b *strings.Builder, s string) {
 // in the HTML as in the post; a node's start counts as a free edge, the
 // way the Hub app's chunks begin. An id without a name stays as typed.
 // rd is the reader: the ?lang= its links carry and the page's words.
-func renderPost(text string, names map[string]string, rd webReading) template.HTML {
-	page := renderText(text, rd.L)
+func renderPost(text string, names map[string]string, rd webReading, marks map[int]bool) template.HTML {
+	page := renderMarked(text, rd.L, marks)
 	if len(names) == 0 {
 		return page
 	}
@@ -850,9 +866,9 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 	trs := s.webTranslations(rd, ids)
 	out := make([]webPost, len(posts))
 	for i, p := range posts {
-		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions, rd), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
+		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions, rd, p.Boxes), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
 		if t, ok := trs[p.ID]; ok && p.Text != "" {
-			out[i].Tr = rd.tr(t, p.Mentions)
+			out[i].Tr = rd.tr(t, p.Mentions, trMarks(p, t))
 		}
 		if p.LastReply != nil && p.ReplyTo == "" {
 			name := p.LastReply.AuthorName
@@ -1132,8 +1148,8 @@ func (rd webReading) shows(from string) bool {
 // tr dresses a translation for the page, the line under it in the
 // page's language; names is the post's mentions, which a translation
 // keeps as they were written.
-func (rd webReading) tr(t store.Translation, names map[string]string) *webTr {
-	tr := &webTr{HTML: renderPost(t.Text, names, rd), Lang: rd.Target}
+func (rd webReading) tr(t store.Translation, names map[string]string, marks map[int]bool) *webTr {
+	tr := &webTr{HTML: renderPost(t.Text, names, rd, marks), Lang: rd.Target}
 	// the language alone: its script tells only a Chinese reader
 	// something, Traditional from the Simplified they are reading
 	from, _, _ := strings.Cut(t.From, "-")
@@ -1151,6 +1167,17 @@ func (rd webReading) tr(t store.Translation, names map[string]string) *webTr {
 	}
 	tr.Note, tr.Show, tr.Back = rd.L.T("tr.from", "lang", name), rd.L.T("tr.show"), rd.L.T("tr.back")
 	return tr
+}
+
+// trMarks is the marks a translated view lays over its boxes: the
+// post's own, when the translation kept its box count, and none when it
+// lost or gained one — a box left as written beats a tick on the wrong
+// line.
+func trMarks(p store.FeedPost, t store.Translation) map[int]bool {
+	if len(p.Boxes) == 0 || card.Boxes(t.Text) != card.Boxes(p.Text) {
+		return nil
+	}
+	return p.Boxes
 }
 
 // webTranslations is the posts among ids this reader is shown

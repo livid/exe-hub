@@ -39,7 +39,7 @@ func TestRenderTextFence(t *testing.T) {
 	}
 	// an id inside a fence is code, not a mention
 	names := map[string]string{"0123456789abcdef": "Ann"}
-	if got, want := string(renderPost("```\n@0123456789abcdef\n```\n@0123456789abcdef", names, webReading{})), "<div class=\"code one first\"><pre>\n@0123456789abcdef</pre>"+BTN+"</div>\n<a class=\"mention\" href=\"/u/0123456789abcdef\">@Ann</a>"; got != want {
+	if got, want := string(renderPost("```\n@0123456789abcdef\n```\n@0123456789abcdef", names, webReading{}, nil)), "<div class=\"code one first\"><pre>\n@0123456789abcdef</pre>"+BTN+"</div>\n<a class=\"mention\" href=\"/u/0123456789abcdef\">@Ann</a>"; got != want {
 		t.Errorf("renderPost over a fence\n got %s\nwant %s", got, want)
 	}
 	// the search's marks stop at the button: its words are the page's

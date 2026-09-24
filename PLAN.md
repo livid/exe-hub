@@ -187,6 +187,11 @@ Envelope: `{type, author (pubkey b64), seq, ts, body}`.
   a parent never cascades — replies stand on their own.
 - `post.delete` — references a post ID. Always allowed for one's own posts,
   even when the author no longer passes the gate or is banned.
+- `post.mark` — `{post, box, done}`: ticks or clears one to-do box of
+  one's own post (see To-do marks). No cooldown and no gate, since it is
+  no post; a banned key's is refused. `box` counts the post's boxes as a
+  page reads them, from nought (`card.Boxes`), and `/v1/msg` refuses a
+  box the post does not have; the store refuses anyone but the author.
 - `ban.set` / `ban.lift` — admin-only (author must be a config-assigned
   admin): ban or unban a target pubkey, with an optional reason on
   `ban.set`.
@@ -387,10 +392,11 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   otherwise; byte ranges, HEAD and If-None-Match, see Embeds & IPFS).
 - `GET  /v1/events` — live activity as SSE, public like all reads (it
   reveals nothing the feed doesn't). Unnamed events; the data is
-  `{"type","id","reply_to?","author"}` where type is `post.create`,
-  `post.delete` or `profile.set` and `id` is the post concerned (for
-  deletes, the deleted post, not the delete message; for profile.set the
-  message itself — `author` is what matters there). Fired from a store
+  `{"type","id","reply_to?","author","mark?"}` where type is `post.create`,
+  `post.delete`, `post.mark` or `profile.set` and `id` is the post
+  concerned (for deletes, the deleted post, not the delete message; for
+  a mark, the post whose box changed, `mark` being `{box, done}`; for
+  profile.set the message itself — `author` is what matters there). Fired from a store
   post-commit hook (`Store.OnMessage`), so subscribers never see
   uncommitted state, and replicated posts fire it the same as direct
   ones. Events carry ids, not content — clients fetch `/v1/post/{id}`
@@ -670,8 +676,9 @@ hub that carries the post.
   stand as the exe Chat plan's box — a 12px square, black border,
   white, a one-pixel shadow, a tick inside once done — the done words
   struck through in grey; the box is out of the line's flow so the
-  strike never crosses it. Boxes are read-only: ticking one from a
-  page would rewrite the post, its own step. The Hub app reads
+  strike never crosses it. A box shows the state its author last set
+  by a mark, when one has (To-do marks, below), the text's otherwise,
+  and carries its count in `data-box`. The Hub app reads
   lists with the same rules (`listAt`), and
   `internal/card/testdata/lists.json` holds the cases both parsers are
   run against. Both composers — the pages' Post window and the Hub
@@ -741,6 +748,33 @@ hub that carries the post.
   outside the link, and so do CJK text and fullwidth punctuation: a URL
   is ASCII plus accented Latin letters, because Chinese prose sits flush
   against a link with no space.
+- **To-do marks** (since 2026-09-24, Livid's ask: click a box to tick it).
+  A signed post never changes: the tick is its own op, `post.mark`
+  `{post, box, done}`, one of the content ops, so it replicates to the
+  peers, replays under Rebuild and never shows on its own — it is no
+  post, so the feed, the reply counts, the thread JSON's posts, search,
+  the translation queue and the daemon's hub agent never see it. The
+  state is the derived table `marks` (post, box, done, ts, id): the
+  newest mark holds a box, by the mark's own `ts` and then its id, never
+  by arrival, so two hubs taking the same marks in a different order and
+  a replay land on the same state; `done` is the state asked for, never
+  a toggle, so two tabs that both ask "done" agree. `box` counts the
+  post's boxes as a page reads them, from nought, fences skipped
+  (`card.Boxes`); the store refuses anyone but the post's author
+  (`ErrNotOwner`, as a delete), `/v1/msg` refuses a box the post does not
+  have, and a delete takes the marks with the post. A post carries its
+  marks as `boxes`, box to state, only the boxes a mark has set; the
+  page (`renderMarked`) lays them over the text's boxes by ordinal, and
+  a translated view takes them only when the translation kept the
+  post's box count (`trMarks`) — a box left as written beats a tick on
+  the wrong line. A mark is a `post.mark` event on `/v1/events` (`id`
+  the post, `mark` `{box, done}`), which a live page takes like a
+  delete of that post: it refetches and swaps the post in; the thread's
+  activity and the strip's post count stay, so a tick never reshuffles
+  the feed. Ticking from the Hub app, where the node's own key signs
+  without asking, and from a page for a wallet author (one signature a
+  click, as every op) are the next steps; today the pages show the
+  state.
 - **A post's time is the reader's.** The server sets each post's own
   timestamp (kept for display; ordering uses receive time) as a UTC
   stamp inside `<time datetime>`, and a small script on every page
