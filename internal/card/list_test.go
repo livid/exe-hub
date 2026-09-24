@@ -19,7 +19,7 @@ func TestListAt(t *testing.T) {
 		Name, Text, Plain string
 		N, Start          int
 		Ordered           bool
-		Items             []string
+		Items, Boxes      []string
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatal(err)
@@ -30,8 +30,8 @@ func TestListAt(t *testing.T) {
 			t.Errorf("%s: took %d lines (list %v), want %d", c.Name, n, l != nil, c.N)
 			continue
 		}
-		if l != nil && (l.Ordered != c.Ordered || l.Start != c.Start || !reflect.DeepEqual(l.Items, c.Items)) {
-			t.Errorf("%s:\n got %v %d %q\nwant %v %d %q", c.Name, l.Ordered, l.Start, l.Items, c.Ordered, c.Start, c.Items)
+		if l != nil && (l.Ordered != c.Ordered || l.Start != c.Start || !reflect.DeepEqual(l.Items, c.Items) || !reflect.DeepEqual(l.Boxes, c.Boxes)) {
+			t.Errorf("%s:\n got %v %d %q boxes %q\nwant %v %d %q boxes %q", c.Name, l.Ordered, l.Start, l.Items, l.Boxes, c.Ordered, c.Start, c.Items, c.Boxes)
 		}
 		if c.Plain == "" {
 			continue

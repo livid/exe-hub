@@ -19,5 +19,11 @@
   {"name": "a year is not a number", "text": "2026. A good year", "n": 0},
   {"name": "a number needs its space", "text": "1.5 litres", "n": 0},
   {"name": "three digits at most, from nought", "text": "0. nought\n999. last", "n": 2, "ordered": true, "start": 0, "items": ["nought", "last"]},
-  {"name": "prose is no list", "text": "just words - with a dash", "n": 0}
+  {"name": "prose is no list", "text": "just words - with a dash", "n": 0},
+  {"name": "a to-do list: a box leads each item's words, open or ticked", "text": "- [ ] one\n- [x] two\n- [X] three", "n": 3, "ordered": false, "start": 0, "items": ["one", "two", "three"], "boxes": [" ", "x", "x"], "plain": "• [ ] one • [x] two • [X] three"},
+  {"name": "boxed and plain items share a list", "text": "- [ ] one\n* two", "n": 2, "ordered": false, "start": 0, "items": ["one", "two"], "boxes": [" ", ""], "plain": "• [ ] one • two"},
+  {"name": "a box's words keep their inline Markdown and their spacing is free", "text": "- [x]   **Done:** a `field`", "n": 1, "ordered": false, "start": 0, "items": ["**Done:** a `field`"], "boxes": ["x"], "plain": "• [x] Done: a `field`"},
+  {"name": "a box needs a space and words after it", "text": "- [ ]\n- [x]word", "n": 2, "ordered": false, "start": 0, "items": ["[ ]", "[x]word"], "plain": "• [ ] • [x]word"},
+  {"name": "only a space or an x fills a box", "text": "- [-] no\n- [o] no\n- [] no", "n": 3, "ordered": false, "start": 0, "items": ["[-] no", "[o] no", "[] no"], "plain": "• [-] no • [o] no • [] no"},
+  {"name": "a numbered item keeps its brackets", "text": "1. [ ] one", "n": 1, "ordered": true, "start": 1, "items": ["[ ] one"], "plain": "1. [ ] one"}
 ]

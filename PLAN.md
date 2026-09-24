@@ -661,14 +661,25 @@ hub that carries the post.
   itself — a bullet, or a CSS counter begun at `--n`, one under the
   first number — in a box that ends 5px left of the words, so they sit
   the same in every browser and a wrapped line comes back under the
-  words; `w2`/`w3` make room for two and three digits. The Hub app reads
+  words; `w2`/`w3` make room for two and three digits. A to-do list
+  (since 2026-09-24, Livid's ask) is a bulleted list whose items open
+  with a box, `[ ] ` still to do or `[x] ` done, with words after the
+  space, as GitHub reads them (`card.List.Boxes`, one entry an item;
+  `- [ ]` alone, `- [ ]word` and a numbered item keep the brackets as
+  words): `li.box`, `.done` when ticked, drawn where the bullet would
+  stand as the exe Chat plan's box — a 12px square, black border,
+  white, a one-pixel shadow, a tick inside once done — the done words
+  struck through in grey; the box is out of the line's flow so the
+  strike never crosses it. Boxes are read-only: ticking one from a
+  page would rewrite the post, its own step. The Hub app reads
   lists with the same rules (`listAt`), and
   `internal/card/testdata/lists.json` holds the cases both parsers are
   run against. Both composers — the pages' Post window and the Hub
   app's — go on with a list by themselves (`listReturn`, the same
   function in web.html and the app: change both): Return on an item
   opens the next one, the same bullet or the number after it with its
-  own `.` or `)` and the marker's spaces, the words right of the caret
+  own `.` or `)` and the marker's spaces, and after a to-do item a
+  fresh `- [ ] ` with the box's spaces, the words right of the caret
   going down with it; Return on an item with no words yet ends the list:
   the marker goes and the Return still breaks the line, so the emptied
   line stays as the blank line under the list and the caret stands on a
@@ -718,7 +729,9 @@ hub that carries the post.
   labels, notifications — a Markdown link is put back to its words
   (`card.Unlink`), a bold stretch to its own (`card.Unbold`), a
   bulleted item's marker to a bullet, `•`, since the lines are run
-  together (`card.Unlist`), a table to its cells' words, a row a line,
+  together, a to-do item's box staying as typed, `• [ ] words`, since
+  the brackets read in any font a preview picture or a notification
+  is set in (`card.Unlist`), a table to its cells' words, a row a line,
   ` · ` between cells (`card.Untable`), and a fenced block to its code
   as typed, the fences gone (`card.Unfence`, which puts only the words
   outside the fences through the rest). Newlines stay line breaks.

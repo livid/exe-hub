@@ -524,7 +524,9 @@ func writeTable(b *strings.Builder, t *card.Table, first, last bool) {
 // first number — the page draws its own markers (web.html, a CSS
 // counter begun at --n, one under the first number), so that number
 // rides in the style, and the class w2 or w3 says how many digits the
-// widest marker has, for the room it needs left of the words.
+// widest marker has, for the room it needs left of the words. A to-do
+// item (card.List.Boxes) is li.box, .done when its box is ticked: the
+// page draws the box where the bullet would stand.
 func writeList(b *strings.Builder, l *card.List, first, last bool) {
 	tag, class, style := "ul", "", ""
 	if l.Ordered {
@@ -546,8 +548,16 @@ func writeList(b *strings.Builder, l *card.List, first, last bool) {
 		class = ` class="` + class[1:] + `"`
 	}
 	b.WriteString("<" + tag + class + style + ">")
-	for _, item := range l.Items {
-		b.WriteString("<li>")
+	for k, item := range l.Items {
+		b.WriteString("<li")
+		if l.Boxes != nil && l.Boxes[k] != "" {
+			b.WriteString(` class="box`)
+			if l.Boxes[k] == "x" {
+				b.WriteString(" done")
+			}
+			b.WriteString(`"`)
+		}
+		b.WriteString(">")
 		writeInline(b, item)
 		b.WriteString("</li>")
 	}

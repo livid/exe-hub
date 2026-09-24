@@ -17,6 +17,8 @@ func TestRenderTextList(t *testing.T) {
 		{"9. nine\n1. ten", `<ol class="w2 first last" style="--n:8"><li>nine</li><li>ten</li></ol>` + "\n"},
 		{"0. nought", `<ol class="first last" style="--n:-1"><li>nought</li></ol>` + "\n"},
 		{"100. a", `<ol class="w3 first last" style="--n:99"><li>a</li></ol>` + "\n"},
+		{"- [ ] open\n- [x] done\n- plain", `<ul class="first last"><li class="box">open</li><li class="box done">done</li><li>plain</li></ul>` + "\n"},
+		{"- [X] **Done:** it\n1. [ ] not a box", `<ul class="first"><li class="box done"><strong>Done:</strong> it</li></ul>` + "\n" + `<ol class="last"><li>[ ] not a box</li></ol>` + "\n"},
 		{"1. one\n\n2. two", `<ol class="first"><li>one</li></ol>` + "\n" + `<ol class="last" style="--n:1"><li>two</li></ol>` + "\n"},
 		{"- one\n1. two", `<ul class="first"><li>one</li></ul>` + "\n" + `<ol class="last"><li>two</li></ol>` + "\n"},
 		{"- **The bar:** a `field` and [Docs](https://x.y)", `<ul class="first last"><li><strong>The bar:</strong> a <code>field</code> and <a href="https://x.y" title="https://x.y" target="_blank" rel="noopener nofollow">Docs</a></li></ul>` + "\n"},

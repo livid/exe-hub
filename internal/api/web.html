@@ -358,6 +358,18 @@ img.idn { box-sizing: content-box; background: #e6e6f5; }
 .text ol > li::before { width: 13px; content: counter(item) "."; }
 .text ol.w2 > li::before { width: 20px; }
 .text ol.w3 > li::before { width: 27px; }
+/* a to-do item ("- [ ] words" or "- [x] words": li.box, .done when
+   ticked): the box stands where the bullet would, and is the Chat plan's
+   box from the exe desktop, copied — a 12px square, black border, white,
+   a one-pixel shadow, the tick inside once done — 5px off the words as
+   the bullet is; the done words are struck through in grey. The box is
+   out of the line's flow, so the strike never crosses it. The Hub app
+   carries the same block. */
+.text li.box { padding-left: 19px; }
+.text li.box::before { top: 1px; width: 12px; height: 12px; border: 1px solid #000; background: #fff; box-shadow: 1px 1px 0 #999;
+  font-size: 11px; line-height: 10px; text-align: center; color: #000; content: ""; }
+.text li.box.done { color: #777; text-decoration: line-through; }
+.text li.box.done::before { content: "\2713"; }
 /* a found word on a search page (web.go markHits): highlighter yellow
    behind the type, which keeps its own colour — a link stays blue — its
    weight and its width, so a marked post sets as it does in the feed.
@@ -1470,34 +1482,37 @@ document.addEventListener("change", e => {
   text.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !send.disabled) send.click(); });
   // A list goes on by itself. Return on a list line opens the next
   // item: the same bullet, or the number after this one with its own
-  // "." or ")", and the spaces the line's marker had; what stood right
-  // of the caret goes down with it. Return on an item with no words yet
-  // ends the list instead: the marker goes, and the Return still breaks
+  // "." or ")", and the spaces the line's marker had — and after a to-do
+  // item, "- [ ] " or "- [x] ", a fresh open box with the spaces the
+  // line's box had; what stood right of the caret goes down with it.
+  // Return on an item with no words yet, "- " or "- [ ] ", ends the
+  // list instead: the marker goes, and the Return still breaks
   // the line — the emptied line stays as the blank line under the list
   // and the caret stands on a fresh one below it, ready for prose.
   // The lines are read as posts are (card.ListAt: the marker at the
-  // start of the line, up to three digits), but an item may still be
-  // empty here, since it is being written. A plain Return is left alone
-  // wherever this does not apply: a line that is no item, the caret
-  // still inside the marker, a number past 999, Shift-Return, and a
-  // Return that ends an input method's composition. It is beforeinput,
+  // start of the line, up to three digits, a box on a bullet only), but
+  // an item may still be empty here, since it is being written. A plain
+  // Return is left alone wherever this does not apply: a line that is no
+  // item, the caret still inside the marker or its box, a number past
+  // 999, Shift-Return, and a Return that ends an input method's
+  // composition. It is beforeinput,
   // not keydown, that says "a line break is coming" on every keyboard,
   // a phone's too. The change goes in as typing would (execCommand
   // insertText), so one Undo takes it back and the field's own input
   // event does the rest. The exe Hub app's composer carries the same
   // function (sysapps/hub index.html): change both.
-  const LIST_LINE_RE = /^(?:([-*])|(\d{1,3})([.)]))( +)(.*)$/;
+  const LIST_LINE_RE = /^(?:([-*])( +)(?:(\[[ xX]\])( +|$))?|(\d{1,3})([.)])( +))(.*)$/;
   function listReturn(ta) {
     const v = ta.value, from = ta.selectionStart, to = ta.selectionEnd;
     const ls = v.lastIndexOf("\n", from - 1) + 1;
     let le = v.indexOf("\n", from);
     if (le < 0) le = v.length;
     const m = LIST_LINE_RE.exec(v.slice(ls, le));
-    if (!m || from < ls + m[0].length - m[5].length) return false; // no item, or the caret in its marker
+    if (!m || from < ls + m[0].length - m[8].length) return false; // no item, or the caret in its marker or box
     let put, a = from, b = to;
-    if (!m[5].trim() && from === to) { put = "\n"; a = ls; b = le; } // an empty item: its marker goes, the line break stays
-    else if (m[1]) put = "\n" + m[1] + m[4];
-    else if (+m[2] < 999) put = "\n" + (+m[2] + 1) + m[3] + m[4];
+    if (!m[8].trim() && from === to) { put = "\n"; a = ls; b = le; } // an empty item: its marker goes, the line break stays
+    else if (m[1]) put = "\n" + m[1] + m[2] + (m[3] ? "[ ]" + m[4] : "");
+    else if (+m[5] < 999) put = "\n" + (+m[5] + 1) + m[6] + m[7];
     else return false;
     ta.setSelectionRange(a, b);
     if (!document.execCommand("insertText", false, put)) {
