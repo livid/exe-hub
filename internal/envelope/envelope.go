@@ -38,6 +38,10 @@ const ReplicatePrefix = "exe-hub:v1\nreplicate\n"
 // page of one kind can never be passed off as the other.
 const TranslationsPrefix = "exe-hub:v1\ntranslations\n"
 
+// SummariesPrefix does the same for a /v1/summaries page (PLAN.md,
+// Thread summaries).
+const SummariesPrefix = "exe-hub:v1\nsummaries\n"
+
 // MaxRaw caps the serialized envelope. Post text is capped separately;
 // this bounds the whole message including embeds metadata.
 const MaxRaw = 64 << 10

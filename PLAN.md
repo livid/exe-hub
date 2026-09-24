@@ -2351,7 +2351,7 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   and Profile dialog show in each language; a token-gated second hub
   for the gate sentence; DPR 1, 1.5, 2 and a phone).
 
-## Thread summaries — a quick read of a long thread (building 2026-09-24)
+## Thread summaries — a quick read of a long thread (built 2026-09-24)
 
 Asked by Livid 2026-09-24: a thread with ten or more replies gets a
 summary by the translation model, written again at 20, 50, 100, 200,
@@ -2453,9 +2453,43 @@ at a reply on its page.
   hub (rows written into its table; the window's place, width and
   stickiness, the cites landing tinted, the live replacement, nothing
   at 1000px or on a phone; DPR 1, 1.5, 2).
-- **Left**: the translations of a summary owed from its newest step
-  (keyed by step, so an earlier step's translations stay with it —
-  Codex's point), a picture post's language from its replies,
-  `/v1/summaries` beside `/v1/translations` for the public hub to take
-  (until then only the host hub, which summarises, shows the window),
-  and the mobile design after that.
+- **In the reader's language (turn 4).** A thread's newest summary
+  written from the thread is owed each of `lang.Targets` it is not in
+  (`SummariesToTranslate`), and the translator puts it there before
+  the posts (`passSummaries`, the same `Translate` and `Check`, plus
+  `SameCites`: every [#n] kept and none added, or the try is spent),
+  kept as a row of the same step with `src` the language it came from
+  and the cites of the original (`SetSummaryTranslation`). Keyed by
+  step, so an earlier step's translations stay with it and nothing is
+  dropped when a new step lands (Codex's point); the window shows the
+  reader the translation of the newest step once it is there, with the
+  post's "Translated from · Show Original" line. A picture post has no
+  language of its own, so its summary is written in the language most
+  of its replies are in (`PostsToSummarize`, the zxx case).
+- **One hub pays, its peers take** (turn 4), the way translations
+  ride: `GET /v1/summaries?after=&limit=&nonce=` serves the summaries
+  this hub made itself, translations included, as hub-signed pages by
+  `rev` under `envelope.SummariesPrefix`, 403 without
+  `allow_replication`; the puller asks each peer after its
+  translations, with a cursor of its own (`peer_state.sum_cursor`), and
+  a peer from before answers 404 and is left alone. **What is taken**
+  (`takeSummary`): one written from the thread only when this hub
+  holds the root, holds as many of the first `step` replies as it read,
+  holds every reply it cites, and the words pass this hub's own
+  `CheckSummary` against its own copy of the thread after `Tidy`; the
+  cites are the peer's, by id, since thread order is each hub's own
+  (`received` is local), so [#n] is a label and the link is the id. A
+  translation of one needs the one it was made from here, passes
+  `Check` against it and keeps its cites. A thread not here whole yet
+  — the root, a reply, or the original a translation needs — sets the
+  summary aside (`pending_summaries`, the payload as served, 2000 to a
+  peer and thirty days like translations) and `settleSummaries` tries
+  what waits at the end of every round, the originals before the
+  translations, final either way but for a thread still short. The
+  newest per (post, step, lang) wins whoever made it (`AcceptSummary`),
+  kept as the peer's and not served on; a landed one goes out as
+  `post.summary`. Livid's pair as before: the host summarises and
+  translates, the public hub takes both. `TestPullSummaries`,
+  `TestTranslatorSummaries`.
+- **Left**: the mobile design (the window shows nothing under 1060px),
+  and the JSON API says nothing of summaries yet.

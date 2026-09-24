@@ -258,3 +258,9 @@ func CheckSummary(out, lang string, root store.FeedPost, replies []store.FeedPos
 	}
 	return cites, nil
 }
+
+// SameCites says whether out points at the same replies text does: a
+// translation of a summary keeps every [#n] and adds none.
+func SameCites(text, out string) bool {
+	return found(cite.FindAllString(text, -1)) == found(cite.FindAllString(out, -1))
+}

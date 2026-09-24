@@ -122,6 +122,7 @@ type fakeOwed struct {
 	rows    map[string]fakeRow
 	kept    []store.KeptTranslation
 	rewrote []string
+	sums    []store.OwedSummaryTranslation
 }
 
 func (o *fakeOwed) PostsToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedTranslation, error) {
@@ -134,6 +135,26 @@ func (o *fakeOwed) PostsToTranslate(targets []string, maxTries int, before int64
 		}
 	}
 	return out, nil
+}
+
+// the summaries owed their languages, and what came of them ("post step lang")
+func (o *fakeOwed) SummariesToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedSummaryTranslation, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	var out []store.OwedSummaryTranslation
+	for _, w := range o.sums {
+		if _, done := o.rows[w.Post+" "+fmt.Sprint(w.Step)+" "+w.To]; !done && len(out) < limit {
+			out = append(out, w)
+		}
+	}
+	return out, nil
+}
+
+func (o *fakeOwed) SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.rows[post+" "+fmt.Sprint(step)+" "+lang] = fakeRow{text, model, ok, 1}
+	return nil
 }
 
 func (o *fakeOwed) KeptTranslations(lang string) ([]store.KeptTranslation, error) {

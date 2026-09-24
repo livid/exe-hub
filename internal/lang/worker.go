@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -244,6 +245,10 @@ type Owed interface {
 	SetTranslation(post, lang, text, model string, ok bool) error
 	KeptTranslations(lang string) ([]store.KeptTranslation, error)
 	RewriteTranslation(post, lang, text string) error
+	// a thread's newest summary is owed the same languages (PLAN.md,
+	// Thread summaries)
+	SummariesToTranslate(targets []string, maxTries int, before int64, limit int) ([]store.OwedSummaryTranslation, error)
+	SetSummaryTranslation(post string, step int, lang, src, text, model string, replies int, cites map[int]string, ok bool) error
 }
 
 // Translator puts every post into the languages the hub keeps it in
@@ -323,6 +328,9 @@ func (t *Translator) pass() (up bool) {
 		}
 	}
 	defer say()
+	if !t.passSummaries() {
+		return false
+	}
 	return drainN(t.Parallel, trPage,
 		func(limit int) ([]store.OwedTranslation, error) {
 			return t.St.PostsToTranslate(Targets, maxTries, time.Now().Add(-retryEvery).UnixMilli(), limit)
@@ -349,6 +357,50 @@ func (t *Translator) pass() (up bool) {
 				mu.Unlock()
 				if t.Bus != nil {
 					t.Bus.Emit(events.Event{Type: "post.translation", ID: o.ID, Author: o.Author})
+				}
+			}
+			return wrote
+		})
+}
+
+// passSummaries puts each thread's newest summary into the languages
+// it is not in (PLAN.md, Thread summaries), before the posts: a summary
+// is short, and the window shows it in the reader's language the
+// moment its translation lands. The translation must keep the cites.
+func (t *Translator) passSummaries() (up bool) {
+	kept := map[string]int{}
+	var mu sync.Mutex
+	defer func() {
+		if len(kept) > 0 {
+			log.Printf("translate: %s", tally(kept, "summary translation kept", "summary translations kept"))
+		}
+	}()
+	return drainN(t.Parallel, trPage,
+		func(limit int) ([]store.OwedSummaryTranslation, error) {
+			return t.St.SummariesToTranslate(Targets, maxTries, time.Now().Add(-retryEvery).UnixMilli(), limit)
+		},
+		func(o store.OwedSummaryTranslation) string { return o.Post + " " + strconv.Itoa(o.Step) + " " + o.To },
+		func(o store.OwedSummaryTranslation) outcome {
+			out, err := t.M.Translate(context.Background(), o.Text, o.From, o.To, "")
+			if err == nil && !SameCites(o.Text, out) {
+				err = fmt.Errorf("%w: the cites differ", ErrAnswer)
+			}
+			if err != nil {
+				log.Printf("translate summary %s at %d to %s: %v", o.Post, o.Step, o.To, err)
+				if !errors.Is(err, ErrAnswer) {
+					return noAnswer
+				}
+			}
+			if err := t.St.SetSummaryTranslation(o.Post, o.Step, o.To, o.From, out, t.M.Name, o.Replies, o.Cites, err == nil); err != nil {
+				log.Printf("translate summary %s at %d to %s: store: %v", o.Post, o.Step, o.To, err)
+				return stop
+			}
+			if err == nil {
+				mu.Lock()
+				kept[o.To]++
+				mu.Unlock()
+				if t.Bus != nil {
+					t.Bus.Emit(events.Event{Type: "post.summary", ID: o.Post, Root: o.Post, Author: o.Author})
 				}
 			}
 			return wrote

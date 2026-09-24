@@ -50,6 +50,7 @@ type Puller struct {
 	Bus *events.Broadcaster
 	// the peers that have no /v1/translations, said once each
 	noTranslations map[string]bool
+	noSummaries    map[string]bool // and no /v1/summaries
 
 	client    *http.Client
 	healing   map[string]*healTry // CID → when its sources are asked next
@@ -102,8 +103,12 @@ func (p *Puller) round() {
 		if err := p.pullTranslations(peer); err != nil {
 			log.Printf("replicate %s: translations: %v", peer.Hub, err)
 		}
+		if err := p.pullSummaries(peer); err != nil {
+			log.Printf("replicate %s: summaries: %v", peer.Hub, err)
+		}
 	}
 	p.settle("")
+	p.settleSummaries()
 	p.heal(up)
 }
 
@@ -680,5 +685,241 @@ func (p *Puller) heal(peers []store.Peer) {
 		try.wait = min(try.wait*2, healMax)
 		try.at = now.Add(try.wait - time.Second) // a cycle is never exactly interval apart
 		log.Printf("replicate: heal %s: %s; next round in %s", f.cid, strings.Join(fails, "; "), try.wait)
+	}
+}
+
+// ---- thread summaries, taken like translations (PLAN.md, Thread summaries) ----
+
+var errNoSummaries = errors.New("peer has no /v1/summaries")
+
+// pullSummaries takes the thread summaries a peer made itself, its
+// translations of them included, off its hub-signed pages from this
+// hub's cursor on: each kept only if it passes this hub's own check
+// against its own copy of the thread (takeSummary), set aside when the
+// thread is not here whole yet, and passed over for good otherwise. A
+// peer from before /v1/summaries answers 404 and is left alone.
+func (p *Puller) pullSummaries(peer store.Peer) error {
+	base, err := envelope.ParseMultiaddr(peer.Addr)
+	if err != nil {
+		return err
+	}
+	pub, err := p.peerKey(peer, base)
+	if err != nil {
+		return err
+	}
+	cursor, taken, aside := peer.SumCursor, 0, 0
+	defer func() {
+		if taken > 0 {
+			log.Printf("replicate %s: took %d summaries", peer.Hub, taken)
+		}
+		if aside > 0 {
+			log.Printf("replicate %s: set %d summaries aside for threads not here whole yet", peer.Hub, aside)
+		}
+	}()
+	for {
+		page, err := p.fetchSummaries(base, pub, peer.Hub, cursor)
+		if errors.Is(err, errNoSummaries) {
+			if !p.noSummaries[peer.Hub] {
+				if p.noSummaries == nil {
+					p.noSummaries = map[string]bool{}
+				}
+				p.noSummaries[peer.Hub] = true
+				log.Printf("replicate %s: serves no summaries", peer.Hub)
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		for _, m := range page.Summaries {
+			switch p.takeSummary(peer.Hub, m) {
+			case kept:
+				taken++
+			case waits:
+				aside++
+			}
+		}
+		if page.Next <= cursor {
+			return nil
+		}
+		cursor = page.Next
+		if err := p.St.SetPeerSummaryCursor(peer.Hub, cursor); err != nil {
+			return err
+		}
+	}
+}
+
+// fetchSummaries gets one /v1/summaries page, verified under its prefix.
+func (p *Puller) fetchSummaries(base string, pub ed25519.PublicKey, hub string, after int64) (*api.SummariesPayload, error) {
+	nb := make([]byte, 16)
+	rand.Read(nb)
+	nonce := hex.EncodeToString(nb)
+	resp, err := p.client.Get(base + "/v1/summaries?after=" + strconv.FormatInt(after, 10) +
+		"&limit=" + strconv.Itoa(pageLimit) + "&nonce=" + nonce)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errNoSummaries
+	}
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("%s: %s", resp.Status, b)
+	}
+	var out struct {
+		Payload json.RawMessage `json:"payload"`
+		Sig     []byte          `json:"sig"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&out); err != nil {
+		return nil, err
+	}
+	if !ed25519.Verify(pub, append([]byte(envelope.SummariesPrefix), out.Payload...), out.Sig) {
+		return nil, errors.New("bad page signature")
+	}
+	pl := &api.SummariesPayload{}
+	if err := json.Unmarshal(out.Payload, pl); err != nil {
+		return nil, err
+	}
+	if pl.Hub != hub || pl.Nonce != nonce {
+		return nil, errors.New("page is for another hub or another ask")
+	}
+	return pl, nil
+}
+
+// takeSummary keeps one summary from a peer if it may be kept. One
+// written from the thread must pass this hub's own CheckSummary against
+// its own copy of the thread at that step — and the cites are the
+// peer's, by id, since thread order is each hub's own; a thread with
+// fewer replies here than it read is not here whole yet, and the
+// summary waits for them. A translation of one must have the one it
+// was made from here, pass Check against it and keep its cites; it
+// waits for the original. What waits is bounded as translations are.
+func (p *Puller) takeSummary(hub string, m store.SharedSummary) taking {
+	if !slices.Contains(lang.Steps, m.Step) || m.Text == "" || len(m.Text) > translationMax || !utf8.ValidString(m.Text) ||
+		len(m.Post) != 64 || strings.Trim(m.Post, "0123456789abcdef") != "" || len(m.Lang) < 2 || len(m.Lang) > 35 ||
+		(m.Src != "" && !slices.Contains(lang.Targets, m.Lang)) || m.Replies < 0 || m.Replies > m.Step || len(m.Cites) > 4000 {
+		return passed
+	}
+	if len(m.Model) > 200 {
+		m.Model = m.Model[:200]
+	}
+	var cites map[int]string
+	if m.Cites != "" {
+		if err := json.Unmarshal([]byte(m.Cites), &cites); err != nil {
+			return passed
+		}
+	}
+	root, err := p.St.Post(m.Post)
+	if errors.Is(err, store.ErrNotFound) {
+		return p.summaryWaits(hub, m)
+	}
+	if err != nil {
+		return failed
+	}
+	if m.Src == "" {
+		replies, err := p.St.Thread(m.Post, m.Step)
+		if err != nil {
+			return failed
+		}
+		if len(replies) < m.Replies {
+			return p.summaryWaits(hub, m)
+		}
+		m.Text = lang.Tidy(m.Lang, m.Text)
+		if _, err := lang.CheckSummary(m.Text, m.Lang, *root, replies); err != nil {
+			log.Printf("replicate %s: summary of %s at %d refused: %v", hub, m.Post, m.Step, err)
+			return passed
+		}
+		held := map[string]bool{}
+		for _, r := range replies {
+			held[r.ID] = true
+		}
+		for _, id := range cites {
+			if !held[id] {
+				return p.summaryWaits(hub, m) // a cited reply is not here yet
+			}
+		}
+	} else {
+		kept, err := p.St.Summaries(m.Post)
+		if err != nil {
+			return failed
+		}
+		var orig *store.Summary
+		for i := range kept {
+			if kept[i].Step == m.Step && kept[i].Src == "" {
+				orig = &kept[i]
+			}
+		}
+		if orig == nil {
+			return p.summaryWaits(hub, m)
+		}
+		if orig.Lang == m.Lang {
+			return passed
+		}
+		m.Text = lang.Tidy(m.Lang, m.Text)
+		if err := lang.Check(orig.Text, m.Text, m.Lang); err != nil {
+			log.Printf("replicate %s: summary of %s at %d into %s refused: %v", hub, m.Post, m.Step, m.Lang, err)
+			return passed
+		}
+		if !lang.SameCites(orig.Text, m.Text) {
+			log.Printf("replicate %s: summary of %s at %d into %s refused: the cites differ", hub, m.Post, m.Step, m.Lang)
+			return passed
+		}
+	}
+	ok, err := p.St.AcceptSummary(hub, m)
+	if err != nil {
+		log.Printf("replicate %s: summary of %s at %d: %v", hub, m.Post, m.Step, err)
+		return failed
+	}
+	if !ok {
+		return passed
+	}
+	if p.Bus != nil {
+		p.Bus.Emit(events.Event{Type: "post.summary", ID: m.Post, Root: m.Post})
+	}
+	return kept
+}
+
+func (p *Puller) summaryWaits(hub string, m store.SharedSummary) taking {
+	dropped, err := p.St.SetPendingSummary(hub, m, pendingMax)
+	if err != nil {
+		log.Printf("replicate %s: summary of %s set aside: %v", hub, m.Post, err)
+		return failed
+	}
+	if dropped > 0 {
+		log.Printf("replicate %s: %d summaries waiting longest dropped: more than %d wait", hub, dropped, pendingMax)
+	}
+	return waits
+}
+
+// settleSummaries tries what was set aside, at the end of each round:
+// taken like any other, and final either way but for a thread still not
+// whole, which waits on. What has waited longer than pendingAge goes.
+func (p *Puller) settleSummaries() {
+	if n, err := p.St.AgePendingSummaries(time.Now().Add(-pendingAge).UnixMilli()); err != nil {
+		log.Printf("replicate: summaries set aside: %v", err)
+	} else if n > 0 {
+		log.Printf("replicate: %d summaries waited %s for threads that never came whole, dropped", n, pendingAge)
+	}
+	waiting, err := p.St.PendingSummaries(500)
+	if err != nil {
+		log.Printf("replicate: summaries set aside: %v", err)
+		return
+	}
+	n := 0
+	for _, w := range waiting {
+		got := p.takeSummary(w.Peer, w.SharedSummary)
+		if got == failed || got == waits {
+			continue
+		}
+		if got == kept {
+			n++
+		}
+		if err := p.St.DropPendingSummary(w.Peer, w.Post, w.Step, w.Lang); err != nil {
+			log.Printf("replicate: summaries set aside: %v", err)
+		}
+	}
+	if n > 0 {
+		log.Printf("replicate: took %d summaries that had waited for their threads", n)
 	}
 }

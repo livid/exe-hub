@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,7 +54,7 @@ func newServingHub(t *testing.T) *servingHub {
 		if r.URL.Path == "/v1/replicate" || r.URL.Path == "/v1/translations" {
 			sh.asked++
 		}
-		if sh.gone && r.URL.Path == "/v1/translations" {
+		if sh.gone && (r.URL.Path == "/v1/translations" || r.URL.Path == "/v1/summaries") {
 			http.NotFound(w, r)
 			return
 		}
@@ -371,5 +372,140 @@ func TestWaitingTranslationIsTriedOnce(t *testing.T) {
 	}
 	if waiting, _ := r.st.PendingTranslations(id, 10); len(waiting) != 0 {
 		t.Fatalf("still waiting: %+v — the refused one would be tried every round", waiting)
+	}
+}
+
+// signedReply is one signed reply, to put into stores as the same message.
+type signedReply struct {
+	raw, sig []byte
+	e        *envelope.Envelope
+	op       any
+}
+
+// reply makes a signed reply and puts it into every store given; the
+// same message can go into another store later (into).
+func (r *rig) reply(text, to string, into ...*store.Store) (string, *signedReply) {
+	r.t.Helper()
+	r.seq++
+	raw, _ := json.Marshal(map[string]any{
+		"type": "post.create", "author": base64.StdEncoding.EncodeToString(r.pub), "seq": r.seq, "ts": 1756500000000 + int64(r.seq),
+		"body": map[string]any{"text": text, "reply_to": to},
+	})
+	e, err := envelope.Parse(raw)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	op, _ := e.Op()
+	m := &signedReply{raw: raw, sig: ed25519.Sign(r.priv, append([]byte(envelope.Prefix), raw...)), e: e, op: op}
+	for _, st := range into {
+		m.into(r.t, st)
+	}
+	return envelope.MsgID(raw), m
+}
+
+func (m *signedReply) into(t *testing.T, st *store.Store) {
+	t.Helper()
+	if _, _, err := st.IngestReplicated(m.raw, m.sig, m.e, m.op, "elsewhere"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPullSummaries: a hub takes the thread summaries its peer made, off
+// the peer's signed pages: one whose thread is here whole, and passes
+// this hub's own check of it, is kept as the peer's with the peer's
+// cites and announced; one whose thread is short here waits, and is
+// taken once the replies come; a translation of one waits for the one
+// it was made from and is kept when it keeps the cites; one that cites
+// a reply this hub lacks waits; the cursor moves on; a newer one wins.
+func TestPullSummaries(t *testing.T) {
+	r := newRig(t)
+	peer := newServingHub(t)
+	bus := events.New()
+	r.p.Bus = bus
+	sub := bus.Subscribe()
+	defer bus.Unsubscribe(sub)
+
+	whole := r.post("a thread both hubs hold whole", "en", r.st, peer.st)
+	short := r.post("a thread this hub holds in part", "en", r.st, peer.st)
+	var wholeR, shortR []string
+	var late []*signedReply // the short thread's last three, on the peer alone at first
+	for i := 0; i < 10; i++ {
+		id, _ := r.reply(fmt.Sprintf("reply %d", i+1), whole, r.st, peer.st)
+		wholeR = append(wholeR, id)
+		if i < 7 {
+			id, _ = r.reply(fmt.Sprintf("short %d", i+1), short, r.st, peer.st)
+		} else {
+			var m *signedReply
+			id, m = r.reply(fmt.Sprintf("short %d", i+1), short, peer.st)
+			late = append(late, m)
+		}
+		shortR = append(shortR, id)
+	}
+	if err := peer.st.SetSummary(whole, 10, "en", "**Whole.**\n- One [#3]", "glm", 10, map[int]string{3: wholeR[2]}, true); err != nil {
+		t.Fatal(err)
+	}
+	peer.st.SetSummaryTranslation(whole, 10, "zh-Hans", "en", "**完整。**\n- 一 [#3]", "glm", 10, map[int]string{3: wholeR[2]}, true)
+	peer.st.SetSummary(short, 10, "en", "**Short here.**\n- Ten [#10]", "glm", 10, map[int]string{10: shortR[9]}, true)
+
+	if err := r.p.pullSummaries(peer.peer(0)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := r.st.Summaries(whole)
+	if len(got) != 2 || got[0].Src != "" || got[0].Text != "**Whole.**\n- One [#3]" || got[0].Cites[3] != wholeR[2] || got[1].Lang != "zh-Hans" || got[1].Src != "en" || got[1].Cites[3] != wholeR[2] {
+		t.Fatalf("the whole thread's summaries: %+v", got)
+	}
+	if got, _ = r.st.Summaries(short); len(got) != 0 {
+		t.Fatalf("a summary of a thread short here was kept: %+v", got)
+	}
+	if waiting, _ := r.st.PendingSummaries(10); len(waiting) != 1 || waiting[0].Post != short {
+		t.Fatalf("waiting = %+v", waiting)
+	}
+	for i := 0; i < 2; i++ {
+		select {
+		case ev := <-sub:
+			if ev.Type != "post.summary" || ev.ID != whole || ev.Root != whole {
+				t.Errorf("event %+v", ev)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("a taken summary was not announced")
+		}
+	}
+	// not served on; the cursor kept
+	if served, _, _ := r.st.SummariesPage(0, 10); len(served) != 0 {
+		t.Errorf("serving on what was taken: %+v", served)
+	}
+	_, cur, _ := peer.st.SummariesPage(0, 10)
+	r.st.Ingest(peerAdd(t, r, peer))
+	if ps, _ := r.st.Peers(); len(ps) != 1 || ps[0].SumCursor != cur || cur == 0 {
+		t.Fatalf("peers = %+v, want the summaries cursor at %d", ps, cur)
+	}
+	// the missing replies come, the same messages: the waiting one settles
+	for _, m := range late {
+		m.into(t, r.st)
+	}
+	r.p.settleSummaries()
+	if got, _ = r.st.Summaries(short); len(got) != 1 {
+		t.Fatalf("after the replies came: %+v", got)
+	}
+	if got[0].Cites[10] != shortR[9] {
+		t.Errorf("the settled summary's cite: %q", got[0].Cites[10])
+	}
+	if waiting, _ := r.st.PendingSummaries(10); len(waiting) != 0 {
+		t.Errorf("still waiting: %+v", waiting)
+	}
+	// a newer one on the peer replaces what was taken
+	peer.st.DropSummaries(whole, 10)
+	time.Sleep(5 * time.Millisecond)
+	peer.st.SetSummary(whole, 10, "en", "**Whole, again.**\n- One [#3]", "glm", 10, map[int]string{3: wholeR[2]}, true)
+	if err := r.p.pullSummaries(peer.peer(cur)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = r.st.Summaries(whole); len(got) != 2 || got[0].Text != "**Whole, again.**\n- One [#3]" {
+		t.Errorf("the peer's redo did not come through: %+v", got)
+	}
+	// a peer from before /v1/summaries is left alone
+	peer.gone = true
+	if err := r.p.pullSummaries(peer.peer(0)); err != nil {
+		t.Errorf("an old peer: %v", err)
 	}
 }

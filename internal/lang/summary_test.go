@@ -178,3 +178,36 @@ func TestSummarizerPass(t *testing.T) {
 		t.Errorf("a refusal: %v", err)
 	}
 }
+
+// TestTranslatorSummaries: a thread's newest summary is put into the
+// languages it is not in before the posts are; the translation must keep
+// every cite, or the try is spent; the cites and the count read ride
+// with it.
+func TestTranslatorSummaries(t *testing.T) {
+	f := &fakeOllama{levels: true, answer: func(p string) (int, string) {
+		switch {
+		case strings.HasPrefix(p, "**Paging first.**"):
+			return 200, "**先做分页。**\n\n- 分页已经上线 [#2]\n- 未决：窗口 [#5]"
+		case strings.HasPrefix(p, "**Lost a cite.**"):
+			return 200, "**丢了一个引用。**\n\n- 分页已经上线\n- 未决：窗口 [#5]"
+		}
+		return 200, "hello there, everyone"
+	}}
+	st := &fakeOwed{rows: map[string]fakeRow{}, sums: []store.OwedSummaryTranslation{
+		{Post: "a", Step: 10, Text: "**Paging first.**\n\n- Paging shipped [#2]\n- Open: the window [#5]", From: "en", To: "zh-Hans", Replies: 10, Cites: map[int]string{2: "r2", 5: "r5"}},
+		{Post: "b", Step: 20, Text: "**Lost a cite.**\n\n- Paging shipped [#2]\n- Open: the window [#5]", From: "en", To: "zh-Hans", Replies: 20},
+	}}
+	tr := NewTranslator(st, newFake(t, f), nil)
+	if !tr.pass() {
+		t.Fatal("pass = false")
+	}
+	if got := st.rows["a 10 zh-Hans"]; !got.ok || got.lang != "**先做分页。**\n\n- 分页已经上线 [#2]\n- 未决：窗口 [#5]" {
+		t.Errorf("the summary's translation: %+v", got)
+	}
+	if got := st.rows["b 20 zh-Hans"]; got.ok {
+		t.Errorf("a translation that lost a cite was kept: %+v", got)
+	}
+	if !SameCites("- x [#1] [#2]", "- y [#2] [#1]") || SameCites("- x [#1]", "- y [#1] [#3]") {
+		t.Error("SameCites")
+	}
+}

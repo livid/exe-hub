@@ -207,6 +207,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/events", s.handleEvents)
 	mux.HandleFunc("GET /v1/replicate", s.handleReplicate)
 	mux.HandleFunc("GET /v1/translations", s.handleTranslations)
+	mux.HandleFunc("GET /v1/summaries", s.handleSummaries)
 	mux.HandleFunc("GET /v1/peers", s.handlePeers)
 	return cors(mux)
 }
@@ -920,6 +921,53 @@ func (s *Server) handleTranslations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sig := s.Hub.Sign(append([]byte(envelope.TranslationsPrefix), pb...))
+	writeJSON(w, http.StatusOK, map[string]any{"payload": json.RawMessage(pb), "sig": sig})
+}
+
+// SummariesPayload is the signed portion of a /v1/summaries response,
+// shaped and signed like TranslationsPayload under a prefix of its own
+// (PLAN.md, Thread summaries — one hub pays).
+type SummariesPayload struct {
+	Hub       string                `json:"hub"`
+	Nonce     string                `json:"nonce"`
+	Next      int64                 `json:"next"`
+	Summaries []store.SharedSummary `json:"summaries"`
+}
+
+// handleSummaries serves peers a hub-signed page of the thread summaries
+// this hub made itself, the translations of them included, one hop like
+// /v1/translations and under the same switch; a peer checks each
+// against its own copy of the thread.
+func (s *Server) handleSummaries(w http.ResponseWriter, r *http.Request) {
+	if !s.Cfg.Get().Replicable() {
+		writeErr(w, http.StatusForbidden, errors.New("this hub does not allow replication"))
+		return
+	}
+	nonce := r.URL.Query().Get("nonce")
+	if !replicateNonce.MatchString(nonce) {
+		writeErr(w, http.StatusBadRequest, errors.New("nonce: want 8-64 hex chars"))
+		return
+	}
+	after, err := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	if err != nil && r.URL.Query().Get("after") != "" {
+		writeErr(w, http.StatusBadRequest, errors.New("after: not a cursor"))
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	sums, next, err := s.St.SummariesPage(after, limit)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	pb, err := json.Marshal(SummariesPayload{Hub: s.Hub.ID, Nonce: nonce, Next: next, Summaries: sums})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	sig := s.Hub.Sign(append([]byte(envelope.SummariesPrefix), pb...))
 	writeJSON(w, http.StatusOK, map[string]any{"payload": json.RawMessage(pb), "sig": sig})
 }
 

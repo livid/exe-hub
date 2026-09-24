@@ -323,6 +323,13 @@ CREATE TABLE IF NOT EXISTS translation_notes (
 			rev     INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (post, step, lang))`,
 		`CREATE INDEX IF NOT EXISTS summaries_rev ON summaries(rev) WHERE rev > 0`,
+		// a peer's summary waiting for its thread (PLAN.md, Thread
+		// summaries — one hub pays), like pending_translations
+		`CREATE TABLE IF NOT EXISTS pending_summaries (
+			peer TEXT NOT NULL, post TEXT NOT NULL, step INTEGER NOT NULL, lang TEXT NOT NULL,
+			payload TEXT NOT NULL, ts INTEGER NOT NULL, seen INTEGER NOT NULL,
+			PRIMARY KEY (peer, post, step, lang))`,
+		`ALTER TABLE peer_state ADD COLUMN sum_cursor INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE peer_state ADD COLUMN tr_cursor INTEGER NOT NULL DEFAULT 0`,
 		// a card that quotes a post here instead of unfurling a fetched
 		// page (PLAN.md, Post cards): the quoted post's whole id, '' for
@@ -2672,10 +2679,12 @@ type Peer struct {
 	// how far into the peer's translations this hub has read (PLAN.md,
 	// Translations — one hub pays)
 	TrCursor int64 `json:"tr_cursor,omitempty"`
+	// and into its summaries (PLAN.md, Thread summaries)
+	SumCursor int64 `json:"sum_cursor,omitempty"`
 }
 
 func (s *Store) Peers() ([]Peer, error) {
-	rows, err := s.db.Query(`SELECT p.hub, p.addr, IFNULL(ps.pubkey,''), IFNULL(ps.cursor,0), IFNULL(ps.tr_cursor,0)
+	rows, err := s.db.Query(`SELECT p.hub, p.addr, IFNULL(ps.pubkey,''), IFNULL(ps.cursor,0), IFNULL(ps.tr_cursor,0), IFNULL(ps.sum_cursor,0)
 		FROM peers p LEFT JOIN peer_state ps ON ps.hub = p.hub ORDER BY p.ts`)
 	if err != nil {
 		return nil, err
@@ -2684,7 +2693,7 @@ func (s *Store) Peers() ([]Peer, error) {
 	out := []Peer{}
 	for rows.Next() {
 		var p Peer
-		if err := rows.Scan(&p.Hub, &p.Addr, &p.PubKey, &p.Cursor, &p.TrCursor); err != nil {
+		if err := rows.Scan(&p.Hub, &p.Addr, &p.PubKey, &p.Cursor, &p.TrCursor, &p.SumCursor); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
