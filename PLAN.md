@@ -961,8 +961,13 @@ hub that carries the post.
   app draws the same page card and opens it in the desktop's sandboxed
   page window without knowing who the admins are. `/p/{id}#page={cid}` opens the page when the
   thread loads: a link that shows a page while the top-level document
-  stays the hub. The live feed's delegated click handles pages it brings
-  in. External fonts and images a page links load as they would anywhere;
+  stays the hub. The hash follows the page in front (2026-09-24):
+  opening, raising or closing a page window rewrites it with
+  `replaceState` (no history entry, no jump), and it is cleared once no
+  page is open, so the address in the bar always shares what the reader
+  is looking at; a hash typed in afterwards opens or raises its page the
+  same way (`hashchange`). The live feed's delegated click handles pages
+  it brings in. External fonts and images a page links load as they would anywhere;
   the hub sets no CSP (were it to, `srcdoc` frames inherit it). A
   `srcdoc` document resolves links against the hub page around it, so a
   page's own `#section` link loaded the thread into the frame; the script

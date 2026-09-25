@@ -1102,12 +1102,22 @@ document.addEventListener("change", e => {
     const at = m ? m.index + m[0].length : 0;
     return text.slice(0, at) + base + text.slice(at);
   };
+  // The address says which page is in front. /p/{id}#page={cid} opens that
+  // page as the thread loads, and opening, raising or closing a page window
+  // writes the hash back (replaceState: no history entry, no jump), cleared
+  // once no page is open, so the link in the bar shares what the reader sees.
+  const topPage = () => [...document.querySelectorAll(".viewer.pageview")].sort((a, b) => b.style.zIndex - a.style.zIndex)[0];
+  const mark = () => {
+    const top = topPage(), hash = top ? "#page=" + top.dataset.cid : "";
+    if (location.hash !== hash) history.replaceState(history.state, "", location.pathname + location.search + hash);
+  };
   const openPage = async (href, name, cid) => {
     const had = shown(href);
-    if (had) { front(had); return; }
+    if (had) { front(had); mark(); return; }
     const w = document.createElement("div");
     w.className = "window viewer pageview";
     w.dataset.src = href;
+    w.dataset.cid = cid;
     w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
       '<span class="title"></span><span class="stripe"></span><span class="tbox zoom" title="' + T("zoom") + '"></span></div>' +
       '<div class="frame"><iframe sandbox="allow-scripts allow-popups allow-forms allow-modals" referrerpolicy="no-referrer" title=""></iframe><div class="statusbar"><span>' + T("loading") + '</span></div></div>';
@@ -1121,8 +1131,9 @@ document.addEventListener("change", e => {
     w.style.top = Math.max(4, (vh - w.offsetHeight) / 2 + k * 24) + "px";
     w.style.visibility = "visible";
     front(w);
-    w.addEventListener("pointerdown", () => front(w), true);
-    w.querySelector(".close").addEventListener("click", () => w.remove());
+    mark();
+    w.addEventListener("pointerdown", () => { front(w); mark(); }, true);
+    w.querySelector(".close").addEventListener("click", () => { w.remove(); mark(); });
     w.querySelector(".zoom").addEventListener("click", () => { w.classList.toggle("zoomed"); size(w); });
     const bar = w.querySelector(".titlebar");
     bar.addEventListener("pointerdown", e => {
@@ -1158,13 +1169,18 @@ document.addEventListener("change", e => {
     if (a.classList.contains("page")) openPage(a.href, a.dataset.name, a.dataset.cid);
     else open(a.href, a.dataset.name);
   });
-  // /p/{id}#page={cid} opens that page as the thread loads
-  const m = /^#page=([a-z0-9]+)$/.exec(location.hash);
-  if (m) { const a = document.querySelector('a.page[data-cid="' + m[1] + '"]'); if (a) openPage(a.href, a.dataset.name, a.dataset.cid); }
+  // /p/{id}#page={cid} opens that page as the thread loads, and a hash typed
+  // into the bar afterwards opens (or raises) its page the same way
+  const byHash = () => {
+    const m = /^#page=([a-z0-9]+)$/.exec(location.hash);
+    if (m) { const a = document.querySelector('a.page[data-cid="' + m[1] + '"]'); if (a) openPage(a.href, a.dataset.name, a.dataset.cid); }
+  };
+  byHash();
+  addEventListener("hashchange", byHash);
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
     const top = [...document.querySelectorAll(".viewer")].sort((a, b) => b.style.zIndex - a.style.zIndex)[0];
-    if (top) top.remove();
+    if (top) { top.remove(); mark(); }
   });
 })();
 </script>
