@@ -199,7 +199,7 @@ ever began that way, but a shorter one is a 404, and the JSON API,
 | `GET /v1/profiles?q=<piece of a name>&limit=8` | `{"profiles":[{"id","name","avatar"}]}` — named profiles whose name holds `q` (ASCII case folded) or whose id starts with it, whoever posted last first; no `q` lists the latest posters (max 20). What a composer's `@` list asks |
 | `GET /v1/profile/{id}` | Profile (404 = key has posted no profile yet) |
 | `GET /v1/profile/{id}/feed` | One author's posts, same pagination |
-| `GET /v1/post/{id}` | `{"post":...,"replies":[...],"thread":[...],"summary":{...}?}` — replies is the level below, oldest-first (`after=` paginates); thread the whole tree in reading order, each with its `depth`; summary, when the thread has one, the model's quick read of it: `{"step":20,"lang":"en","text":"**point**\n\n- …[#3]","model","replies","cites":{"3":"<reply id>"},"ts"}` |
+| `GET /v1/post/{id}` | `{"post":...,"replies":[...],"thread":[...],"summary":{...}?}` — the start of an id (8+ hex) is a 302 to the whole one, follow it (`curl -L`); replies is the level below, oldest-first (`after=` paginates); thread the whole tree in reading order, each with its `depth`; summary, when the thread has one, the model's quick read of it: `{"step":20,"lang":"en","text":"**point**\n\n- …[#3]","model","replies","cites":{"3":"<reply id>"},"ts"}` |
 | `GET /v1/search?q=<words>&limit=50&before=<post id>` | `{"query","posts":[...],"total"}` — posts holding every word of `q` (literal substrings, ASCII case folded), replies included, newest-first, same pagination; `total` is the match count |
 | `GET /v1/embed/{cid}` | Embed bytes (immutable cache; only pinned CIDs) |
 | `GET /v1/seq?author=` | `{"seq":N}` — author's last accepted seq |

@@ -570,6 +570,12 @@ hub that carries the post.
   2026-09-19, after a link of mine cut to eight characters came up
   404; that link, `/p/9c2cd7cd`, and `/p/9c2cd7cdf0b6?lang=zh` are the
   fixture (`TestWebShortIDFixture`), and both resolve.
+  `GET /v1/post/{id}` takes the same prefix (2026-09-24) and sends it on
+  the same way, a 302 with `no-store` to the whole id, the query carried:
+  a client that follows redirects (V2EX's Hub cards, which expand a link
+  cut short as well as a whole one) looks a post up by the link as it
+  was written and lands on JSON that carries whole ids as ever. A short
+  id in a signed message, `reply_to` or a delete, is still no id at all.
 - **Thread paging (built 2026-09-24).** A thread page held every reply
   up to 500, the first 500 in arrival order, and then stopped, which
   cut a long thread at the wrong end: the newest replies, the half a

@@ -68,7 +68,7 @@ func TestWebShortIDFixture(t *testing.T) {
 		h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example"+path, nil))
 		return w
 	}
-	for _, path := range []string{sixColumnsCut, sixColumnsShort, "/p/" + sixColumns} { // the post is not here yet: short or whole, a 404 that says so for now only
+	for _, path := range []string{sixColumnsCut, sixColumnsShort, "/p/" + sixColumns, "/v1/post/" + sixColumns[:8]} { // the post is not here yet: short or whole, a 404 that says so for now only
 		if w := ask(path); w.Code != http.StatusNotFound || w.Header().Get("Cache-Control") != "no-store" {
 			t.Errorf("before the post arrives, GET %s = %d, Cache-Control %q; want 404, no-store", path, w.Code, w.Header().Get("Cache-Control"))
 		}
@@ -82,6 +82,13 @@ func TestWebShortIDFixture(t *testing.T) {
 	}
 	if w := ask(sixColumnsCut + "?lang=zh"); w.Header().Get("Location") != "/p/"+sixColumns+"?lang=zh" {
 		t.Errorf("GET %s?lang=zh went to %q", sixColumnsCut, w.Header().Get("Location"))
+	}
+	// the JSON the same way: V2EX's Hub card fetches a link cut short by the id as written
+	if w := ask("/v1/post/" + sixColumns[:12] + "?lang=zh"); w.Code != http.StatusFound || w.Header().Get("Location") != "/v1/post/"+sixColumns+"?lang=zh" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("GET /v1/post/%s?lang=zh = %d to %q (Cache-Control %q), want 302 to the whole id's JSON with ?lang=zh, no-store", sixColumns[:12], w.Code, w.Header().Get("Location"), w.Header().Get("Cache-Control"))
+	}
+	if w := ask("/v1/post/" + sixColumns); w.Code != http.StatusOK || w.Header().Get("Cache-Control") == "no-store" || !strings.Contains(w.Body.String(), `"id":"`+sixColumns+`"`) {
+		t.Errorf("GET the whole id's JSON = %d (Cache-Control %q)", w.Code, w.Header().Get("Cache-Control"))
 	}
 	if w := ask(sixColumnsCut[:len(sixColumnsCut)-1]); w.Code != http.StatusNotFound || w.Header().Get("Location") != "" {
 		t.Errorf("GET %s = %d, want 404: seven characters are under the floor", sixColumnsCut[:len(sixColumnsCut)-1], w.Code)
@@ -146,6 +153,17 @@ func TestWebShortID(t *testing.T) {
 	if w := ask("/p/" + gone[:12]); w.Code != http.StatusNotFound {
 		t.Errorf("a deleted post's short link = %d, want 404", w.Code)
 	}
+	// the JSON: a prefix is sent on, shouted whole ids too; under the floor, gone or shared it is a 404 that is not kept
+	for path, want := range map[string]string{"/v1/post/" + id[:store.PostPrefixMin]: "/v1/post/" + id, "/v1/post/" + strings.ToUpper(id) + "?lang=en": "/v1/post/" + id + "?lang=en"} {
+		if w := ask(path); w.Code != http.StatusFound || w.Header().Get("Location") != want || w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("GET %s = %d to %q (Cache-Control %q), want 302 to %q, no-store", path, w.Code, w.Header().Get("Location"), w.Header().Get("Cache-Control"), want)
+		}
+	}
+	for path, want := range map[string]string{"/v1/post/" + id[:store.PostPrefixMin-1]: "no such post", "/v1/post/" + gone[:12]: "no such post"} {
+		if w := ask(path); w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), want) || w.Header().Get("Location") != "" {
+			t.Errorf("GET %s = %d %s, want 404 %q", path, w.Code, w.Body.String(), want)
+		}
+	}
 	// two posts that begin alike: never a winner, and the page says why
 	craft(id[:12] + strings.Repeat("0", 52))
 	if w := ask("/p/" + id[:12]); w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "More than one post begins that way") {
@@ -153,5 +171,11 @@ func TestWebShortID(t *testing.T) {
 	}
 	if w := ask("/p/" + id); w.Code != http.StatusOK {
 		t.Errorf("the whole id beside a twin = %d", w.Code)
+	}
+	if w := ask("/v1/post/" + id[:12]); w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "ambiguous short id") || w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("an ambiguous short id's JSON = %d %s (Cache-Control %q), want 404 saying so, no-store", w.Code, w.Body.String(), w.Header().Get("Cache-Control"))
+	}
+	if w := ask("/v1/post/" + id); w.Code != http.StatusOK {
+		t.Errorf("the whole id's JSON beside a twin = %d", w.Code)
 	}
 }

@@ -766,6 +766,34 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
+	// the start of an id, eight characters or more, is sent on to the whole
+	// one as /p/ does (PLAN.md, Public pages — a short id finds its post): a
+	// 302 the client follows, the query carried; nothing said about a short
+	// id may be kept, the redirect or the 404
+	if short, ok := webShortID(r.PathValue("id")); ok {
+		w.Header().Set("Cache-Control", "no-store")
+		id, err := short, error(nil)
+		if len(short) < 64 {
+			id, err = s.St.ResolvePrefix(short)
+		} else if _, err = s.St.Post(short); err != nil {
+			id = "" // a whole id in capitals that is no post's
+		}
+		switch {
+		case errors.Is(err, store.ErrAmbiguous):
+			writeErr(w, http.StatusNotFound, errors.New("ambiguous short id"))
+		case errors.Is(err, store.ErrNotFound):
+			writeErr(w, http.StatusNotFound, errors.New("no such post"))
+		case err != nil:
+			writeErr(w, http.StatusInternalServerError, err)
+		default:
+			to := "/v1/post/" + id
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, to, http.StatusFound)
+		}
+		return
+	}
 	p, err := s.St.Post(r.PathValue("id"))
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, errors.New("no such post"))
