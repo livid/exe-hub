@@ -105,11 +105,15 @@ func TestStatsPage(t *testing.T) {
 	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Ann"})
 	id := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "# A heading\nthe words of the post"})
 	now := time.Now().UnixMilli()
+	// the old hit sits at noon of yesterday's calendar day in the desk's zone (UTC), not a fixed 26 hours
+	// back: from 00:00 to 02:00 UTC that fell in the day before, and the Yesterday view counted nothing
+	u := time.Now().UTC()
+	yesterdayNoon := time.Date(u.Year(), u.Month(), u.Day()-1, 12, 0, 0, 0, time.UTC).UnixMilli()
 	statsHits(t, s, []stats.Hit{
 		{TS: now - 60_000, VID: "aaaa", SID: "s1", Entry: true, Path: "/", Kind: "home", Ref: "Google", Channel: "search", Country: "JP", Device: "desktop", Browser: "Chrome", OS: "Windows", Lang: "ja"},
 		{TS: now - 30_000, VID: "aaaa", SID: "s1", Path: "/p/" + id, Kind: "thread", Ref: "Google", Channel: "search", Country: "JP", Device: "desktop", Browser: "Chrome", OS: "Windows", Lang: "ja"},
 		{TS: now - 20_000, VID: "bbbb", SID: "s2", Entry: true, Path: "/u/" + pub2id(pub), Kind: "profile", Channel: "direct", Country: "CN", Device: "mobile", Browser: "Safari", OS: "iOS", Lang: "zh-CN"},
-		{TS: now - 26*3600_000, VID: "cccc", SID: "s3", Entry: true, Path: "/", Kind: "home", Channel: "direct", Country: "US", Device: "desktop"},
+		{TS: yesterdayNoon, VID: "cccc", SID: "s3", Entry: true, Path: "/", Kind: "home", Channel: "direct", Country: "US", Device: "desktop"},
 		{TS: now - 10_000, VID: "gggg", SID: "g1", Entry: true, Path: "/p/" + id, Kind: "thread", Channel: "direct", Country: "US", Device: "bot", Browser: "Googlebot", Bot: true},
 	})
 	h := s.Handler()
