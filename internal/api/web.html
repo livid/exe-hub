@@ -16,7 +16,7 @@
 {{end}}<meta property="og:site_name" content="{{.Host}}">
 <meta property="og:title" content="{{.Title}}">
 <meta property="og:type" content="{{if eq .Page "thread"}}article{{else if eq .Page "profile"}}profile{{else}}website{{end}}">
-<meta property="og:url" content="{{.Base}}{{.Path}}">
+<meta property="og:url" content="{{.Base}}{{.Path}}{{.Q}}">
 {{if .Desc}}<meta property="og:description" content="{{.Desc}}">
 <meta name="description" content="{{.Desc}}">
 {{end}}{{if .Image}}<meta property="og:image" content="{{.Image}}">

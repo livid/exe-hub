@@ -1930,21 +1930,27 @@ func TestWebPreviewLang(t *testing.T) {
 		t.Fatal(err)
 	}
 	pic := ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "", "embeds": []map[string]any{{"cid": cid, "mime": "image/png", "filename": "cat.png"}}})
-	for _, p := range []string{id, pic} {
-		if err := s.St.SetLang(p, "en", "m", true); err != nil {
+	han := ingest(t, s, priv, pub, 4, "post.create", map[string]any{"text": "今天天气很好。"})
+	for p, tag := range map[string]string{id: "en", pic: "en", han: "zh-Hans"} {
+		if err := s.St.SetLang(p, tag, "m", true); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := s.St.SetTranslation(id, "zh-Hans", "想法：在 Hub app 里用 $V2EX 打赏一条帖子。尚未实现。", "m", true); err != nil {
-		t.Fatal(err)
+	for _, tr := range [][3]string{{id, "zh-Hans", "想法：在 Hub app 里用 $V2EX 打赏一条帖子。尚未实现。"}, {han, "en", "Lovely weather today."}} {
+		if err := s.St.SetTranslation(tr[0], tr[1], tr[2], "m", true); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// as written: no language named, and a crawler names none
+	// as written: no language named, and a crawler names none; og:url and
+	// the canonical link are the one bare address
 	_, body := get(t, h, "/p/"+id)
 	for _, want := range []string{
 		`<title>Idea: tip a post with $V2EX from the Hub app — Livid</title>`,
 		`<meta property="og:description" content="Idea: tip a post with $V2EX from the Hub app. Not built yet.">`,
 		`<meta property="og:image" content="http://hub.example/v1/preview/post/` + id + `.png">`,
 		`<meta property="og:image:alt" content="Livid on hub.example: Idea: tip a post with $V2EX from the Hub app. Not built yet.">`,
+		`<link rel="canonical" href="http://hub.example/p/` + id + `">`,
+		`<meta property="og:url" content="http://hub.example/p/` + id + `">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("thread page lacks %s", want)
@@ -1959,10 +1965,33 @@ func TestWebPreviewLang(t *testing.T) {
 		`<meta property="og:image" content="http://hub.example/v1/preview/post/` + id + `.png?lang=zh">`,
 		`<meta name="twitter:image" content="http://hub.example/v1/preview/post/` + id + `.png?lang=zh">`,
 		`<meta property="og:image:alt" content="Livid · hub.example: 想法：在 Hub app 里用 $V2EX 打赏一条帖子。尚未实现。">`,
+		// og:url is the page as shared, so a scraper that follows it
+		// keeps the reading; the canonical link stays the bare address
+		`<link rel="canonical" href="http://hub.example/p/` + id + `">`,
+		`<meta property="og:url" content="http://hub.example/p/` + id + `?lang=zh">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("thread page under ?lang=zh lacks %s", want)
 		}
+	}
+	// a Chinese post shared with ?lang=en previews in English
+	_, body = get(t, h, "/p/"+han+"?lang=en")
+	for _, want := range []string{
+		`<title>Lovely weather today — Livid</title>`,
+		`<meta property="og:description" content="Lovely weather today.">`,
+		`<meta property="og:image" content="http://hub.example/v1/preview/post/` + han + `.png?lang=en">`,
+		`<meta property="og:url" content="http://hub.example/p/` + han + `?lang=en">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("a Chinese thread under ?lang=en lacks %s", want)
+		}
+	}
+	if _, body = get(t, h, "/p/"+han); !strings.Contains(body, `<title>今天天气很好 — Livid</title>`) || !strings.Contains(body, `<meta property="og:url" content="http://hub.example/p/`+han+`">`) {
+		t.Error("a Chinese thread as written")
+	}
+	// every page's og:url keeps the lang it was shared with
+	if _, body = get(t, h, "/?lang=zh"); !strings.Contains(body, `<meta property="og:url" content="http://hub.example/?lang=zh">`) || !strings.Contains(body, `<link rel="canonical" href="http://hub.example/">`) {
+		t.Error("the home page under ?lang=zh")
 	}
 	// ?lang=orig: as written, the link carried
 	if _, body = get(t, h, "/p/"+id+"?lang=orig"); !strings.Contains(body, `<title>Idea: tip a post with $V2EX from the Hub app — Livid</title>`) ||
@@ -2007,6 +2036,13 @@ func TestWebPreviewLang(t *testing.T) {
 	}
 	if string(shot("/v1/preview/post/"+id+".png?lang=en")) != string(plain) {
 		t.Error("?lang=en on an English post drew another card")
+	}
+	// a Chinese post: ?lang=en draws the translation; ?lang=zh the post
+	// as written under a Chinese date and status line, so its card is
+	// neither the plain one nor the English one
+	hanPlain, hanEn, hanZh := shot("/v1/preview/post/"+han+".png"), shot("/v1/preview/post/"+han+".png?lang=en"), shot("/v1/preview/post/"+han+".png?lang=zh")
+	if string(hanEn) == string(hanPlain) || string(hanZh) == string(hanPlain) || string(hanZh) == string(hanEn) {
+		t.Error("a Chinese post's cards do not differ by ?lang=")
 	}
 	if dir := os.Getenv("PREVIEW_OUT"); dir != "" {
 		for name, b := range map[string][]byte{"post-en.png": plain, "post-zh.png": zh, "post-ja.png": shot("/v1/preview/post/" + id + ".png?lang=ja"), "pic-zh.png": shot("/v1/preview/post/" + pic + ".png?lang=zh")} {
