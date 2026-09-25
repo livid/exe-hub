@@ -1118,7 +1118,11 @@ hub that carries the post.
   the card's chrome was a loose recreation (a 22px bar, an 11px flat
   close box, the title on #ddd). The card holds
   the avatar, the name, the date (UTC), the words wrapped to six lines
-  with an ellipsis, and the reply count on the status bar; a profile
+  with an ellipsis, and the reply count on the status bar — with
+  `?lang=` on the picture's address, the post's translation for that
+  reader when the page would show one, the date and the count in the
+  language (`previewReading`, `replies.none` and the `preview.*` strings
+  in webStrings, 2026-09-25; see Translations, the head); a profile
   carries its bio and post count, the home page the hub icon, its host
   and its counts. Type is Go Sans with Droid Sans Fallback for CJK
   (`internal/preview/FONTS.md`); an emoji, which neither has, is left
@@ -2120,7 +2124,18 @@ the original one press away. Asked by Livid 2026-09-19.
   written, the found words on yellow in whichever is showing. An
   explicit `?lang=` is carried by the page's own links (posts, profiles,
   pagers, the find strip), so a look at the other language lasts past
-  one click; titles, descriptions and preview pictures stay as written.
+  one click. A thread page's head reads as the page does (2026-09-25,
+  Livid: a link shared with `?lang=zh` should preview in Chinese): the
+  title, `og:description` and the picture's alt come from the
+  translation the reader is shown, and the drawn picture's link carries
+  the address's `?lang=` — `/v1/preview/post/{id}.png?lang=zh` — so the
+  card a chat app makes of that link is in that language, its date and
+  reply count too (see Link previews). The picture route reads `?lang=`
+  alone, never Accept-Language: a card is made from a link, whoever
+  fetches its picture has no language of their own, and a cache in
+  front of the hub keyed by the address must never hand one reader
+  another's card. A link without `?lang=` previews as written, since a
+  crawler names no language.
 - **Chinese punctuation, set by rule** (`lang.FullWidth`, 2026-09-19).
   A manual read of the longest translations found the model's one
   habit: straight after a code span, a link or a Latin word it stays in

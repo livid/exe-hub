@@ -217,6 +217,7 @@ type webPost struct {
 // below that swaps the two.
 type webTr struct {
 	HTML template.HTML // rendered like any post's text
+	Text string        // its words with the mentions named, for the head of a thread page
 	Lang string        // the language it is in, its lang attribute
 	Note string        // "Translated from English", in the reader's language
 	// the control's words as the page opens and once pressed
@@ -971,6 +972,7 @@ func (s *Server) webPosts(rd webReading, posts []store.FeedPost) []webPost {
 		out[i] = webPost{FeedPost: p, HTML: renderPost(p.Text, p.Mentions, rd, p.Boxes), When: webWhen(p.TS), Stamp: webStamp(p.TS), Q: rd.Q}
 		if t, ok := trs[p.ID]; ok && p.Text != "" {
 			out[i].Tr = rd.tr(t, p.Mentions, trMarks(p, t))
+			out[i].Tr.Text = card.NameMentions(t.Text, p.Mentions)
 		}
 		if p.LastReply != nil && p.ReplyTo == "" {
 			name := p.LastReply.AuthorName
@@ -1200,15 +1202,25 @@ type webReading struct {
 // language to another and stands without script; every page says Vary:
 // Accept-Language.
 func webReadingOf(r *http.Request) webReading {
-	rd := webReading{L: webLocaleOf(r)}
-	tag := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang")))
+	return readingOf(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang"))), webBrowserLang(r))
+}
+
+// readingOf is the reading of a request whose ?lang= is tag ("" for
+// none) from a browser whose first language is browser ("" for none).
+func readingOf(tag, browser string) webReading {
+	rd := webReading{L: webLocales["en"]}
+	if l := webLocaleTag(tag); l != nil {
+		rd.L = l
+	} else if l := webLocaleTag(browser); l != nil {
+		rd.L = l
+	}
 	if tag != "" {
 		if rd.Reader = webReaderTag(tag); rd.Reader != "" {
 			rd.Lang, rd.Q = tag, "?lang="+url.QueryEscape(tag)
 		}
 	}
 	if rd.Reader == "" {
-		rd.Reader = webReaderTag(webBrowserLang(r))
+		rd.Reader = webReaderTag(browser)
 	}
 	if rd.Reader != "" && rd.Reader != "orig" {
 		rd.Target = webTarget(rd.Reader)
@@ -1446,8 +1458,8 @@ func opening(text string) string {
 // author — "Idea: every hub account gets a home page — Claude" — so a
 // preview has a subject of its own even when a client shows no
 // description; a post with no words is its author on this hub.
-func threadTitle(p store.FeedPost, host string, l *webLocale) string {
-	if s := opening(named(p)); s != "" {
+func threadTitle(p store.FeedPost, words, host string, l *webLocale) string {
+	if s := opening(words); s != "" {
 		return s + " — " + authorLabel(p)
 	}
 	return l.T("title.on", "name", authorLabel(p), "host", host)
@@ -1692,10 +1704,17 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 			replies[i].ParentHref = "/p/" + p.ID + rd.with("at", replies[i].ReplyTo)
 		}
 	}
+	// the head — the title, the description, the picture's alt and the
+	// picture itself — reads in the reader's language, as the page does
+	// (PLAN.md, Translations): a link shared with ?lang= previews in it
+	words := named(*p)
+	if post.Tr != nil {
+		words = post.Tr.Text
+	}
 	// the thread this page is a window on, for the live script's filter:
 	// the post itself, or the root above it when the post is a reply
 	d := &webData{
-		Page: "thread", Title: threadTitle(*p, r.Host, rd.L), Desc: excerpt(named(*p), 200),
+		Page: "thread", Title: threadTitle(*p, words, r.Host, rd.L), Desc: excerpt(words, 200),
 		Post: &post, Replies: replies, Count: len(thread), Root: p.ID, Compose: &webCompose{ReplyTo: p.ID},
 		Canonical: true, Published: webStamp(p.TS), CardKind: "summary_large_image",
 		Live: s.Events != nil, Lang: rd.Lang, Q: rd.Q,
@@ -1720,10 +1739,10 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if d.Desc == "" {
-		d.Desc = previewNoWords(*p) + " By " + authorLabel(*p) + " on " + r.Host + "."
+		d.Desc = rd.L.T("preview.by", "what", previewNoWords(*p, rd.L), "name", authorLabel(*p), "host", r.Host)
 	}
 	// the picture: the post's first one, else a card drawn from its words
-	d.ImageAlt = authorLabel(*p) + " on " + r.Host + ": " + excerpt(named(*p), 120)
+	d.ImageAlt = rd.L.T("title.on", "name", authorLabel(*p), "host", r.Host) + ": " + excerpt(words, 120)
 	switch v := append(post.Videos, post.Sounds...); {
 	case len(post.Images) > 0:
 		d.Image = webBase(r) + "/v1/embed/" + post.Images[0].CID
@@ -1737,7 +1756,7 @@ func (s *Server) handleThreadPage(w http.ResponseWriter, r *http.Request) {
 		d.Image = webBase(r) + "/v1/embed/" + v[0].Poster // a video's frame, or a sound's waveform
 		d.ImageW, d.ImageH = v[0].Width, v[0].Height
 	default:
-		d.Image = webBase(r) + "/v1/preview/post/" + p.ID + ".png"
+		d.Image = webBase(r) + "/v1/preview/post/" + p.ID + ".png" + rd.Q
 		d.ImageW, d.ImageH = preview.W, preview.H
 	}
 	s.webRender(w, r, http.StatusOK, d)

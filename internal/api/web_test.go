@@ -1911,3 +1911,148 @@ func TestWebSummaryWindow(t *testing.T) {
 		t.Error("the live script does not swap the Summary window")
 	}
 }
+
+// TestWebPreviewLang: a thread link shared with ?lang= previews in that
+// language — the title, the description, the picture's alt and the
+// picture's own address carry the reader's translation and its chrome
+// words — while a link without one previews the post as written; the
+// picture route reads ?lang= alone, never the fetcher's
+// Accept-Language, so a cache in front of the hub keyed by the address
+// can never hand one reader another's card.
+func TestWebPreviewLang(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	ingest(t, s, priv, pub, 1, "profile.set", map[string]any{"name": "Livid"})
+	id := ingest(t, s, priv, pub, 2, "post.create", map[string]any{"text": "Idea: tip a post with $V2EX from the Hub app. Not built yet."})
+	const cid = "bafybeieeqqg3m4keu6lt3bwmo6s2gofxyrrn3sbyayw63kvxzrq4p5rdsy"
+	if err := s.St.AddPin(cid, 1234, "image/png", false); err != nil {
+		t.Fatal(err)
+	}
+	pic := ingest(t, s, priv, pub, 3, "post.create", map[string]any{"text": "", "embeds": []map[string]any{{"cid": cid, "mime": "image/png", "filename": "cat.png"}}})
+	for _, p := range []string{id, pic} {
+		if err := s.St.SetLang(p, "en", "m", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.St.SetTranslation(id, "zh-Hans", "想法：在 Hub app 里用 $V2EX 打赏一条帖子。尚未实现。", "m", true); err != nil {
+		t.Fatal(err)
+	}
+	// as written: no language named, and a crawler names none
+	_, body := get(t, h, "/p/"+id)
+	for _, want := range []string{
+		`<title>Idea: tip a post with $V2EX from the Hub app — Livid</title>`,
+		`<meta property="og:description" content="Idea: tip a post with $V2EX from the Hub app. Not built yet.">`,
+		`<meta property="og:image" content="http://hub.example/v1/preview/post/` + id + `.png">`,
+		`<meta property="og:image:alt" content="Livid on hub.example: Idea: tip a post with $V2EX from the Hub app. Not built yet.">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("thread page lacks %s", want)
+		}
+	}
+	// with ?lang=zh: the head in the reader's Chinese, the picture's link carrying it
+	_, body = get(t, h, "/p/"+id+"?lang=zh")
+	for _, want := range []string{
+		`<title>想法：在 Hub app 里用 $V2EX 打赏一条帖子 — Livid</title>`,
+		`<meta property="og:title" content="想法：在 Hub app 里用 $V2EX 打赏一条帖子 — Livid">`,
+		`<meta property="og:description" content="想法：在 Hub app 里用 $V2EX 打赏一条帖子。尚未实现。">`,
+		`<meta property="og:image" content="http://hub.example/v1/preview/post/` + id + `.png?lang=zh">`,
+		`<meta name="twitter:image" content="http://hub.example/v1/preview/post/` + id + `.png?lang=zh">`,
+		`<meta property="og:image:alt" content="Livid · hub.example: 想法：在 Hub app 里用 $V2EX 打赏一条帖子。尚未实现。">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("thread page under ?lang=zh lacks %s", want)
+		}
+	}
+	// ?lang=orig: as written, the link carried
+	if _, body = get(t, h, "/p/"+id+"?lang=orig"); !strings.Contains(body, `<title>Idea: tip a post with $V2EX from the Hub app — Livid</title>`) ||
+		!strings.Contains(body, `<meta property="og:image" content="http://hub.example/v1/preview/post/`+id+`.png?lang=orig">`) {
+		t.Error("thread page under ?lang=orig")
+	}
+	// a browser's own language reads the head as the page reads, its picture link plain
+	if _, body = get(t, h, "/p/"+id, "Accept-Language", "zh-CN"); !strings.Contains(body, `<title>想法：在 Hub app 里用 $V2EX 打赏一条帖子 — Livid</title>`) ||
+		!strings.Contains(body, `<meta property="og:image" content="http://hub.example/v1/preview/post/`+id+`.png">`) {
+		t.Error("thread page for a Chinese browser")
+	}
+	// a post with no words is described in the reader's language
+	if _, body = get(t, h, "/p/"+pic+"?lang=zh"); !strings.Contains(body, `<meta property="og:description" content="一张图片。由 Livid 发布于 hub.example。">`) {
+		t.Error("a picture post under ?lang=zh: " + body[strings.Index(body, `og:description`):][:120])
+	}
+	if _, body = get(t, h, "/p/"+pic); !strings.Contains(body, `<meta property="og:description" content="A picture. By Livid on hub.example.">`) {
+		t.Error("a picture post as written")
+	}
+	// the pictures: ?lang= draws another card, Accept-Language never does
+	shot := func(path string, hdr ...string) []byte {
+		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
+		for i := 0; i+1 < len(hdr); i += 2 {
+			req.Header.Set(hdr[i], hdr[i+1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Header().Get("Content-Type"))
+		}
+		return w.Body.Bytes()
+	}
+	plain := shot("/v1/preview/post/" + id + ".png")
+	zh := shot("/v1/preview/post/" + id + ".png?lang=zh")
+	if string(zh) == string(plain) {
+		t.Error("?lang=zh drew the card as written")
+	}
+	if string(shot("/v1/preview/post/"+id+".png?lang=orig")) != string(plain) {
+		t.Error("?lang=orig drew another card")
+	}
+	if string(shot("/v1/preview/post/"+id+".png", "Accept-Language", "zh-CN")) != string(plain) {
+		t.Error("Accept-Language drew another card")
+	}
+	if string(shot("/v1/preview/post/"+id+".png?lang=en")) != string(plain) {
+		t.Error("?lang=en on an English post drew another card")
+	}
+	if dir := os.Getenv("PREVIEW_OUT"); dir != "" {
+		for name, b := range map[string][]byte{"post-en.png": plain, "post-zh.png": zh, "post-ja.png": shot("/v1/preview/post/" + id + ".png?lang=ja"), "pic-zh.png": shot("/v1/preview/post/" + pic + ".png?lang=zh")} {
+			if err := os.WriteFile(dir+"/"+name, b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// TestPreviewWords: the card's own words in each language.
+func TestPreviewWords(t *testing.T) {
+	en, zh, ja := webLocales["en"], webLocales["zh"], webLocales["ja"]
+	const ms = 1758812400000 // 25 Sep 2025 15:00 UTC
+	for _, c := range []struct{ got, want string }{
+		{previewWhen(ms, en), "25 Sep 2025 · 15:00 UTC"},
+		{previewWhen(ms, zh), "2025年9月25日 · 15:00 UTC"},
+		{previewWhen(ms, ja), "2025年9月25日 · 15:00 UTC"},
+		{previewReplies(0, en), "No replies yet"},
+		{previewReplies(1, en), "1 reply"},
+		{previewReplies(2, en), "2 replies"},
+		{previewReplies(0, zh), "还没有回复"},
+		{previewReplies(3, zh), "3 条回复"},
+		{previewReplies(1, ja), "1 件の返信"},
+		{previewNoWords(store.FeedPost{}, en), "A post."},
+		{previewNoWords(store.FeedPost{Embeds: []envelope.Embed{{MIME: "image/png"}, {MIME: "image/png"}}}, zh), "2 张图片。"},
+		{previewNoWords(store.FeedPost{Embeds: []envelope.Embed{{MIME: "text/plain"}}}, ja), "添付ファイル 1 件。"},
+	} {
+		if c.got != c.want {
+			t.Errorf("got %q, want %q", c.got, c.want)
+		}
+	}
+	for _, c := range []struct{ tag, reader, target, lang, q, code string }{
+		{"", "", "", "", "", "en"},
+		{"zh", "zh-Hans", "zh-Hans", "zh", "?lang=zh", "zh"},
+		{"zh-tw", "zh-Hant", "zh-Hans", "zh-tw", "?lang=zh-tw", "zh"},
+		{"ja", "ja", "ja", "ja", "?lang=ja", "ja"},
+		{"en", "en", "en", "en", "?lang=en", "en"},
+		{"orig", "orig", "", "orig", "?lang=orig", "en"},
+		{"fr", "fr", "en", "fr", "?lang=fr", "en"},
+	} {
+		req := httptest.NewRequest("GET", "http://hub.example/v1/preview/post/x.png?lang="+c.tag, nil)
+		req.Header.Set("Accept-Language", "ja")
+		rd := previewReading(req)
+		if rd.Reader != c.reader || rd.Target != c.target || rd.Lang != c.lang || rd.Q != c.q || rd.L.Code != c.code {
+			t.Errorf("?lang=%s reads %+v", c.tag, rd)
+		}
+	}
+}

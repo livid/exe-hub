@@ -152,6 +152,7 @@ var webStrings = map[string]map[string]string{
 		"replies":       "{n} replies",      // the thread's status line and a root's foot
 		"replies.one":   "{n} reply",
 		"replies.range": "{a}–{b} of {n} replies", // a thread page past one page: the replies this page holds
+		"replies.none":  "No replies yet",         // a thread's preview picture, on its status bar
 		"summary":       "Summary",                // the window beside a long thread, and its meta line
 		"summary.of":    "Summary of the first {n} replies",
 		"summarize":     "Summarize",             // the strip's button on a phone, which slides the summary in
@@ -181,6 +182,12 @@ var webStrings = map[string]map[string]string{
 		"tr.from": "Translated from {lang}",
 		"tr.show": "Show Original",
 		"tr.back": "Show Translation",
+		// a thread's preview — its description and its picture — when the post has no words
+		"preview.picture":  "A picture.",
+		"preview.pictures": "{n} pictures.",
+		"preview.file":     "An attachment.",
+		"preview.post":     "A post.",
+		"preview.by":       "{what} By {name} on {host}.",
 		// the Post window
 		"post":               "Post",
 		"compose.note.post":  "Post from a Solana wallet: one signature a post, never a transaction.",
@@ -292,6 +299,7 @@ var webStrings = map[string]map[string]string{
 		"feed":               "信息流",
 		"replies":            "{n} 条回复",
 		"replies.range":      "第 {a}–{b} 条，共 {n} 条回复",
+		"replies.none":       "还没有回复",
 		"summary":            "摘要",
 		"summary.of":         "前 {n} 条回复的摘要",
 		"summarize":          "总结",
@@ -316,6 +324,11 @@ var webStrings = map[string]map[string]string{
 		"tr.from":            "译自{lang}",
 		"tr.show":            "显示原文",
 		"tr.back":            "显示译文",
+		"preview.picture":    "一张图片。",
+		"preview.pictures":   "{n} 张图片。",
+		"preview.file":       "一个附件。",
+		"preview.post":       "一条帖子。",
+		"preview.by":         "{what}由 {name} 发布于 {host}。",
 		"post":               "发帖",
 		"compose.note.post":  "用 Solana 钱包发帖：每帖签一次名，签的是消息，不是交易。",
 		"compose.note.reply": "用 Solana 钱包回复：每条回复签一次名，签的是消息，不是交易。",
@@ -423,6 +436,7 @@ var webStrings = map[string]map[string]string{
 		"feed":               "フィード",
 		"replies":            "{n} 件の返信",
 		"replies.range":      "{n} 件の返信のうち {a}–{b} 件目",
+		"replies.none":       "まだ返信はありません",
 		"summary":            "要約",
 		"summary.of":         "最初の {n} 件の返信の要約",
 		"summarize":          "要約",
@@ -447,6 +461,11 @@ var webStrings = map[string]map[string]string{
 		"tr.from":            "{lang}から翻訳",
 		"tr.show":            "原文を表示",
 		"tr.back":            "翻訳を表示",
+		"preview.picture":    "画像 1 枚。",
+		"preview.pictures":   "画像 {n} 枚。",
+		"preview.file":       "添付ファイル 1 件。",
+		"preview.post":       "投稿。",
+		"preview.by":         "{what}{host} の {name} より。",
 		"post":               "投稿",
 		"compose.note.post":  "Solana ウォレットで投稿：署名 1 回、トランザクションは不要です。",
 		"compose.note.reply": "Solana ウォレットで返信：署名 1 回、トランザクションは不要です。",

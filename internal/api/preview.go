@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"exehub/internal/card"
 	"exehub/internal/identicon"
 	"exehub/internal/preview"
 	"exehub/internal/store"
@@ -87,24 +88,38 @@ func previewID(r *http.Request) string {
 }
 
 // previewWhen is the date line a card shows for a post: UTC, the
-// pages' local-time rewrite being script.
-func previewWhen(ms int64) string {
-	return time.UnixMilli(ms).UTC().Format("2 Jan 2006 · 15:04 UTC")
+// pages' local-time rewrite being script; a Chinese or Japanese card
+// writes the date as its reader does.
+func previewWhen(ms int64, l *webLocale) string {
+	t := time.UnixMilli(ms).UTC()
+	if l.Code == "zh" || l.Code == "ja" {
+		return t.Format("2006年1月2日 · 15:04 UTC")
+	}
+	return t.Format("2 Jan 2006 · 15:04 UTC")
 }
 
 // previewReplies is the thread page's status line.
-func previewReplies(n int) string {
-	switch n {
-	case 0:
-		return "No replies yet"
-	case 1:
-		return "1 reply"
+func previewReplies(n int, l *webLocale) string {
+	if n == 0 {
+		return l.T("replies.none")
 	}
-	return fmt.Sprintf("%d replies", n)
+	return l.T("replies", "n", n)
 }
 
-// handlePreviewPost: GET /v1/preview/post/{id} — the author and the
-// words of one post, the thread's reply count on the status line.
+// previewReading is the reading a post's picture is drawn for: the
+// address's ?lang= alone, never the fetcher's Accept-Language. A card
+// is made from a link, and whoever fetches its picture — a crawler, a
+// cache in front of the hub — has no language of their own; the
+// picture must say the same thing to everyone who asks by that
+// address.
+func previewReading(r *http.Request) webReading {
+	return readingOf(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang"))), "")
+}
+
+// handlePreviewPost: GET /v1/preview/post/{id}[?lang=…] — the author
+// and the words of one post, the thread's reply count on the status
+// line; with ?lang= the words are the reader's translation when the
+// page would show one, and the date and the count in their language.
 func (s *Server) handlePreviewPost(w http.ResponseWriter, r *http.Request) {
 	p, err := s.St.Post(previewID(r))
 	if errors.Is(err, store.ErrNotFound) {
@@ -115,20 +130,26 @@ func (s *Server) handlePreviewPost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	body := webWords(named(*p))
+	rd := previewReading(r)
+	words := named(*p)
+	if t, ok := s.webTranslations(rd, []string{p.ID})[p.ID]; ok && p.Text != "" {
+		words = card.NameMentions(t.Text, p.Mentions)
+	}
+	body := webWords(words)
 	if strings.TrimSpace(body) == "" {
-		body = previewNoWords(*p)
+		body = previewNoWords(*p, rd.L)
 	}
 	pic, crisp := s.portrait(r.Context(), p.Avatar, p.Author)
 	servePreview(w, r, preview.Card{
 		Title: r.Host, Picture: pic, Crisp: crisp,
-		Name: authorLabel(*p), Sub: previewWhen(p.TS), Body: body,
-		Foot: previewReplies(p.Replies),
+		Name: authorLabel(*p), Sub: previewWhen(p.TS, rd.L), Body: body,
+		Foot: previewReplies(p.Replies, rd.L),
 	})
 }
 
-// previewNoWords stands in for a post that is all pictures or files.
-func previewNoWords(p store.FeedPost) string {
+// previewNoWords stands in for a post that is all pictures or files,
+// in the language of the card or the head it is for.
+func previewNoWords(p store.FeedPost, l *webLocale) string {
 	n := 0
 	for _, e := range p.Embeds {
 		if strings.HasPrefix(e.MIME, "image/") {
@@ -137,13 +158,13 @@ func previewNoWords(p store.FeedPost) string {
 	}
 	switch {
 	case n == 1:
-		return "A picture."
+		return l.T("preview.picture")
 	case n > 1:
-		return fmt.Sprintf("%d pictures.", n)
+		return l.T("preview.pictures", "n", n)
 	case len(p.Embeds) > 0:
-		return "An attachment."
+		return l.T("preview.file")
 	}
-	return "A post."
+	return l.T("preview.post")
 }
 
 // handlePreviewProfile: GET /v1/preview/profile/{id} — the avatar, the
