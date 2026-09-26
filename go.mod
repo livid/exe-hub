@@ -20,6 +20,4 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-require github.com/livid/exe-stats v0.0.0
-
-replace github.com/livid/exe-stats => /www/exe-stats
+require github.com/livid/exe-stats v0.1.0
