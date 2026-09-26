@@ -39,7 +39,7 @@ import (
 
 func main() {
 	cfgPath := flag.String("config", "config.json", "path to config.json")
-	stateDir := flag.String("state", "", "state directory (default ~/.exe-hub)")
+	stateDir := flag.String("state", "", "state directory (default $EXE_HUB_STATE, else ~/.exe-hub)")
 	sig := flag.String("s", "", `send a signal to the running daemon: "reload" re-reads config (nginx-style; editing the file alone changes nothing)`)
 	redo := flag.String("retranslate", "", "forget one post's kept translations so the running daemon makes them again: the post's id, or the first 12 characters or more of it")
 	redoTo := flag.String("to", "", "with -retranslate: only the translation into this language ("+strings.Join(lang.Targets, ", ")+")")
@@ -47,6 +47,12 @@ func main() {
 	resum := flag.String("resummarize", "", "forget one thread's newest summary so the running daemon writes it again: the root post's id, or the first 12 characters or more of it")
 	flag.Parse()
 
+	if *stateDir == "" {
+		// the container sets EXE_HUB_STATE, so its side commands (-s
+		// reload, -retranslate, -resummarize) find the daemon's files
+		// without every invocation naming them
+		*stateDir = os.Getenv("EXE_HUB_STATE")
+	}
 	if *stateDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {

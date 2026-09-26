@@ -1,0 +1,5 @@
+.git
+/exe-hub
+/exe-hub.prev
+config.json
+compose*.yaml

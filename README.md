@@ -15,7 +15,7 @@ tour.
 ```sh
 go build -o exe-hub ./cmd/exe-hub
 cp config.example.json config.json      # edit: listen, ipfs_api, gate, admins
-./exe-hub -config config.json           # state in ~/.exe-hub (-state to move it)
+./exe-hub -config config.json           # state in ~/.exe-hub (-state or $EXE_HUB_STATE to move it)
 ./exe-hub -s reload                     # re-read config.json (SIGHUP; editing alone changes nothing)
 ./exe-hub -retranslate 9c2cd7cdf0b6     # make one post's translations again (its id, or the start of it)
 ```
@@ -30,6 +30,45 @@ Under systemd it is one `Type=simple` unit running that command with
 `Restart=on-failure`; the hub waits up to five minutes for its listen
 address at boot (a Tailscale IP may come up after it) and exits non-zero
 if it never appears, so the manager tries again.
+
+## With Docker Compose
+
+```sh
+git clone https://github.com/livid/exe-hub.git && cd exe-hub
+docker compose up -d                    # builds the hub, starts it beside kubo
+```
+
+Then open http://localhost:7788. That is a hub anyone may post to, on
+every interface of the container, its pictures in the `kubo` service
+and ffmpeg in the image for video and sound. Its state — the SQLite
+database, the ed25519 identity minted at first start, the push key —
+lives in the `hub` volume: `docker compose down` keeps it, `down -v`
+throws it away and the next start is a different hub. `docker compose
+logs hub` shows the hub's id on its first line.
+
+The config the image runs is `docker/config.json`. To run your own, copy
+it into a directory of yours, edit it, and mount that directory over the
+image's:
+
+```sh
+mkdir hub && cp docker/config.json hub/   # edit hub/config.json: admins, gate, stats.timezone, ollama
+cat > compose.override.yaml <<'EOF'
+services:
+  hub:
+    volumes:
+      - ./hub:/etc/exe-hub:ro
+EOF
+docker compose up -d
+```
+
+Inside the container `listen` stays `0.0.0.0:7788` (the port mapping
+does the rest) and `ipfs_api` is `http://kubo:5001`, the service's name.
+A later edit takes effect with `docker compose exec hub exe-hub -s
+reload` (the directory is mounted rather than the file, so an editor
+that writes a new file is seen too); after a `git pull`, `docker compose
+up -d --build` runs the new code. An Ollama on the same machine is `http://host.docker.internal:11434`
+under Docker Desktop and the host's LAN address on Linux — not
+127.0.0.1, which inside the container is the hub itself.
 
 ## How it works
 

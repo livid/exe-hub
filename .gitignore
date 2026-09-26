@@ -1,3 +1,5 @@
 config.json
 /exe-hub
 /exe-hub.prev
+/compose.override.yaml
+!/docker/config.json

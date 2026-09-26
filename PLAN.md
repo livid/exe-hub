@@ -41,6 +41,35 @@ around.
   with each other. Hub signatures get their own domain prefix when that
   lands.
 
+- **Docker Compose** (built 2026-09-26, asked for by a reader with a
+  NAS whose every service is a compose file, Livid: "add Docker Compose
+  YAML to exe-hub so users can easily launch an exe-hub instance").
+  `compose.yaml` at the repo root is two services: `hub`, built from the
+  checkout by the `Dockerfile` (a static Go build in `golang:1.26-alpine`,
+  run in `alpine:3.24` with ffmpeg and the CA certificates, as the user
+  `hub`, uid 1000), and `kubo` (`ipfs/kubo:release`, profile `server`, its
+  RPC reachable only inside the compose network — the hub is its only
+  client and serves the pictures itself, so nothing of kubo's is
+  published). Two named volumes, `hub` (`/var/lib/exe-hub`: the database,
+  identity, push key, staged media) and `kubo` (`/data/ipfs`); the hub's
+  is the one that must survive, since losing it is a different hub. The
+  image bakes `docker/config.json` at `/etc/exe-hub/config.json` — open
+  gate, `listen` `0.0.0.0:7788`, `ipfs_api` `http://kubo:5001`, media
+  on x264, no admins — so `docker compose up -d` needs no file first; a
+  hub of one's own mounts a directory holding a copy of it over
+  `/etc/exe-hub` from a `compose.override.yaml` (gitignored; the
+  directory rather than the file, since a bind-mounted file keeps its
+  first inode and an editor's or sed's rewrite is never seen), reloads with `docker compose exec
+  hub exe-hub -s reload` (the pidfile is in the state dir, in the same
+  container: the image sets `EXE_HUB_STATE=/var/lib/exe-hub`, which is
+  what `-state` defaults to when it is not given, so the side commands
+  need no flag in an exec), and rebuilds with `up -d --build`. Not a registry image:
+  the build is from source, per architecture, on the machine that runs
+  it, until there is somewhere to publish one from. Known catch at the
+  time of writing: `go.mod` takes `github.com/livid/exe-stats` by a
+  `replace` to `/www/exe-stats`, so a clone elsewhere builds once that
+  module is published and the replace gone.
+
 ## Aggregation — one-hop pull replication (built)
 
 - **"Trust" means manual admin curation, nothing more.** A hub aggregates

@@ -1,0 +1,9 @@
+{
+  "listen": "0.0.0.0:7788",
+  "ipfs_api": "http://kubo:5001",
+  "gate": { "mode": "open" },
+  "admins": [],
+  "allow_replication": true,
+  "cooldown": 60,
+  "media": { "encoder": "x264" }
+}

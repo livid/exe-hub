@@ -1,0 +1,37 @@
+# Your own exe-hub with Docker Compose (PLAN.md, Hub identity &
+# deployment): the hub, built from this checkout, beside the kubo node
+# that keeps its pictures.
+#
+#   docker compose up -d        then open http://localhost:7788
+#
+# The hub's state — its SQLite database, the ed25519 identity it mints
+# on first start, its push key — lives in the `hub` volume: `down` keeps
+# it, `down -v` throws it away and the next start is a different hub.
+# To run your own config, see README.md, "With Docker Compose".
+services:
+  hub:
+    build: .
+    image: exe-hub
+    restart: unless-stopped
+    ports:
+      - "7788:7788"
+    volumes:
+      - hub:/var/lib/exe-hub
+    depends_on:
+      - kubo
+
+  kubo:
+    image: ipfs/kubo:release
+    restart: unless-stopped
+    environment:
+      # no scans of the local network and no mDNS: what a hosted machine
+      # wants, and a home network loses nothing by it
+      IPFS_PROFILE: server
+    volumes:
+      - kubo:/data/ipfs
+    # Its RPC on :5001 stays inside the compose network, where the hub is
+    # its only client; nothing is published, the hub serves the pictures.
+
+volumes:
+  hub:
+  kubo:
