@@ -1961,9 +1961,9 @@ mockups are the look; this is what stands behind them.
   per emoji, the emoji and its count, 6px apart (8px on a phone, where
   the buttons stand 30px tall). They lie flat on the post, no button
   face: the mouse over one draws a 1px rounded line round it (#262626,
-  10px corners), and a press greys it (#ddd). One the reader gave keeps
-  that line all the time, in the highlight blue (#333399), its count
-  blue with it. It wore the pressed face first (#666, Bookmark's rule),
+  3px corners, the push buttons' own), and a press greys it (#ddd). One
+  the reader gave keeps that line all the time, in the highlight blue
+  (#333399), its count blue with it. It wore the pressed face first (#666, Bookmark's rule),
   which muddied a red ❤️; Livid asked for the line instead
   (2026-10-28). Without a mouse (a phone) every one keeps a
   light line (#bbb), so it still reads as a button. Which are the
