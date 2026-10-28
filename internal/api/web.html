@@ -15,8 +15,8 @@
 // names an id, and clears it at Sign Out
 window.hubMine = id => {
   const css = document.getElementById("mine") || document.head.appendChild(Object.assign(document.createElement("style"), { id: "mine" }));
-  const sel = /^[0-9a-f]{16}$/.test(id || "") ? '.rx[data-ids~="' + id + '"]' : "";
-  css.textContent = sel ? sel + " { background: #666; color: #fff; box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; } .paper " + sel + " { background: var(--ink); color: var(--ground); border-color: var(--ink); box-shadow: none; }" : "";
+  const sel = /^[0-9a-f]{16}$/.test(id || "") ? '.rxs .rx[data-ids~="' + id + '"]' : "";
+  css.textContent = sel ? sel + ", " + sel + ":hover, " + sel + ":active { border-color: #333399; color: #333399; } .paper " + sel + ", .paper " + sel + ":hover, .paper " + sel + ":active { border-color: var(--ink); color: var(--ink); }" : "";
   if (window.hubRxDress) hubRxDress();
 };
 try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hubMine(w && w.id); } catch (e) { hubMine(""); }</script>
@@ -866,14 +866,21 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .post .rx-add[aria-expanded=true] .w { fill: #999; }
 .post .rx-add:focus { outline: none; }
 .post .rx-add:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
-/* the row of reactions: push buttons, the emoji and its count, 6px
-   apart, under the body. One the reader gave wears the pressed face —
-   the rule is <style id="mine">'s, by the button's data-ids — and the
-   count goes white with it. Nothing selects, and a held finger brings
-   no callout: holding one down opens who reacted. */
+/* the row of reactions: the emoji and its count, 6px apart, under the
+   body, flat on the post — no button face, which muddied a red heart.
+   The mouse over one draws a rounded line round it, and a press greys
+   it; one the reader gave keeps that line in the highlight blue, the
+   count blue with it — the rule is <style id="mine">'s, by the button's
+   data-ids. Without a mouse (a phone) every one keeps a light line, so
+   it still reads as a button. Nothing selects, and a held finger
+   brings no callout: holding one down opens who reacted. */
 .rxs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; cursor: auto; }
 .rxs .rx { display: inline-flex; align-items: center; min-width: 0; height: 20px; padding: 2px 7px;
+  background: transparent; border-color: transparent; border-radius: 10px; box-shadow: none;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+@media (hover: hover) { .rxs .rx:hover { border-color: #262626; } }
+@media (hover: none) { .rxs .rx { border-color: #bbb; } }
+.rxs .rx:active { background: #ddd; color: #262626; border-color: #262626; box-shadow: none; }
 .rxs .rx .em { font-size: 14px; line-height: 14px; font-weight: normal; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 .rxs .rx .n { margin-left: 5px; font-variant-numeric: tabular-nums; }
 .rxs .rx:focus { outline: none; }
@@ -893,9 +900,9 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 /* the picker (PLAN.md, Reactions — Add Reaction): a menu in the "@"
    list's dress hung under its button, 244px wide; its cells invert
    under the pointer as menu rows do, and one the reader gave wears the
-   pressed face. The status line names the emoji under the pointer. On
-   a phone it is a sheet: a window at the foot of the screen over a
-   faint veil, the cells 44px. */
+   row's blue rounded line. The status line names the emoji under the
+   pointer. On a phone it is a sheet: a window at the foot of the
+   screen over a faint veil, the cells 44px. */
 .rxp { position: absolute; z-index: 90; box-sizing: border-box; width: 244px; padding: 0; background: #ddd; color: #262626;
   border: 1px solid #262626; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb, 2px 2px 0 rgba(38,38,38,.85);
   cursor: default; -webkit-user-select: none; user-select: none; }
@@ -912,7 +919,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .rxp .ec { display: flex; align-items: center; justify-content: center; height: 26px; margin: 0; padding: 0; border: 0; border-radius: 0;
   background: transparent; box-shadow: none; color: inherit; font-size: 16px; line-height: 1;
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; cursor: default; }
-.rxp .ec.mine { background: #666; }
+.rxp .ec.mine { box-sizing: border-box; border: 1px solid #333399; border-radius: 10px; }
 .rxp .ec.on { background: #333399; }
 .rxp .ec:focus { outline: none; }
 .rxp .ec:focus-visible { outline: 2px solid #9999fe; outline-offset: -2px; }
@@ -1157,6 +1164,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .paper .btn { height: auto; min-width: 0; padding: 1px 10px; border: 1px solid var(--line); border-radius: 0; box-shadow: none;
   background: transparent; color: var(--ink); font: inherit; font-size: 13px; line-height: 20px; font-weight: 400; cursor: pointer; }
 .paper .btn:active { background: var(--wash); color: var(--ink); box-shadow: none; }
+/* a reaction is one of them too, its line no darker under the mouse;
+   the reader's own is drawn in ink (<style id="mine">) */
+.paper .rxs .rx:hover, .paper .rxs .rx:active { border-color: var(--line); }
+.paper .rxs .rx:active { background: var(--wash); color: var(--ink); }
 .paper .text .copy .gl .w, .paper .text .copy:active .gl .w { fill: var(--ground); }
 .paper .foot .del { color: #a33; font-size: 12px; }
 .paper .foot .del.armed, .paper .foot .del.armed:active { background: #b33; color: #fff; border-color: #b33; box-shadow: none; }

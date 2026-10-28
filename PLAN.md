@@ -1957,14 +1957,19 @@ mockups are the look; this is what stands behind them.
   [{id, name, avatar, ts}]}]}`, ts the op's own. The live bus says
   `post.react` with the post's id, so an open page draws the change.
 - **The row of reactions.** Under the post's body — after its card and
-  pictures, before its foot line — only once a post has one: a push
-  button per emoji, the emoji and its count, 6px apart (8px on a phone,
-  where the buttons stand 30px tall). One the reader gave wears the
-  pressed face — #666, white figures, the inset bevel — Platinum's
-  toggle that is on, the Bookmark button's rule; no new colour. Which
-  are the reader's is in the page as each button's `data-ids` (the ids
-  that gave it), and a rule the head script writes for the remembered
-  wallet's id (`<style id="mine">`, `[data-ids~="id"]`) presses them
+  pictures, before its foot line — only once a post has one: a button
+  per emoji, the emoji and its count, 6px apart (8px on a phone, where
+  the buttons stand 30px tall). They lie flat on the post, no button
+  face: the mouse over one draws a 1px rounded line round it (#262626,
+  10px corners), and a press greys it (#ddd). One the reader gave keeps
+  that line all the time, in the highlight blue (#333399), its count
+  blue with it. It wore the pressed face first (#666, Bookmark's rule),
+  which muddied a red ❤️; Livid asked for the line instead
+  (2026-10-28). Without a mouse (a phone) every one keeps a
+  light line (#bbb), so it still reads as a button. Which are the
+  reader's is in the page as each button's `data-ids` (the ids that
+  gave it), and a rule the head script writes for the remembered
+  wallet's id (`<style id="mine">`, `[data-ids~="id"]`) draws them
   before the first paint, on every page; the compose script writes it
   again when the gate names an id, and clears it at Sign Out. Its title
   says who: "You and 8 more. Right-click to see who." or "4 people.
@@ -1987,7 +1992,7 @@ mockups are the look; this is what stands behind them.
   🍜 🦉 🐛 🤝), eight to a row, and a status line naming the emoji under
   the pointer ("🔥  Fire"), the way Key Caps does. A cell inverts under
   the pointer as a menu row does; one the reader already gave wears the
-  pressed face, and picking it again takes it back ("· yours, click to
+  row's blue rounded line, and picking it again takes it back ("· yours, click to
   take it back"). The search reaches every emoji: the first word typed
   fetches the names — `GET /v1/emoji/{lang}`, the page's language and
   English, about 50 KB each gzipped, under a version in the address so
@@ -2019,7 +2024,9 @@ mockups are the look; this is what stands behind them.
   it to take it back.") beside Cancel. Holding a reaction down (half a
   second) opens the Reactions window on it.
 - **Paper** (a Planet site's frame, Replies under a blog post) draws the
-  row in its own plain buttons, read-only: a press shows who.
+  row in its own plain buttons — the hairline box, square, no darker
+  under the mouse — the reader's own in ink, read-only: a press shows
+  who.
 - Not built: a notification for a reaction to one's post, and reactions
   in the exe Hub app (it ignores the event type until then).
 - Check: `go test ./internal/envelope ./internal/store ./internal/api
