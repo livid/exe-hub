@@ -467,7 +467,7 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 		if v.Avatar != "" {
 			p.mirrorNow(base, hub, v.Avatar, true)
 		}
-	case *envelope.PostDelete, *envelope.PostMark:
+	case *envelope.PostDelete, *envelope.PostMark, *envelope.PostReact:
 		// no preparation needed
 	default:
 		// moderation and peer ops never replicate; the server filters
@@ -484,8 +484,8 @@ func (p *Puller) handle(m store.ReplMsg, hub, base string) {
 		// duplicate: both hubs saw it (mutual peering, or a re-pull);
 		// stale seq: the author wrote elsewhere first — first arrival wins
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrNotOwner):
-		// a delete for a post we never had (banned author, or its parent
-		// hub is not our peer) — nothing to remove
+		// a delete, mark or reaction for a post we never had (banned
+		// author, or its parent hub is not our peer) — nothing to touch
 	case err != nil:
 		log.Printf("replicate %s: ingest %s: %v", hub, envelope.MsgID(m.Envelope), err)
 	}

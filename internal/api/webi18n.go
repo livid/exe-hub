@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"exehub/internal/envelope"
 	"exehub/internal/lang"
 
 	stats "github.com/livid/exe-stats"
@@ -125,7 +126,36 @@ func (l *webLocale) T(key string, kv ...any) string {
 // (Erniu's report, 2026-10-25). The wallet says the rest in its own
 // language.
 func (d *webData) JS() map[string]any {
-	return map[string]any{"s": d.L.S, "loc": d.DateLoc, "siws": webStrings["en"]["signin.stmt"]}
+	return map[string]any{"s": d.L.S, "loc": d.DateLoc, "siws": webStrings["en"]["signin.stmt"], "rx": d.L.rxTable()}
+}
+
+// rxSlugs names each emoji a post.react may give (envelope.Reactions)
+// for the catalogs: its name is "rx.n." and the slug, in every language
+// (PLAN.md, Reactions).
+var rxSlugs = map[string]string{
+	"👍": "thumbsup", "❤️": "heart", "🎉": "party", "🔥": "fire", "👀": "eyes", "🙏": "pray", "😂": "joy", "🚀": "rocket",
+	"😀": "grin", "😅": "sweat", "😍": "hearteyes", "🤔": "thinking", "😮": "openmouth", "😢": "cry", "👏": "clap", "🙌": "raised",
+	"💯": "hundred", "✅": "check", "⭐": "star", "☕": "coffee", "🍜": "ramen", "🦉": "owl", "🐛": "bug", "🤝": "handshake",
+}
+
+// rxName is an emoji's name in this language, the emoji itself for one
+// the hub does not offer.
+func (l *webLocale) rxName(e string) string {
+	if slug, ok := rxSlugs[e]; ok {
+		return l.T("rx.n." + slug)
+	}
+	return e
+}
+
+// rxTable is the picker's emoji, in the set's order, each with its name
+// in this language and in English: a search finds an emoji by either.
+func (l *webLocale) rxTable() [][3]string {
+	en := webLocales["en"]
+	out := make([][3]string, len(envelope.Reactions))
+	for i, e := range envelope.Reactions {
+		out[i] = [3]string{e, l.rxName(e), en.rxName(e)}
+	}
+	return out
 }
 
 func isOne(v any) bool {
@@ -148,7 +178,8 @@ func isOne(v any) bool {
 var webTmpls = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
 	for code, l := range webLocales {
-		t := template.New("web").Funcs(stats.Funcs()).Funcs(template.FuncMap{"T": l.T, "build": func() string { return webBuild }})
+		t := template.New("web").Funcs(stats.Funcs()).Funcs(template.FuncMap{"T": l.T, "build": func() string { return webBuild },
+			"rxname": l.rxName, "words": func(ids []string) string { return strings.Join(ids, " ") }})
 		out[code] = template.Must(template.Must(t.Parse(webHTML)).Parse(stats.TemplateHTML()))
 	}
 	return out
@@ -314,6 +345,60 @@ var webStrings = map[string]map[string]string{
 		"bookmark.remove":      "Remove bookmark",
 		"bookmarked":           "Bookmarked.",
 		"unbookmarked":         "Bookmark removed.",
+		// Reactions (PLAN.md): the row under a post, the picker, who reacted
+		"rx.add":        "Add Reaction", // the button beside Bookmark, its title, and the picker's window on a phone
+		"rx.search":     "Search emoji",
+		"rx.frequent":   "Frequently Used",
+		"rx.more":       "Smileys and More",
+		"rx.results":    "Results",
+		"rx.none":       "No emoji is named “{q}”.",
+		"rx.choose":     "Choose a reaction",                     // the picker's status line with no emoji under the pointer
+		"rx.yours":      "yours, click to take it back",          // after an emoji's name there, one the reader gave
+		"rx.yours.tap":  "{e} is yours. Tap it to take it back.", // the phone picker's foot
+		"rx.people":     "{n} people",
+		"rx.people.one": "{n} person",
+		"rx.tip":        "{n} people. Right-click to see who.", // a reaction's title
+		"rx.tip.one":    "{n} person. Right-click to see who.",
+		"rx.tip.you":    "You and {n} more. Right-click to see who.",
+		"rx.tip.only":   "You. Click to take it back.",
+		"rx.label":      "{name}, {n}", // a reaction's accessible name
+		"rx.label.you":  "{name}, {n}, including you",
+		"rx.you":        "You", // the reader, in the list of who reacted
+		"rx.others":     "and {n} more",
+		"rx.remove":     "Remove My Reaction",
+		"rx.everyone":   "Show Everyone…",
+		"rx.window":     "Reactions", // the window of who reacted
+		"rx.all":        "All",
+		"rx.remove.e":   "Remove My {e}",
+		"rx.list":       "People who reacted with {name}",
+		"rx.done":       "Done",
+		"rx.added":      "Reaction added.",
+		"rx.removed":    "Reaction removed.",
+		// each emoji's name, the picker's status line and what its search finds (rxSlugs)
+		"rx.n.thumbsup":  "Thumbs Up",
+		"rx.n.heart":     "Red Heart",
+		"rx.n.party":     "Party Popper",
+		"rx.n.fire":      "Fire",
+		"rx.n.eyes":      "Eyes",
+		"rx.n.pray":      "Folded Hands",
+		"rx.n.joy":       "Face with Tears of Joy",
+		"rx.n.rocket":    "Rocket",
+		"rx.n.grin":      "Grinning Face",
+		"rx.n.sweat":     "Grinning Face with Sweat",
+		"rx.n.hearteyes": "Smiling Face with Heart-Eyes",
+		"rx.n.thinking":  "Thinking Face",
+		"rx.n.openmouth": "Face with Open Mouth",
+		"rx.n.cry":       "Crying Face",
+		"rx.n.clap":      "Clapping Hands",
+		"rx.n.raised":    "Raising Hands",
+		"rx.n.hundred":   "Hundred Points",
+		"rx.n.check":     "Check Mark",
+		"rx.n.star":      "Star",
+		"rx.n.coffee":    "Hot Beverage",
+		"rx.n.ramen":     "Steaming Bowl",
+		"rx.n.owl":       "Owl",
+		"rx.n.bug":       "Bug",
+		"rx.n.handshake": "Handshake",
 		// the Profile dialog
 		"profile.title": "Profile",
 		"pic":           "Picture",
@@ -532,6 +617,56 @@ var webStrings = map[string]map[string]string{
 		"bookmark.remove":      "移除书签",
 		"bookmarked":           "已加入书签。",
 		"unbookmarked":         "已移除书签。",
+		"rx.add":               "添加回应",
+		"rx.search":            "搜索表情",
+		"rx.frequent":          "常用",
+		"rx.more":              "表情与更多",
+		"rx.results":           "结果",
+		"rx.none":              "没有名为“{q}”的表情。",
+		"rx.choose":            "选择一个回应",
+		"rx.yours":             "你的，点按可收回",
+		"rx.yours.tap":         "{e} 是你的。轻点可收回。",
+		"rx.people":            "{n} 人",
+		"rx.tip":               "{n} 人。右键点按查看是谁。",
+		"rx.tip.you":           "你和另外 {n} 人。右键点按查看是谁。",
+		"rx.tip.only":          "你。点按可收回。",
+		"rx.label":             "{name}，{n}",
+		"rx.label.you":         "{name}，{n}，包括你",
+		"rx.you":               "你",
+		"rx.others":            "另外 {n} 人",
+		"rx.remove":            "收回我的回应",
+		"rx.everyone":          "显示所有人…",
+		"rx.window":            "回应",
+		"rx.all":               "全部",
+		"rx.remove.e":          "收回我的 {e}",
+		"rx.list":              "用{name}回应的人",
+		"rx.done":              "完成",
+		"rx.added":             "已添加回应。",
+		"rx.removed":           "已收回回应。",
+		"rx.n.thumbsup":        "竖起大拇指",
+		"rx.n.heart":           "红心",
+		"rx.n.party":           "拉炮彩带",
+		"rx.n.fire":            "火",
+		"rx.n.eyes":            "双眼",
+		"rx.n.pray":            "双手合十",
+		"rx.n.joy":             "笑哭了",
+		"rx.n.rocket":          "火箭",
+		"rx.n.grin":            "咧嘴笑脸",
+		"rx.n.sweat":           "苦笑",
+		"rx.n.hearteyes":       "花痴",
+		"rx.n.thinking":        "想一想",
+		"rx.n.openmouth":       "吃惊",
+		"rx.n.cry":             "哭",
+		"rx.n.clap":            "鼓掌",
+		"rx.n.raised":          "举双手",
+		"rx.n.hundred":         "一百分",
+		"rx.n.check":           "勾号",
+		"rx.n.star":            "星星",
+		"rx.n.coffee":          "热饮",
+		"rx.n.ramen":           "面条",
+		"rx.n.owl":             "猫头鹰",
+		"rx.n.bug":             "毛毛虫",
+		"rx.n.handshake":       "握手",
 		"profile.title":        "资料",
 		"pic":                  "头像",
 		"choose":               "选择图片…",
@@ -747,6 +882,56 @@ var webStrings = map[string]map[string]string{
 		"bookmark.remove":      "移除書籤",
 		"bookmarked":           "已加入書籤。",
 		"unbookmarked":         "已移除書籤。",
+		"rx.add":               "加入回應",
+		"rx.search":            "搜尋表情",
+		"rx.frequent":          "常用",
+		"rx.more":              "表情與更多",
+		"rx.results":           "結果",
+		"rx.none":              "沒有名為「{q}」的表情。",
+		"rx.choose":            "選擇一個回應",
+		"rx.yours":             "你的，按一下可收回",
+		"rx.yours.tap":         "{e} 是你的。點一下可收回。",
+		"rx.people":            "{n} 人",
+		"rx.tip":               "{n} 人。按右鍵查看是誰。",
+		"rx.tip.you":           "你和另外 {n} 人。按右鍵查看是誰。",
+		"rx.tip.only":          "你。按一下可收回。",
+		"rx.label":             "{name}，{n}",
+		"rx.label.you":         "{name}，{n}，包括你",
+		"rx.you":               "你",
+		"rx.others":            "另外 {n} 人",
+		"rx.remove":            "收回我的回應",
+		"rx.everyone":          "顯示所有人⋯",
+		"rx.window":            "回應",
+		"rx.all":               "全部",
+		"rx.remove.e":          "收回我的 {e}",
+		"rx.list":              "以{name}回應的人",
+		"rx.done":              "完成",
+		"rx.added":             "已加入回應。",
+		"rx.removed":           "已收回回應。",
+		"rx.n.thumbsup":        "豎起大拇指",
+		"rx.n.heart":           "紅心",
+		"rx.n.party":           "拉炮彩帶",
+		"rx.n.fire":            "火",
+		"rx.n.eyes":            "雙眼",
+		"rx.n.pray":            "雙手合十",
+		"rx.n.joy":             "笑哭了",
+		"rx.n.rocket":          "火箭",
+		"rx.n.grin":            "咧嘴笑臉",
+		"rx.n.sweat":           "苦笑",
+		"rx.n.hearteyes":       "花癡",
+		"rx.n.thinking":        "想一想",
+		"rx.n.openmouth":       "吃驚",
+		"rx.n.cry":             "哭",
+		"rx.n.clap":            "鼓掌",
+		"rx.n.raised":          "舉雙手",
+		"rx.n.hundred":         "一百分",
+		"rx.n.check":           "勾號",
+		"rx.n.star":            "星星",
+		"rx.n.coffee":          "熱飲",
+		"rx.n.ramen":           "麵條",
+		"rx.n.owl":             "貓頭鷹",
+		"rx.n.bug":             "毛毛蟲",
+		"rx.n.handshake":       "握手",
 		"profile.title":        "個人資料",
 		"pic":                  "頭像",
 		"choose":               "選擇圖片…",
@@ -958,6 +1143,56 @@ var webStrings = map[string]map[string]string{
 		"bookmark.remove":      "ブックマークを外す",
 		"bookmarked":           "ブックマークしました。",
 		"unbookmarked":         "ブックマークを外しました。",
+		"rx.add":               "リアクションを追加",
+		"rx.search":            "絵文字を検索",
+		"rx.frequent":          "よく使う項目",
+		"rx.more":              "スマイリーなど",
+		"rx.results":           "検索結果",
+		"rx.none":              "「{q}」という絵文字はありません。",
+		"rx.choose":            "リアクションを選択",
+		"rx.yours":             "あなたのもの、クリックで取り消し",
+		"rx.yours.tap":         "{e} はあなたのものです。タップで取り消せます。",
+		"rx.people":            "{n} 人",
+		"rx.tip":               "{n} 人。右クリックで誰か表示します。",
+		"rx.tip.you":           "あなたとほか {n} 人。右クリックで誰か表示します。",
+		"rx.tip.only":          "あなた。クリックで取り消せます。",
+		"rx.label":             "{name}、{n}",
+		"rx.label.you":         "{name}、{n}、あなたを含む",
+		"rx.you":               "あなた",
+		"rx.others":            "ほか {n} 人",
+		"rx.remove":            "自分のリアクションを取り消す",
+		"rx.everyone":          "全員を表示…",
+		"rx.window":            "リアクション",
+		"rx.all":               "すべて",
+		"rx.remove.e":          "自分の {e} を取り消す",
+		"rx.list":              "{name}でリアクションした人",
+		"rx.done":              "完了",
+		"rx.added":             "リアクションを追加しました。",
+		"rx.removed":           "リアクションを取り消しました。",
+		"rx.n.thumbsup":        "サムズアップ",
+		"rx.n.heart":           "赤いハート",
+		"rx.n.party":           "クラッカー",
+		"rx.n.fire":            "炎",
+		"rx.n.eyes":            "目",
+		"rx.n.pray":            "合掌",
+		"rx.n.joy":             "うれし泣き",
+		"rx.n.rocket":          "ロケット",
+		"rx.n.grin":            "にっこり笑顔",
+		"rx.n.sweat":           "冷や汗の笑顔",
+		"rx.n.hearteyes":       "目がハート",
+		"rx.n.thinking":        "考え中",
+		"rx.n.openmouth":       "口を開けた顔",
+		"rx.n.cry":             "泣き顔",
+		"rx.n.clap":            "拍手",
+		"rx.n.raised":          "ばんざい",
+		"rx.n.hundred":         "100点",
+		"rx.n.check":           "チェックマーク",
+		"rx.n.star":            "星",
+		"rx.n.coffee":          "ホットドリンク",
+		"rx.n.ramen":           "ラーメン",
+		"rx.n.owl":             "フクロウ",
+		"rx.n.bug":             "毛虫",
+		"rx.n.handshake":       "握手",
 		"profile.title":        "プロフィール",
 		"pic":                  "画像",
 		"choose":               "画像を選択…",

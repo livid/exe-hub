@@ -292,3 +292,41 @@ func TestMarkReplicates(t *testing.T) {
 		t.Fatalf("after the pull, boxes %v: want box 1 ticked", p.Boxes)
 	}
 }
+
+// TestReactionReplicates: a post.react travels between hubs like a mark
+// (PLAN.md, Reactions — It replicates): the puller keeps it, and the
+// post shows the emoji here after the pull.
+func TestReactionReplicates(t *testing.T) {
+	r := newRig(t)
+	peer := newServingHub(t)
+	raw, sig, e, op := r.signed("exe is out")
+	id, _, err := peer.st.Ingest(raw, sig, e, op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.seq++
+	xraw, _ := json.Marshal(map[string]any{
+		"type": "post.react", "author": base64.StdEncoding.EncodeToString(r.pub), "seq": r.seq, "ts": 1756500000001,
+		"body": map[string]any{"post": id, "emoji": "🎉", "on": true},
+	})
+	xe, err := envelope.Parse(xraw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xop, err := xe.Op()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := peer.st.Ingest(xraw, ed25519.Sign(r.priv, append([]byte(envelope.Prefix), xraw...)), xe, xop); err != nil {
+		t.Fatal(err)
+	}
+	r.st.Ingest(peerAdd(t, r, peer))
+	r.p.round()
+	p, err := r.st.Post(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Reactions) != 1 || p.Reactions[0].Emoji != "🎉" || len(p.Reactions[0].By) != 1 {
+		t.Fatalf("after the pull, reactions %v: want one 🎉", p.Reactions)
+	}
+}

@@ -219,6 +219,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/profile/{id}/bookmarks", s.handleProfileBookmarks)
 	mux.HandleFunc("GET /v1/profile/{id}/bookmarks/ids", s.handleProfileBookmarkIDs)
 	mux.HandleFunc("GET /v1/post/{id}", s.handlePost)
+	mux.HandleFunc("GET /v1/post/{id}/reactions", s.handlePostReactions)
 	mux.HandleFunc("GET /v1/search", s.handleSearch)
 	mux.HandleFunc("GET /v1/embed/{cid}", s.handleEmbed)
 	mux.HandleFunc("GET /v1/seq", s.handleSeq)
@@ -583,10 +584,11 @@ func (s *Server) policy(e *envelope.Envelope) error {
 		if banned {
 			return errors.New("this key is banned from posting here")
 		}
-	case "post.create", "profile.set", "post.bookmark":
-		// a bookmark is gated as a profile is, without the cooldown: a
-		// key that could not post here cannot fill the log with them
-		// either (PLAN.md, The signed-in reader's desk — Bookmarks)
+	case "post.create", "profile.set", "post.bookmark", "post.react":
+		// a bookmark or a reaction is gated as a profile is, without the
+		// cooldown: a key that could not post here cannot fill the log
+		// with them either (PLAN.md, The signed-in reader's desk —
+		// Bookmarks; Reactions)
 		banned, err := s.St.Banned(pid)
 		if err != nil {
 			return err
@@ -855,6 +857,23 @@ func (s *Server) handleProfileBookmarkIDs(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"posts": ids})
+}
+
+// handlePostReactions is who gave each emoji a post carries, with their
+// names and pictures: the list of who reacted (PLAN.md, Reactions).
+func (s *Server) handlePostReactions(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rs, err := s.St.PostReactions(id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, errors.New("no such post"))
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"post": id, "reactions": rs})
 }
 
 // profileIDRe is a profile id: 16 lower-case hex digits.

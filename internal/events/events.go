@@ -9,13 +9,14 @@ import "sync"
 // Event is one feed-visible change. Type is the envelope op that caused
 // it; ID is the post id it concerns (for post.delete, the deleted post,
 // not the delete message's own id; for post.mark, the post whose box
-// changed, Mark saying which and how; for profile.set, the message
+// changed, Mark saying which and how; for post.react, the post an emoji
+// was given or taken back from; for profile.set, the message
 // itself — Author names the profile that changed). post.card is the one type with
 // no envelope behind it: something the hub derived for the post landed —
 // its link card, the card's archived copy, or a linked picture (none of
 // them signed) — so live pages refetch the post and draw it in.
 type Event struct {
-	Type    string `json:"type"`               // "post.create" | "post.delete" | "post.mark" | "profile.set" | "post.card" | "post.translation"
+	Type    string `json:"type"`               // "post.create" | "post.delete" | "post.mark" | "post.react" | "profile.set" | "post.card" | "post.translation"
 	ID      string `json:"id"`                 // post id
 	ReplyTo string `json:"reply_to,omitempty"` // parent post id when the post is a reply
 	Root    string `json:"root,omitempty"`     // the thread's root, for post.create of a reply, post.delete and post.summary: a thread page filters by it

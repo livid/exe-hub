@@ -135,6 +135,23 @@ CREATE TABLE IF NOT EXISTS bookmarks (
 );
 CREATE INDEX IF NOT EXISTS bookmarks_author ON bookmarks(author, received);
 
+-- the emoji each author gave each post, as their post.react ops last said
+-- (PLAN.md, Reactions): ts and id are the standing op's, so a later op
+-- with an older ts loses, and a taken-back emoji keeps its row with
+-- given 0 for that reason; first is the oldest ts of any op on the row,
+-- which keeps an emoji's place in the post's row when its first giver
+-- takes it back
+CREATE TABLE IF NOT EXISTS reactions (
+  post   TEXT NOT NULL,
+  author TEXT NOT NULL,               -- profile id
+  emoji  TEXT NOT NULL,
+  given  INTEGER NOT NULL,
+  ts     INTEGER NOT NULL,
+  id     TEXT NOT NULL,
+  first  INTEGER NOT NULL,
+  PRIMARY KEY (post, author, emoji)
+);
+
 CREATE TABLE IF NOT EXISTS embeds (
   post     TEXT NOT NULL,
   idx      INTEGER NOT NULL,
@@ -698,6 +715,9 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		if _, err := tx.Exec(`DELETE FROM bookmarks WHERE post=?`, v.Post); err != nil {
 			return nil, err
 		}
+		if _, err := tx.Exec(`DELETE FROM reactions WHERE post=?`, v.Post); err != nil {
+			return nil, err
+		}
 		// The post's link card goes with it, its picture's pin released.
 		var cimg string
 		if err := tx.QueryRow(`SELECT image FROM cards WHERE post=?`, v.Post).Scan(&cimg); err != nil && err != sql.ErrNoRows {
@@ -831,6 +851,30 @@ func apply(tx *sql.Tx, id string, e *envelope.Envelope, op any, received int64, 
 		_, err = tx.Exec(`INSERT INTO bookmarks (author, post, received) VALUES (?,?,?)
 			ON CONFLICT(author, post) DO UPDATE SET received=excluded.received`, pid, v.Post, received)
 		return nil, err
+	case *envelope.PostReact:
+		var n int
+		if err = tx.QueryRow(`SELECT COUNT(*) FROM posts WHERE id=?`, v.Post).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			if replay {
+				return nil, nil // a post gone some other way since: nothing to react to
+			}
+			return nil, ErrNotFound
+		}
+		// The newest op holds an emoji, by its own ts and then its id —
+		// never by arrival — so two hubs taking one author's reactions in
+		// a different order, and a replay, land on the same state.
+		if _, err = tx.Exec(`INSERT INTO reactions (post, author, emoji, given, ts, id, first) VALUES (?,?,?,?,?,?,?)
+			ON CONFLICT(post, author, emoji) DO UPDATE SET given=excluded.given, ts=excluded.ts, id=excluded.id
+			WHERE excluded.ts > reactions.ts OR (excluded.ts = reactions.ts AND excluded.id > reactions.id)`,
+			v.Post, pid, v.Emoji, v.On, e.TS, id, e.TS); err != nil {
+			return nil, err
+		}
+		// the oldest op counts toward the emoji's place whichever stands,
+		// a MIN, so every order of arrival agrees on it too
+		_, err = tx.Exec(`UPDATE reactions SET first=MIN(first, ?) WHERE post=? AND author=? AND emoji=?`, e.TS, v.Post, pid, v.Emoji)
+		return nil, err
 	case *envelope.BanSet:
 		_, err = tx.Exec(`INSERT INTO bans (target, reason, by, ts) VALUES (?,?,?,?)
 			ON CONFLICT(target) DO UPDATE SET reason=excluded.reason, by=excluded.by, ts=excluded.ts`,
@@ -921,7 +965,7 @@ func (s *Store) Rebuild() error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, t := range []string{"profiles", "posts", "embeds", "marks", "bookmarks", "bans", "invites", "seqs", "peers"} {
+	for _, t := range []string{"profiles", "posts", "embeds", "marks", "bookmarks", "reactions", "bans", "invites", "seqs", "peers"} {
 		if _, err := tx.Exec(`DELETE FROM ` + t); err != nil {
 			return err
 		}
@@ -1031,6 +1075,9 @@ type FeedPost struct {
 	// a box with no mark stands as the text has it (see PLAN.md, To-do
 	// marks)
 	Boxes map[int]bool `json:"boxes,omitempty"`
+	// the emoji given to it, each with the profiles that gave it (see
+	// PLAN.md, Reactions)
+	Reactions []Reaction `json:"reactions,omitempty"`
 	// in a notifications list: what the post is to the reader the list
 	// is for — WhyReply, WhyMention or WhyThread (see Notifications)
 	Why string `json:"why,omitempty"`
@@ -1206,7 +1253,113 @@ func (s *Store) scanFeed(rows *sql.Rows) ([]FeedPost, error) {
 	if err := s.postBoxes(out); err != nil {
 		return nil, err
 	}
+	if err := s.postReactions(out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// Reaction is one emoji given to a post: By is the profile ids that gave
+// it, earliest first, so its length is the count.
+type Reaction struct {
+	Emoji string   `json:"emoji"`
+	By    []string `json:"by"`
+}
+
+// reactionOrder ranks a post's emoji for its row: by the oldest op any
+// author made on it, given or taken back since, so the row grows at its
+// end and a button never moves because its first giver took theirs back.
+const reactionOrder = `JOIN (SELECT post, emoji, MIN(first) AS f FROM reactions GROUP BY post, emoji) o
+	ON o.post = r.post AND o.emoji = r.emoji`
+
+// postReactions fills each post's Reactions: one lookup for the page,
+// the emoji in reactionOrder and who gave each, earliest first.
+func (s *Store) postReactions(posts []FeedPost) error {
+	if len(posts) == 0 {
+		return nil
+	}
+	args := make([]any, len(posts))
+	at := make(map[string]int, len(posts))
+	for i, p := range posts {
+		args[i] = p.ID
+		at[p.ID] = i
+	}
+	rows, err := s.db.Query(`SELECT r.post, r.emoji, r.author FROM reactions r `+reactionOrder+`
+		WHERE r.given = 1 AND r.post IN (?`+strings.Repeat(",?", len(posts)-1)+`)
+		ORDER BY r.post, o.f, r.emoji, r.ts, r.id`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var post, emoji, author string
+		if err := rows.Scan(&post, &emoji, &author); err != nil {
+			return err
+		}
+		i, ok := at[post]
+		if !ok {
+			continue
+		}
+		rs := posts[i].Reactions
+		k := slices.IndexFunc(rs, func(r Reaction) bool { return r.Emoji == emoji })
+		if k < 0 {
+			rs = append(rs, Reaction{Emoji: emoji})
+			k = len(rs) - 1
+		}
+		rs[k].By = append(rs[k].By, author)
+		posts[i].Reactions = rs
+	}
+	return rows.Err()
+}
+
+// Reactor is one profile that gave a post an emoji, for the list of who
+// reacted: TS is the op's own time.
+type Reactor struct {
+	ID     string `json:"id"`
+	Name   string `json:"name,omitempty"`
+	Avatar string `json:"avatar,omitempty"`
+	TS     int64  `json:"ts"`
+}
+
+// ReactionPeople is who gave an emoji, earliest first.
+type ReactionPeople struct {
+	Emoji  string    `json:"emoji"`
+	People []Reactor `json:"people"`
+}
+
+// PostReactions is who gave each emoji a post carries, in the order the
+// post's row shows them (PLAN.md, Reactions — Read); ErrNotFound for a
+// post this hub does not hold.
+func (s *Store) PostReactions(post string) ([]ReactionPeople, error) {
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE id=?`, post).Scan(&n); err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	rows, err := s.db.Query(`SELECT r.emoji, r.author, IFNULL(pr.name,''), IFNULL(pr.avatar,''), r.ts
+		FROM reactions r `+reactionOrder+` LEFT JOIN profiles pr ON pr.id = r.author
+		WHERE r.post = ? AND r.given = 1 ORDER BY o.f, r.emoji, r.ts, r.id`, post)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ReactionPeople{}
+	for rows.Next() {
+		var emoji string
+		var p Reactor
+		if err := rows.Scan(&emoji, &p.ID, &p.Name, &p.Avatar, &p.TS); err != nil {
+			return nil, err
+		}
+		k := slices.IndexFunc(out, func(r ReactionPeople) bool { return r.Emoji == emoji })
+		if k < 0 {
+			out = append(out, ReactionPeople{Emoji: emoji})
+			k = len(out) - 1
+		}
+		out[k].People = append(out[k].People, p)
+	}
+	return out, rows.Err()
 }
 
 // postBoxes fills each post's Boxes from its marks: one lookup for the
@@ -3029,7 +3182,7 @@ type ReplMsg struct {
 
 // replicated content ops; moderation and peer curation are local policy
 // and never leave the hub
-var contentTypes = map[string]bool{"profile.set": true, "post.create": true, "post.delete": true, "post.mark": true}
+var contentTypes = map[string]bool{"profile.set": true, "post.create": true, "post.delete": true, "post.mark": true, "post.react": true}
 
 // ReplicationPage returns local-origin content messages after the given
 // rowid cursor. limit bounds rows scanned, not returned, so a stretch of

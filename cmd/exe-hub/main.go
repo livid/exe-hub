@@ -303,6 +303,8 @@ func serve(cfgPath, stateDir, pidPath string) error {
 			}
 		case *envelope.PostMark:
 			bus.Emit(events.Event{Type: "post.mark", ID: o.Post, Author: e.ProfileID(), Mark: &events.Mark{Box: o.Box, Done: o.Done}})
+		case *envelope.PostReact:
+			bus.Emit(events.Event{Type: "post.react", ID: o.Post, Author: e.ProfileID()})
 		case *envelope.ProfileSet:
 			bus.Emit(events.Event{Type: "profile.set", ID: id, Author: e.ProfileID()})
 		}

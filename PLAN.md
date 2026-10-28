@@ -97,7 +97,8 @@ around.
 Mechanics (the questions v1 deferred, now settled):
 
 - **What replicates: content ops only** — `profile.set`, `post.create`,
-  `post.delete` (a feed without names is broken; deletes must propagate).
+  `post.delete` (a feed without names is broken; deletes must propagate),
+  `post.mark` and `post.react` (see Reactions).
   Moderation (`ban.*`) and `peer.*` are local policy and never replicate.
 - **Strictly one hop.** `messages` gains an `origin` column ('' = ingested
   locally, else the peer hub id it was pulled from). `GET /v1/replicate`
@@ -226,6 +227,10 @@ Envelope: `{type, author (pubkey b64), seq, ts, body}`.
   this hub holds, one's own too; a post it does not hold is refused.
   Gated like `profile.set` (bans, the token gate, an invite), with no
   cooldown. Local: it never replicates.
+- `post.react` — `{post, emoji, on}`: gives one emoji of the fixed set
+  to a post or takes it back — the state asked for (see Reactions).
+  Gated like `post.bookmark`, no cooldown; it replicates, and the newest
+  by its own ts stands.
 - `ban.set` / `ban.lift` — admin-only (author must be a config-assigned
   admin): ban or unban a target profile id, with an optional reason on
   `ban.set`.
@@ -244,7 +249,7 @@ feed ordering uses hub receive time.
 ## Storage (SQLite, WAL mode)
 
 - `messages` — append-only log of raw signed envelopes. **Source of truth.**
-- `profiles`, `posts`, `embeds`, `pins`, `bans`, `invites`, `bookmarks` — derived indexes,
+- `profiles`, `posts`, `embeds`, `pins`, `bans`, `invites`, `bookmarks`, `reactions` — derived indexes,
   rebuildable by replaying `messages`. Schema changes to derived tables
   never lose data.
 - Feed queries use keyset pagination (`before=<id>`), never OFFSET.
@@ -471,6 +476,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   just their ids, the newest 1,000 (what a page marks its posts by).
 - `GET  /v1/post/{id}` — one post plus its replies (oldest-first, keyset-
   paginated via `after=`).
+- `GET  /v1/post/{id}/reactions` — who gave each emoji the post carries,
+  with names and pictures (see Reactions). Every post's JSON carries
+  `reactions` (`{emoji, by}`) itself.
 - `GET  /v1/search?q=&before=<id>&limit=` — the posts holding every word
   of `q` (the public search page's query: literal substrings, ASCII case
   folded, whitespace-normalised, 200 characters at most), replies
@@ -486,7 +494,7 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - `GET  /v1/events` — live activity as SSE, public like all reads (it
   reveals nothing the feed doesn't). Unnamed events; the data is
   `{"type","id","reply_to?","author","mark?"}` where type is `post.create`,
-  `post.delete`, `post.mark` or `profile.set` and `id` is the post
+  `post.delete`, `post.mark`, `post.react` or `profile.set` and `id` is the post
   concerned (for deletes, the deleted post, not the delete message; for
   a mark, the post whose box changed, `mark` being `{box, done}`; for
   profile.set the message itself — `author` is what matters there). Fired from a store
@@ -1893,6 +1901,120 @@ bookmark op for post), Profile".
   the Wallet Standard mock (the join window and the Navigation window
   trading places, the links, the selected row, a bookmark made and
   taken back, at device pixel ratios 1, 1.5 and 2 and on a phone).
+
+## Reactions — an emoji on a post (built 2026-10-28)
+
+Livid, 2026-10-28: "implement emoji reaction", from Claude Design's
+mockups (the canvas "Hub Emoji Reactions": a desktop feed, the picker,
+who reacted, and the same three on a phone), which Livid loved. The
+mockups are the look; this is what stands behind them.
+
+- **The op.** `post.react {post, emoji, on}` — gives one emoji to a post
+  (`on` true) or takes it back (false): the state asked for, never a
+  toggle, as `post.bookmark` and `post.mark` are. Any post this hub
+  holds, one's own too; a post it does not hold is refused (400). An
+  author gives each emoji to a post once; several emoji to one post are
+  several rows.
+- **Which emoji.** A fixed set, `envelope.Reactions`, in the picker's
+  order: the mockup's 24 — 👍 ❤️ 🎉 🔥 👀 🙏 😂 🚀, then 😀 😅 😍 🤔 😮 😢
+  👏 🙌 💯 ✅ ⭐ ☕ 🍜 🦉 🐛 🤝 — each the exact string the set holds (❤️
+  with its U+FE0F). Anything else is refused at `Op()`. A fixed set
+  because every one is a signed line in a log that replicates: a set
+  every hub can name and draw keeps that log free of words passed off
+  as a reaction, and gives the picker's search a name to find each by.
+  The set grows by appending; a hub that does not know an emoji yet
+  refuses it from a peer too, so a new one ships to both instances
+  before a page offers it.
+- **It replicates.** A reaction is content a reader sees on the post,
+  so `post.react` is a content op beside `post.mark` (Aggregation —
+  What replicates) and a reaction on either instance shows on both.
+  Local bans apply to replicated ones; a reaction to a post the pulling
+  hub does not hold is dropped, as a delete for one is.
+- **Which one stands.** One author's ops on two hubs land in a different
+  order on each, so the newest by the op's own `ts`, then its id,
+  stands — `marks`' rule, never arrival. The `reactions` table (post,
+  author's profile id, emoji, `given`, the op's ts and id) keeps a
+  taken-back row with `given` 0, so an older "on" arriving later loses
+  to it, and `first`, the oldest ts of any op on the row (a MIN, so
+  every order agrees). Derived: Rebuild replays it; a deleted post
+  takes its reactions with it.
+- **Policy.** Gated as `post.bookmark` is — a ban, the token gate, an
+  invite — without the cooldown: a key that could not post here cannot
+  fill the log with reactions either.
+- **Read.** Every post in the JSON API carries `reactions`: one entry
+  per emoji given, ranked by the oldest op on it (`first`, taken-back
+  rows too) — so the row grows at its end, and a button never moves
+  under the pointer because its first giver took theirs back —
+  `{emoji, by}`
+  where `by` is the profile ids that gave it, earliest first (its
+  length is the count). `GET /v1/post/{id}/reactions` is who gave them,
+  for the list of who reacted: `{post, reactions: [{emoji, people:
+  [{id, name, avatar, ts}]}]}`, ts the op's own. The live bus says
+  `post.react` with the post's id, so an open page draws the change.
+- **The row of reactions.** Under the post's body — after its card and
+  pictures, before its foot line — only once a post has one: a push
+  button per emoji, the emoji and its count, 6px apart (8px on a phone,
+  where the buttons stand 30px tall). One the reader gave wears the
+  pressed face — #666, white figures, the inset bevel — Platinum's
+  toggle that is on, the Bookmark button's rule; no new colour. Which
+  are the reader's is in the page as each button's `data-ids` (the ids
+  that gave it), and a rule the head script writes for the remembered
+  wallet's id (`<style id="mine">`, `[data-ids~="id"]`) presses them
+  before the first paint, on every page; the compose script writes it
+  again when the gate names an id, and clears it at Sign Out. Its title
+  says who: "You and 8 more. Right-click to see who." or "4 people.
+  Right-click to see who."
+- **Giving one.** On a page with the Post window, signed in: a press on
+  a button gives that emoji or takes it back — one `post.react`, one
+  wallet prompt, as Bookmark is — the button turning at once (the count
+  with it) and back if the hub refuses; the status line says "Reaction
+  added." or "Reaction removed." Elsewhere, or signed out, a press opens
+  the list of who reacted with it, since there is nothing to sign with.
+- **Add Reaction.** A small push button holding a smiley with a plus,
+  Bookmark's size, 8px at its left on the meta line, shown where Bookmark is
+  (signed in, a page with the Post window). It opens the picker hung
+  under it, right edges aligned: a menu (the "@" list's dress), 244px
+  wide, a search field at its head, "Frequently Used" — the reader's
+  eight most used here (counted on the browser, `exe-hub-reactions`;
+  the set's first eight until then) — over a rule, then "Smileys and
+  More", the other sixteen, eight to a row, and a status line naming the
+  emoji under the pointer ("🔥  Fire"), the way Key Caps does. A cell
+  inverts under the pointer as a menu row does; one the reader already
+  gave wears the pressed face, and picking it again takes it back
+  ("· yours, click to take it back"). Typing narrows the cells to the
+  names holding the words (in the page's language and in English):
+  "Results", or "No emoji is named “…”." Return picks the first; Escape,
+  a click outside or a second press of the button closes it.
+- **Who reacted.** A right-click on a reaction (or the keyboard's
+  context key) opens a contextual menu at the pointer: its head, dimmed
+  and bold, "🎉  Party Popper · 9 people", then up to seven people with
+  their 16px picture and name, a check by "You", "and 2 more" dimmed,
+  and under a rule Remove My Reaction (when the reader gave it and can
+  sign here) and Show Everyone…, which opens the Reactions window: a
+  segmented row (All 16 · 🎉 9 · 🚀 4 · 👍 3), the people of the chosen
+  one in 44px rows — picture, name, id, time — each a link to their
+  page, and Done; Remove My 🎉 at its lower left when it is the
+  reader's.
+- **A phone.** The same layout with taller buttons: reactions 30px. The
+  tool buttons on the meta line keep their size — 28px, as mocked, would
+  make every post's meta line taller — and answer a touch 6px above and
+  below them and 3px either side, as the pager's buttons do. The picker and the Reactions window open as sheets
+  at the foot of the screen over a faint veil, with 44px cells; the
+  picker's foot says what a cell already given does ("🎉 is yours. Tap
+  it to take it back.") beside Cancel. Holding a reaction down (half a
+  second) opens the Reactions window on it.
+- **Paper** (a Planet site's frame, Replies under a blog post) draws the
+  row in its own plain buttons, read-only: a press shows who.
+- Not built: a notification for a reaction to one's post, and reactions
+  in the exe Hub app (it ignores the event type until then).
+- Check: `go test ./internal/envelope ./internal/store ./internal/api
+  ./internal/replicate` (TestReactions: the op's rules, the set, last by
+  ts across orders, the taken-back row, a delete, Rebuild, the feed's
+  `reactions` and the who endpoint; replication carries them) and
+  `~/tools/playwright/exe-hub-reactions-test.js` against a scratch hub
+  with the Wallet Standard mock (a reaction given from the picker and
+  taken back, the menu and the window of who, at device pixel ratios 1,
+  1.5 and 2 and on a phone).
 
 ## Offline — what a reader has seen, kept on the device (built 2026-10-07)
 

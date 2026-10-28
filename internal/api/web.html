@@ -9,6 +9,17 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <script>const HUB = {{.JS}}, T = (k, v) => { const s = HUB.s[k] === undefined ? k : HUB.s[k]; return v ? s.replace(/\{(\w+)\}/g, (m, n) => n in v ? v[n] : m) : s; };</script>
+<script>// the reactions the reader gave, pressed before the first paint (PLAN.md,
+// Reactions): a rule naming their id among each button's data-ids, for the
+// wallet remembered here; the compose script writes it again when the gate
+// names an id, and clears it at Sign Out
+window.hubMine = id => {
+  const css = document.getElementById("mine") || document.head.appendChild(Object.assign(document.createElement("style"), { id: "mine" }));
+  const sel = /^[0-9a-f]{16}$/.test(id || "") ? '.rx[data-ids~="' + id + '"]' : "";
+  css.textContent = sel ? sel + " { background: #666; color: #fff; box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; } .paper " + sel + " { background: var(--ink); color: var(--ground); border-color: var(--ink); box-shadow: none; }" : "";
+  if (window.hubRxDress) hubRxDress();
+};
+try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hubMine(w && w.id); } catch (e) { hubMine(""); }</script>
 {{if .PushKey}}<script>if ("serviceWorker" in navigator && "PushManager" in window && "Notification" in window) document.documentElement.classList.add("push");</script>
 {{end}}{{if or .Compose .Nav}}<script>document.documentElement.classList.add("js");
 // the wallet remembered from the last visit: its class shows the Reply
@@ -840,6 +851,137 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .post .bm[aria-pressed=true] .w { fill: #999; }
 .post .bm:focus { outline: none; }
 .post .bm:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+/* Add Reaction (PLAN.md, Reactions): Bookmark's size and its float, at
+   its left — it floats after it — holding a smiley and a plus. Pressed
+   in while its picker is open, as a menu's title is. */
+.post .rx-add { display: none; float: right; margin: 0 0 -1px 8px; min-width: 0; height: auto; padding: 3px 6px; }
+.wallet .post .rx-add { display: flex; align-items: center; justify-content: center; }
+.post .rx-add svg { display: block; width: 18px; height: 10px; shape-rendering: crispEdges; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .post .rx-add svg { shape-rendering: geometricPrecision; } }
+.post .rx-add .k { fill: currentColor; }
+.post .rx-add .w { fill: #fff; }
+.post .rx-add[aria-expanded=true] { background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.post .rx-add[aria-expanded=true] .k { fill: #262626; }
+.post .rx-add[aria-expanded=true] .w { fill: #999; }
+.post .rx-add:focus { outline: none; }
+.post .rx-add:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+/* the row of reactions: push buttons, the emoji and its count, 6px
+   apart, under the body. One the reader gave wears the pressed face —
+   the rule is <style id="mine">'s, by the button's data-ids — and the
+   count goes white with it. Nothing selects, and a held finger brings
+   no callout: holding one down opens who reacted. */
+.rxs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; cursor: auto; }
+.rxs .rx { display: inline-flex; align-items: center; min-width: 0; height: 20px; padding: 2px 7px;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.rxs .rx .em { font-size: 14px; line-height: 14px; font-weight: normal; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.rxs .rx .n { margin-left: 5px; font-variant-numeric: tabular-nums; }
+.rxs .rx:focus { outline: none; }
+.rxs .rx:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
+/* a finger: the buttons a thumb's height and the row 8px apart; the
+   tool buttons on the meta line keep their size, which keeps the line's
+   height, and answer a touch 6px above and below them and 3px either
+   side, short of each other (PLAN.md, Reactions — A phone). Nothing is
+   drawn. */
+@media (pointer: coarse) {
+  .post :is(.bm, .rx-add) { position: relative; }
+  .post :is(.bm, .rx-add)::after { content: ""; box-sizing: border-box; position: absolute; top: -6px; bottom: -6px; left: -3px; right: -3px; }
+  .rxs { gap: 8px; margin-top: 10px; }
+  .rxs .rx { height: 30px; padding: 0 10px; }
+  .rxs .rx .em { font-size: 16px; line-height: 16px; }
+}
+/* the picker (PLAN.md, Reactions — Add Reaction): a menu in the "@"
+   list's dress hung under its button, 244px wide; its cells invert
+   under the pointer as menu rows do, and one the reader gave wears the
+   pressed face. The status line names the emoji under the pointer. On
+   a phone it is a sheet: a window at the foot of the screen over a
+   faint veil, the cells 44px. */
+.rxp { position: absolute; z-index: 90; box-sizing: border-box; width: 244px; padding: 0; background: #ddd; color: #262626;
+  border: 1px solid #262626; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb, 2px 2px 0 rgba(38,38,38,.85);
+  cursor: default; -webkit-user-select: none; user-select: none; }
+.rxp .rxp-q { padding: 8px 8px 6px; }
+.rxp input { display: block; box-sizing: border-box; width: 100%; height: 20px; margin: 0; padding: 2px 5px; font: inherit; font-size: 12px; line-height: 14px;
+  color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
+  box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+.rxp input:focus { outline: none; }
+.rxp .rxp-h { padding: 0 8px; font-size: 11px; font-weight: bold; line-height: 16px; }
+.rxp .rxp-g { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); padding: 2px 6px 6px; }
+.rxp .rxp-sep { height: 0; margin: 0 0 4px; border-top: 1px solid #999; border-bottom: 1px solid #fff; }
+.rxp .rxp-none { padding: 0 8px 8px; font-size: 11px; color: #555; }
+.rxp .ec { display: flex; align-items: center; justify-content: center; height: 26px; margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; color: inherit; font-size: 16px; line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; cursor: default; }
+.rxp .ec.mine { background: #666; }
+.rxp .ec.on { background: #333399; }
+.rxp .ec:focus { outline: none; }
+.rxp .ec:focus-visible { outline: 2px solid #9999fe; outline-offset: -2px; }
+.rxp .statusbar { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 15px; }
+.rxveil { position: fixed; inset: 0; z-index: 89; background: rgba(0,0,0,.15); }
+.rxp.sheet, .rxw { position: fixed; z-index: 90; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto;
+  max-width: 420px; margin: 0 auto; }
+.rxp.sheet { padding: 0; background: var(--g400); box-shadow: 2px 2px 0 var(--black); }
+.rxp.sheet .frame { background: #fff; }
+.rxp.sheet .rxp-q { padding: 8px; background: #ddd; border-bottom: 1px solid #262626; }
+.rxp.sheet input { height: 28px; font-size: 16px; }
+.rxp.sheet .rxp-h { padding: 8px 12px 2px; }
+.rxp.sheet .ec { height: 44px; font-size: 24px; }
+.rxp .rxp-foot { display: flex; align-items: center; gap: 12px; padding: 12px; border-top: 1px solid #262626; background: #ddd; }
+.rxp .rxp-foot .grow { flex: 1; min-width: 0; font-size: 11px; line-height: 16px; color: #555; }
+.rxp .rxp-foot .btn, .rxw .rxw-foot .btn { flex: none; }
+/* who reacted, on a desktop: a contextual menu at the pointer, the "@"
+   list's dress — its head dimmed and bold, a person a row with their
+   16px picture, a check by the reader, Remove My Reaction and Show
+   Everyone… under a rule */
+.rxm { position: fixed; z-index: 95; box-sizing: border-box; min-width: 220px; max-width: calc(100vw - 16px); padding: 2px 1px; background: #ddd;
+  border: 1px solid #262626; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb, 2px 2px 0 rgba(38,38,38,.85);
+  cursor: default; -webkit-user-select: none; user-select: none; }
+.rxm .mi { display: flex; align-items: center; gap: 6px; box-sizing: border-box; width: 100%; margin: 0; padding: 1px 16px 1px 18px; border: 0; background: none;
+  font: inherit; font-size: 12px; line-height: 18px; color: #262626; text-align: left; white-space: nowrap; position: relative; cursor: default; }
+.rxm .mi.head { font-weight: bold; color: #808080; }
+.rxm .mi.dim { color: #808080; }
+.rxm a.mi { text-decoration: none; }
+.rxm :is(a, button).mi.on { background: #333399; color: #fff; }
+.rxm :is(a, button).mi:focus { outline: none; }
+.rxm .mi .chk { position: absolute; left: 5px; top: 6px; width: 10px; height: 8px; }
+.rxm .mi .chk svg { display: block; shape-rendering: crispEdges; fill: currentColor; }
+.rxm .mi .av, .rxw .av { flex: none; box-sizing: border-box; width: 16px; height: 16px; border: 1px solid #262626; background: #ccc; }
+.rxm .mi .av img { display: block; width: 14px; height: 14px; image-rendering: pixelated; }
+.rxm .mi .av img.idn { width: 10px; height: 10px; padding: 2px; }
+.rxm .mi .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rxm .sep { height: 0; margin: 3px 0; border-top: 1px solid #999; border-bottom: 1px solid #fff; }
+/* the Reactions window: Show Everyone… on a desktop, centred over a
+   faint veil; a sheet on a phone, or a reaction held down. A segmented
+   row picks the emoji, the people of it in 44px rows under it, each a
+   link to their page; Done is the default, Remove My 🎉 at the left. */
+.rxw { margin: 0 auto; }
+.rxw.center { top: 50%; bottom: auto; transform: translateY(-50%); max-width: 360px; }
+.rxw .rxw-seg { display: flex; padding: 12px; background: #ddd; border-bottom: 1px solid #262626; box-shadow: inset 0 1px 0 rgba(255,255,255,.6); }
+.rxw .rxw-seg .btn { flex: 1 1 0; min-width: 0; padding: 2px 4px; display: inline-flex; align-items: center; justify-content: center; border-radius: 0; }
+.rxw .rxw-seg .btn + .btn { margin-left: -1px; }
+.rxw .rxw-seg .btn:first-child { border-radius: 3px 0 0 3px; }
+.rxw .rxw-seg .btn:last-child { border-radius: 0 3px 3px 0; }
+.rxw .rxw-seg .btn[aria-pressed=true] { background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.rxw .rxw-seg .em { font-size: 14px; line-height: 14px; font-weight: normal; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.rxw .rxw-seg .n { margin-left: 5px; }
+.rxw ul { list-style: none; margin: 0; padding: 0; max-height: min(396px, 50vh); overflow-y: auto; }
+.rxw li a { display: flex; align-items: center; gap: 10px; height: 44px; box-sizing: border-box; padding: 0 12px; border-bottom: 1px solid #ddd;
+  color: #262626; text-decoration: none; }
+.rxw li:last-child a { border-bottom: 0; }
+.rxw li .av { width: 30px; height: 30px; }
+.rxw li .av img { display: block; width: 28px; height: 28px; image-rendering: pixelated; }
+.rxw li .av img.idn { width: 20px; height: 20px; padding: 4px; }
+.rxw li .who { flex: 1; min-width: 0; line-height: 15px; overflow: hidden; }
+.rxw li .who b, .rxw li .who .mono { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rxw li .who .mono { color: #666; font-size: 11px; }
+.rxw li time { flex: none; font-size: 10px; color: #6b6b6b; }
+.rxw .rxw-foot { display: flex; align-items: center; gap: 12px; padding: 12px; border-top: 1px solid #262626; background: #ddd; }
+.rxw .rxw-foot .grow { flex: 1; }
+.rxw .rxw-foot .rm { color: #7a1010; }
+.rxw .rxw-foot .rm[hidden] { display: none; }
+.rxw .rxw-foot .default { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
+.rxw li .em { flex: none; font-size: 16px; line-height: 16px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+@media (pointer: coarse) { .rxw .rxw-seg .btn, .rxw .rxw-foot .btn, .rxp .rxp-foot .btn { height: 30px; } }
 /* why a post is among one's notifications, where "in reply to" stands */
 .meta .why { color: #333399; }
 .foot .del { display: none; margin: 0 0 0 auto; min-width: 0; height: auto;
@@ -1285,7 +1427,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     return !!((window.hubBusy && hubBusy())
       || (at && at.matches("textarea, input[type=text]"))
       || [...document.querySelectorAll("textarea, input[type=text]:not([hidden])")].some(f => f.value !== f.defaultValue)
-      || document.querySelector(".atts > *, .veil:not([hidden]), .dveil:not([hidden]), .picker:not([hidden]), .viewer, .ytv iframe")
+      || document.querySelector(".atts > *, .veil:not([hidden]), .dveil:not([hidden]), .picker:not([hidden]), .viewer, .ytv iframe, .rxp, .rxm, .rxw")
       || [...document.querySelectorAll("video:not([loop]), audio")].some(m => !m.paused && !m.ended)
       || (sel && !sel.isCollapsed));
   };
@@ -2169,6 +2311,422 @@ document.addEventListener("change", e => {
   });
 })();
 </script>{{end}}
+<script>
+// Reactions (PLAN.md, Reactions): the row of them under a post, the
+// picker Add Reaction opens, and who reacted — a contextual menu on a
+// desktop, the Reactions window on a phone or from Show Everyone…. A
+// press on a reaction gives it or takes it back where the Post window
+// can sign (the compose script's hubReact); anywhere else it shows who.
+// Every name and id on the menu and in the window is someone else's
+// words, so nothing here is written as HTML: each node is built and its
+// text set.
+(() => {
+  const RX = HUB.rx || [], NAME = new Map(RX.map(r => [r[0], r[1]]));
+  const coarse = matchMedia("(pointer: coarse)");
+  const ID = /^[0-9a-f]{16}$/;
+  const USED = "exe-hub-reactions";
+  const remembered = () => { try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); return w && ID.test(w.id || "") ? w.id : ""; } catch (e) { return ""; } };
+  // who may sign here now, and whose the page shows as theirs
+  const signer = () => (window.hubSigner && hubSigner()) || "";
+  const reader = () => signer() || remembered();
+  const idsOf = b => (b.dataset.ids || "").split(" ").filter(Boolean);
+  // a person's page, in the language this one was asked in
+  const LQ = (q => q ? "?lang=" + encodeURIComponent(q) : "")(new URLSearchParams(location.search).get("lang"));
+  const nameOf = e => NAME.get(e) || e;
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const face = (id, avatar, big) => {
+    const box = el("span", "av"), img = el("img");
+    img.alt = "";
+    img.src = avatar ? "/v1/embed/" + avatar : "/v1/identicon/" + id + ".svg";
+    if (!avatar) img.className = "idn";
+    box.append(img);
+    return box;
+  };
+  const CHECK = '<svg viewBox="0 0 10 8" width="10" height="8" aria-hidden="true"><path d="M9 0h1v2H9zM8 1h1v2H8zM7 2h1v2H7zM6 3h1v2H6zM5 4h1v2H5zM4 5h1v2H4zM3 6h1v2H3zM0 3h1v2H0zM1 4h1v2H1zM2 5h1v2H2z"/></svg>';
+
+  // ---- the row: each button's words follow who the reader is ----
+  // its title says who ("You and 8 more."), its name the count and
+  // whether one is the reader's, and aria-pressed the same where a press
+  // gives or takes back. The look is the head's rule, by data-ids.
+  function dress(root = document) {
+    const me = reader(), can = !!signer() && !!window.hubReact;
+    for (const b of root.querySelectorAll(".rx[data-e]")) {
+      const ids = idsOf(b), n = ids.length, mine = !!me && ids.includes(me), name = nameOf(b.dataset.e);
+      b.title = mine ? (n > 1 ? T("rx.tip.you", { n: n - 1 }) : T("rx.tip.only")) : T(n === 1 && HUB.s["rx.tip.one"] ? "rx.tip.one" : "rx.tip", { n });
+      b.setAttribute("aria-label", T(mine ? "rx.label.you" : "rx.label", { name, n }));
+      if (can) { b.setAttribute("aria-pressed", mine); b.removeAttribute("aria-haspopup"); }
+      else { b.removeAttribute("aria-pressed"); b.setAttribute("aria-haspopup", "menu"); }
+    }
+  }
+  window.hubRxDress = () => dress();
+  dress();
+  for (const f of document.querySelectorAll(".frame")) if (f.dataset.live) new MutationObserver(() => dress(f)).observe(f, { childList: true });
+
+  // ---- giving one, or taking it back ----
+  // The button turns at once, its count with it — a new emoji's button
+  // stands at the row's end, the row made if the post had none — and
+  // turns back if the hub refuses (hubReact calls flip both ways). The
+  // live page brings the hub's own row after.
+  const postOf = id => { const p = document.getElementById(id); return p && p.classList.contains("post") ? p : null; };
+  function flip(id, e, on, me) {
+    const post = postOf(id);
+    if (!post || !me) return;
+    const body = post.querySelector(":scope > div");
+    let row = body.querySelector(":scope > .rxs");
+    let b = row && [...row.querySelectorAll(".rx")].find(x => x.dataset.e === e);
+    let ids = b ? idsOf(b) : [];
+    ids = ids.filter(x => x !== me);
+    if (on) ids.push(me);
+    if (!ids.length) {
+      if (b) b.remove();
+      if (row && !row.children.length) row.remove();
+      return;
+    }
+    if (!row) {
+      row = el("div", "rxs");
+      body.insertBefore(row, body.querySelector(":scope > .foot"));
+    }
+    if (!b) {
+      b = el("button", "btn rx");
+      b.type = "button";
+      b.dataset.e = e;
+      b.append(el("span", "em", e), el("span", "n"));
+      row.append(b);
+    }
+    b.dataset.ids = ids.join(" ");
+    b.querySelector(".n").textContent = ids.length;
+    dress(row);
+  }
+  async function give(id, e, on) {
+    const me = signer();
+    if (!window.hubReact || !me) return;
+    if (await hubReact(id, e, on, now => flip(id, e, now, me)) && on) {
+      try {
+        const used = JSON.parse(localStorage.getItem(USED) || "{}");
+        used[e] = (typeof used[e] === "number" ? used[e] : 0) + 1;
+        localStorage.setItem(USED, JSON.stringify(used));
+      } catch (x) {}
+    }
+  }
+  const givenBy = (id, me) => {
+    const post = postOf(id);
+    return new Set(post && me ? [...post.querySelectorAll(":scope > div > .rxs .rx")].filter(b => idsOf(b).includes(me)).map(b => b.dataset.e) : []);
+  };
+
+  // ---- one thing open at a time: the picker, the menu or the window ----
+  let open = null; // {node, veil, close}
+  function shut(refocus) {
+    if (!open) return;
+    const o = open;
+    open = null;
+    o.node.remove();
+    if (o.veil) o.veil.remove();
+    if (o.close) o.close();
+    if (refocus && o.from && document.contains(o.from)) o.from.focus({ preventScroll: true });
+  }
+  document.addEventListener("pointerdown", e => {
+    if (open && !open.node.contains(e.target) && !(open.from && open.from.contains(e.target))) shut(false);
+  }, true);
+  document.addEventListener("keydown", e => { if (open && e.key === "Escape") { e.preventDefault(); shut(true); } });
+  addEventListener("resize", () => { if (open && !open.fixed) shut(false); });
+  addEventListener("scroll", () => { if (open && open.menu) shut(false); }, { passive: true });
+  const veil = () => { const v = el("div", "rxveil"); document.body.append(v); return v; };
+  const windowOf = (cls, title) => {
+    const w = el("div", "window " + cls);
+    w.setAttribute("role", "dialog");
+    w.setAttribute("aria-label", title);
+    const bar = el("div", "titlebar"), box = el("span", "tbox close");
+    box.title = T("close");
+    box.addEventListener("click", () => shut(true));
+    bar.append(box, el("span", "stripe"), el("span", "title", title), el("span", "stripe"));
+    const frame = el("div", "frame");
+    w.append(bar, frame);
+    return { w, frame };
+  };
+
+  // ---- the picker ----
+  // Frequently Used is the reader's eight most used on this browser, the
+  // set's first eight until there are counts; Smileys and More the
+  // other sixteen in the set's order. A search narrows the cells to the
+  // names that hold every word, in the page's language or in English.
+  function picker(btn) {
+    const post = btn.closest(".post");
+    if (!post) return;
+    if (open && open.from === btn) { shut(true); return; }
+    shut(false);
+    const id = post.id, mine = givenBy(id, signer()), sheet = coarse.matches;
+    let used = {};
+    try { used = JSON.parse(localStorage.getItem(USED) || "{}") || {}; } catch (e) {}
+    const u = e => typeof used[e] === "number" ? used[e] : 0;
+    const order = RX.map((r, i) => [r, i]);
+    const freq = order.slice().sort((a, b) => u(b[0][0]) - u(a[0][0]) || a[1] - b[1]).slice(0, 8);
+    const more = order.filter(x => !freq.includes(x));
+    let node, status, foot;
+    const box = el("div", "rxp-b"), q = el("input");
+    q.type = "text";
+    q.placeholder = T("rx.search");
+    q.setAttribute("aria-label", T("rx.search"));
+    q.autocomplete = "off";
+    q.setAttribute("enterkeyhint", "go");
+    const qrow = el("div", "rxp-q");
+    qrow.append(q);
+    const say = e => {
+      const s = e ? e + " " + nameOf(e) + (mine.has(e) ? " · " + T("rx.yours") : "") : T("rx.choose");
+      if (status) status.textContent = s;
+    };
+    const cell = ([r]) => {
+      const c = el("button", "ec" + (mine.has(r[0]) ? " mine" : ""), r[0]);
+      c.type = "button";
+      c.dataset.e = r[0];
+      c.setAttribute("aria-label", r[1]);
+      if (mine.has(r[0])) c.setAttribute("aria-pressed", "true");
+      return c;
+    };
+    const grid = cells => { const g = el("div", "rxp-g"); g.append(...cells.map(cell)); return g; };
+    const browse = () => {
+      box.replaceChildren(el("div", "rxp-h", T("rx.frequent")), grid(freq), el("div", "rxp-sep"), el("div", "rxp-h", T("rx.more")), grid(more));
+    };
+    const find = () => {
+      const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.length) { browse(); return; }
+      const hits = order.filter(([r]) => words.every(w => r[1].toLowerCase().includes(w) || r[2].toLowerCase().includes(w)));
+      box.replaceChildren(el("div", "rxp-h", T("rx.results")));
+      if (hits.length) box.append(grid(hits));
+      else box.append(el("div", "rxp-none", T("rx.none", { q: q.value.trim() })));
+    };
+    browse();
+    if (sheet) {
+      const { w, frame } = windowOf("rxp sheet", T("rx.add"));
+      foot = el("div", "rxp-foot");
+      const hint = el("span", "grow"), cancel = el("button", "btn", T("cancel"));
+      cancel.type = "button";
+      cancel.addEventListener("click", () => shut(true));
+      const first = RX.find(r => mine.has(r[0]));
+      hint.textContent = first ? T("rx.yours.tap", { e: first[0] }) : T("rx.choose");
+      foot.append(hint, cancel);
+      frame.append(qrow, box, foot);
+      node = w;
+    } else {
+      node = el("div", "rxp");
+      node.setAttribute("role", "dialog");
+      node.setAttribute("aria-label", T("rx.add"));
+      status = el("div", "statusbar");
+      node.append(qrow, box, status);
+      say("");
+    }
+    node.addEventListener("pointerover", e => {
+      const c = e.target.closest(".ec");
+      for (const x of node.querySelectorAll(".ec.on")) if (x !== c) x.classList.remove("on");
+      if (c && e.pointerType !== "touch") { c.classList.add("on"); say(c.dataset.e); }
+    });
+    node.addEventListener("pointerleave", () => { for (const x of node.querySelectorAll(".ec.on")) x.classList.remove("on"); say(""); });
+    node.addEventListener("focusin", e => { const c = e.target.closest(".ec"); if (c) say(c.dataset.e); });
+    node.addEventListener("click", e => {
+      const c = e.target.closest(".ec");
+      if (!c) return;
+      shut(true);
+      give(id, c.dataset.e, !mine.has(c.dataset.e));
+    });
+    q.addEventListener("input", find);
+    q.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const c = box.querySelector(".ec");
+      if (c) c.click();
+    });
+    btn.setAttribute("aria-expanded", "true");
+    open = { node, from: btn, fixed: sheet, close: () => btn.setAttribute("aria-expanded", "false") };
+    if (sheet) { open.veil = veil(); open.veil.addEventListener("click", () => shut(true)); }
+    document.body.append(node);
+    if (!sheet) {
+      // hung under its button, right edges aligned, kept on the page
+      const r = btn.getBoundingClientRect();
+      node.style.left = Math.max(8 + scrollX, r.right + scrollX - node.offsetWidth) + "px";
+      node.style.top = r.bottom + scrollY + 2 + "px";
+      // the cells keep the height they browse at, so the status line
+      // stays put under the pointer while a search narrows them
+      box.style.minHeight = box.offsetHeight + "px";
+      q.focus({ preventScroll: true });
+    }
+  }
+  document.addEventListener("click", e => {
+    const b = e.target instanceof Element && e.target.closest(".post .rx-add");
+    if (b) { e.preventDefault(); picker(b); }
+  });
+
+  // ---- who reacted ----
+  // The list comes from the hub with names and pictures; a hub out of
+  // reach leaves the ids the button carries, each named by itself.
+  async function people(id, b) {
+    try {
+      const r = await fetch("/v1/post/" + id + "/reactions", { cache: "no-store" });
+      if (r.ok) { const out = await r.json(); if (Array.isArray(out.reactions)) return out.reactions; }
+    } catch (x) {}
+    const post = postOf(id);
+    return post ? [...post.querySelectorAll(":scope > div > .rxs .rx")].map(x => ({ emoji: x.dataset.e, people: idsOf(x).map(i => ({ id: i, name: "", avatar: "", ts: 0 })) })) : [];
+  }
+  const peopleWord = n => T(n === 1 && HUB.s["rx.people.one"] ? "rx.people.one" : "rx.people", { n });
+  let asking = 0;
+  async function menu(b, x, y) {
+    const post = b.closest(".post"), e = b.dataset.e;
+    if (!post) return;
+    if (open && open.menu && open.from === b) { shut(true); return; }
+    const ask = ++asking;
+    const all = await people(post.id, b);
+    if (ask !== asking) return;
+    shut(false);
+    const got = all.find(r => r.emoji === e) || { emoji: e, people: idsOf(b).map(i => ({ id: i })) };
+    const me = reader(), can = !!signer() && !!window.hubReact, n = got.people.length;
+    const m = el("div", "rxm");
+    m.setAttribute("role", "menu");
+    m.tabIndex = -1;
+    const head = el("div", "mi head", e + " " + nameOf(e) + " · " + peopleWord(n));
+    m.append(head, el("div", "sep"));
+    // the reader first among them, as You, then in the order they gave it
+    const shown = [...got.people].sort((a, c) => (c.id === me) - (a.id === me)).slice(0, 7);
+    for (const p of shown) {
+      const a = el("a", "mi");
+      a.href = "/u/" + p.id + LQ;
+      a.setAttribute("role", "menuitem");
+      if (p.id === me) { const c = el("span", "chk"); c.innerHTML = CHECK; a.append(c); }
+      a.append(face(p.id, p.avatar), el("span", "nm", p.id === me ? T("rx.you") : p.name || p.id));
+      m.append(a);
+    }
+    if (n > shown.length) m.append(el("div", "mi dim", T("rx.others", { n: n - shown.length })));
+    m.append(el("div", "sep"));
+    if (can && me && got.people.some(p => p.id === me)) {
+      const rm = el("button", "mi", T("rx.remove"));
+      rm.type = "button";
+      rm.setAttribute("role", "menuitem");
+      rm.addEventListener("click", () => { shut(true); give(post.id, e, false); });
+      m.append(rm);
+    }
+    const every = el("button", "mi", T("rx.everyone"));
+    every.type = "button";
+    every.setAttribute("role", "menuitem");
+    every.addEventListener("click", () => { shut(false); sheet(post.id, e, all, b, false); });
+    m.append(every);
+    const rows = () => [...m.querySelectorAll("a.mi, button.mi")];
+    const hi = r => { for (const x of rows()) x.classList.toggle("on", x === r); };
+    m.addEventListener("pointerover", ev => hi(ev.target.closest("a.mi, button.mi")));
+    m.addEventListener("pointerleave", () => hi(null));
+    m.addEventListener("keydown", ev => {
+      const rs = rows(), at = rs.findIndex(r => r.classList.contains("on"));
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+        ev.preventDefault();
+        const k = ev.key === "ArrowDown" ? at + 1 : at < 0 ? rs.length - 1 : at - 1;
+        const r = rs[(k + rs.length) % rs.length];
+        hi(r);
+        r.focus({ preventScroll: true });
+      } else if (ev.key === "Enter" && at >= 0) { ev.preventDefault(); rs[at].click(); }
+    });
+    open = { node: m, from: b, menu: true };
+    document.body.append(m);
+    // at the pointer, kept on the screen
+    const { clientWidth: vw, clientHeight: vh } = document.documentElement;
+    m.style.left = Math.max(4, Math.min(x, vw - m.offsetWidth - 4)) + "px";
+    m.style.top = Math.max(4, y + m.offsetHeight > vh - 4 ? y - m.offsetHeight : y) + "px";
+    m.focus({ preventScroll: true });
+  }
+
+  // the Reactions window: All, then each emoji, its people under it
+  async function sheet(id, e, all, from, fetchFirst) {
+    const ask = ++asking;
+    if (fetchFirst) all = await people(id, from);
+    if (ask !== asking) return;
+    shut(false);
+    const me = reader(), can = !!signer() && !!window.hubReact;
+    const { w, frame } = windowOf("rxw" + (coarse.matches ? "" : " center"), T("rx.window"));
+    const seg = el("div", "rxw-seg"), list = el("ul"), foot = el("div", "rxw-foot");
+    const total = all.reduce((k, r) => k + r.people.length, 0);
+    const tabs = [["", el("button", "btn", T("rx.all"))]];
+    tabs[0][1].append(el("span", "n", total));
+    for (const r of all) {
+      const t = el("button", "btn");
+      t.append(el("span", "em", r.emoji), el("span", "n", r.people.length));
+      t.setAttribute("aria-label", T("rx.label", { name: nameOf(r.emoji), n: r.people.length }));
+      tabs.push([r.emoji, t]);
+    }
+    const rm = el("button", "btn rm"), done = el("button", "btn default", T("rx.done"));
+    rm.type = done.type = "button";
+    done.addEventListener("click", () => shut(true));
+    foot.append(rm, el("span", "grow"), done);
+    let on = all.some(r => r.emoji === e) ? e : "";
+    const show = () => {
+      for (const [k, t] of tabs) t.setAttribute("aria-pressed", k === on);
+      const rows = on ? (all.find(r => r.emoji === on) || { people: [] }).people.map(p => [on, p])
+        : all.flatMap(r => r.people.map(p => [r.emoji, p])).sort((a, b) => a[1].ts - b[1].ts);
+      list.setAttribute("aria-label", on ? T("rx.list", { name: nameOf(on) }) : T("rx.window"));
+      list.replaceChildren(...rows.map(([em, p]) => {
+        const li = el("li"), a = el("a"), who = el("span", "who");
+        a.href = "/u/" + p.id + LQ;
+        who.append(el("b", "", p.id === me ? T("rx.you") : p.name || p.id), el("span", "mono", p.id));
+        a.append(face(p.id, p.avatar), who);
+        if (!on) a.append(el("span", "em", em));
+        if (p.ts) { const t = el("time"); t.setAttribute("datetime", new Date(p.ts).toISOString()); a.append(t); }
+        li.append(a);
+        return li;
+      }));
+      localTimes(list);
+      const mine = on && can && me && rows.some(([, p]) => p.id === me);
+      rm.hidden = !mine;
+      rm.textContent = mine ? T("rx.remove.e", { e: on }) : "";
+    };
+    for (const [k, t] of tabs) { t.type = "button"; t.addEventListener("click", () => { on = k; show(); }); seg.append(t); }
+    rm.addEventListener("click", () => { const em = on; shut(true); give(id, em, false); });
+    show();
+    frame.append(seg, list, foot);
+    open = { node: w, from, fixed: true, veil: veil() };
+    open.veil.addEventListener("click", () => shut(true));
+    document.body.append(w);
+    done.focus({ preventScroll: true });
+  }
+
+  // ---- the buttons: a press, a right-click, a finger held down ----
+  let held = null, swallow = false;
+  document.addEventListener("pointerdown", e => {
+    const b = e.pointerType === "touch" && e.target instanceof Element && e.target.closest(".rxs .rx");
+    if (!b) return;
+    const x0 = e.clientX, y0 = e.clientY;
+    clearTimeout(held && held.t);
+    held = { b, x0, y0, t: setTimeout(() => {
+      held = null;
+      swallow = true;
+      setTimeout(() => { swallow = false; }, 800);
+      const post = b.closest(".post");
+      if (post) sheet(post.id, b.dataset.e, null, b, true);
+    }, 500) };
+  });
+  // the click a browser sends as the held finger lifts lands on the veil
+  // the window came with, or on the button: it is the hold's, taken here
+  // before anything below hears it
+  document.addEventListener("click", e => { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
+  const drop = () => { if (held) { clearTimeout(held.t); held = null; } };
+  document.addEventListener("pointerup", drop);
+  document.addEventListener("pointercancel", drop);
+  document.addEventListener("pointermove", e => { if (held && Math.hypot(e.clientX - held.x0, e.clientY - held.y0) > 10) drop(); });
+  document.addEventListener("contextmenu", e => {
+    const b = e.target instanceof Element && e.target.closest(".rxs .rx");
+    if (!b) return;
+    e.preventDefault();
+    if (coarse.matches && e.button !== 2 && !(e.clientX === 0 && e.clientY === 0)) return; // a finger: held above
+    const r = b.getBoundingClientRect();
+    // the keyboard's context key says no place: under the button then
+    menu(b, e.clientX || r.left, e.clientY || r.bottom + 2);
+  });
+  document.addEventListener("click", e => {
+    const b = e.target instanceof Element && e.target.closest(".rxs .rx");
+    if (!b) return;
+    e.preventDefault();
+    const post = b.closest(".post");
+    if (!post) return;
+    if (signer() && window.hubReact) { give(post.id, b.dataset.e, !idsOf(b).includes(signer())); return; }
+    // nothing to sign with here: a press shows who
+    if (coarse.matches) sheet(post.id, b.dataset.e, null, b, true);
+    else { const r = b.getBoundingClientRect(); menu(b, r.left, r.bottom + 2); }
+  });
+})();
+</script>
 {{if .Compose}}<script>
 // Posting from a Solana wallet (PLAN.md, Posting from a wallet). A hub
 // account is a raw ed25519 key, and so is a Solana address: the wallet's
@@ -2462,6 +3020,7 @@ document.addEventListener("change", e => {
     document.dispatchEvent(new CustomEvent("exe-hub-id", { detail: st.v.profile }));
     if (window.hubNav) hubNav(st.v.profile);
     keptOf(st.v.profile);
+    hubMine(st.v.profile);
     q(".id").textContent = st.v.profile;
     q(".id").title = me.address;
     q(".name").textContent = st.profile && st.profile.name ? st.profile.name : T("noname");
@@ -2567,7 +3126,7 @@ document.addEventListener("change", e => {
     // — and its who line, drawn already, stands until the gate's answer
     // redraws it the same or with what changed since
     const before = recall(), same = before && before.address === me.address;
-    if (!same) { showOwn(""); disarm(); keptOf(""); if (window.hubNav) hubNav(""); }
+    if (!same) { showOwn(""); disarm(); keptOf(""); hubMine(""); if (window.hubNav) hubNav(""); }
     remember(same ? Object.assign(before, { name: me.name }) : { name: me.name, address: me.address });
     root.classList.add("wallet");
     if (!same || !before.id) {
@@ -2585,6 +3144,7 @@ document.addEventListener("change", e => {
     showOwn(""); // and so do the Delete buttons
     disarm();
     keptOf(""); // and the kept posts, and the Navigation window's links
+    hubMine(""); // and the reactions pressed as theirs
     if (window.hubNav) hubNav("");
     remember(null);
     root.classList.remove("wallet");
@@ -3074,6 +3634,32 @@ document.addEventListener("change", e => {
       render();
     }
   });
+  // ---- reactions (PLAN.md, Reactions) ----
+  // The reactions script asks who can sign here (the id the gate named
+  // for the wallet signed in, "" for none) and sends a post.react through
+  // here: one prompt, as Bookmark is, the button turning at once by flip
+  // and back if the hub refuses. A press while something else is being
+  // signed or sent waits for nothing: it is not taken.
+  window.hubSigner = () => (me && keptFor) || "";
+  window.hubReact = async (id, emoji, on, flip) => {
+    if (!me || !keptFor || busy) return false;
+    const who = me;
+    busy = true;
+    render();
+    flip(on);
+    try {
+      await sendOp("post.react", { post: id, emoji, on }, tell, null, who);
+      done(T(on ? "rx.added" : "rx.removed"));
+      return true;
+    } catch (err) {
+      flip(!on);
+      flash = err.message;
+      return false;
+    } finally {
+      busy = false;
+      render();
+    }
+  };
   // The post as the window stands: the words, the reply it answers, and
   // what is attached: the window's pictures, or the pad's drawing. Post
   // sends it, and so does the pad's Send, so the words, the mentions and
@@ -4117,7 +4703,16 @@ document.addEventListener("change", e => {
 {{/* Bookmark, on a page with the Post window (PLAN.md, The signed-in
      reader's desk — Bookmarks): a toggle, pressed in for a post the
      reader keeps (aria-pressed, which the compose script sets) */}}
-{{define "keep"}}{{if .Keep}}<button type="button" class="btn bm" aria-label="{{T "bookmark"}}" title="{{T "bookmark"}}"><svg viewBox="0 0 8 10" width="8" height="10" aria-hidden="true"><path class="w" d="M1 1h6v1h-6zM1 2h6v1h-6zM1 3h6v1h-6zM1 4h6v1h-6zM1 5h6v1h-6zM1 6h6v1h-6zM1 7h2v1h-2zM5 7h2v1h-2zM1 8h1v1h-1zM6 8h1v1h-1z"/><path class="k" d="M0 0h8v1h-8zM0 1h1v1h-1zM7 1h1v1h-1zM0 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM7 3h1v1h-1zM0 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM7 5h1v1h-1zM0 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM3 7h2v1h-2zM7 7h1v1h-1zM0 8h1v1h-1zM2 8h1v1h-1zM5 8h1v1h-1zM7 8h1v1h-1zM0 9h2v1h-2zM6 9h2v1h-2z"/></svg></button>{{end}}{{end}}
+{{define "keep"}}{{if .Keep}}<button type="button" class="btn bm" aria-label="{{T "bookmark"}}" title="{{T "bookmark"}}"><svg viewBox="0 0 8 10" width="8" height="10" aria-hidden="true"><path class="w" d="M1 1h6v1h-6zM1 2h6v1h-6zM1 3h6v1h-6zM1 4h6v1h-6zM1 5h6v1h-6zM1 6h6v1h-6zM1 7h2v1h-2zM5 7h2v1h-2zM1 8h1v1h-1zM6 8h1v1h-1z"/><path class="k" d="M0 0h8v1h-8zM0 1h1v1h-1zM7 1h1v1h-1zM0 2h1v1h-1zM7 2h1v1h-1zM0 3h1v1h-1zM7 3h1v1h-1zM0 4h1v1h-1zM7 4h1v1h-1zM0 5h1v1h-1zM7 5h1v1h-1zM0 6h1v1h-1zM7 6h1v1h-1zM0 7h1v1h-1zM3 7h2v1h-2zM7 7h1v1h-1zM0 8h1v1h-1zM2 8h1v1h-1zM5 8h1v1h-1zM7 8h1v1h-1zM0 9h2v1h-2zM6 9h2v1h-2z"/></svg></button><button type="button" class="btn rx-add" aria-label="{{T "rx.add"}}" title="{{T "rx.add"}}" aria-haspopup="dialog" aria-expanded="false">{{template "g-smiley"}}</button>{{end}}{{end}}
+
+{{/* Add Reaction's glyph (PLAN.md, Reactions): an 11px smiley and a
+     plus, 18×10, the mockup's pixels */}}
+{{define "g-smiley"}}<svg viewBox="0 0 18 10" width="18" height="10" aria-hidden="true"><path class="w" d="M3 1h5v1h-5zM2 2h7v1h-7zM1 3h2v2h-2zM4 3h3v2h-3zM8 3h2v2h-2zM1 5h9v1h-9zM1 6h1v1h-1zM3 6h5v1h-5zM9 6h1v1h-1zM2 7h1v1h-1zM8 7h1v1h-1zM3 8h5v1h-5z"/><path class="k" d="M3 0h5v1H3zM1 1h2v1H1zM8 1h2v1H8zM1 2h1v1H1zM9 2h1v1H9zM0 3h1v4H0zM10 3h1v4h-1zM3 3h1v2H3zM7 3h1v2H7zM2 6h1v1H2zM8 6h1v1H8zM1 7h1v1H1zM3 7h5v1H3zM9 7h1v1H9zM1 8h2v1H1zM8 8h2v1H8zM3 9h5v1H3zM15 3h1v5h-1zM13 5h5v1h-5z"/></svg>{{end}}
+
+{{/* the row of reactions under a post (PLAN.md, Reactions): a push
+     button per emoji given, the emoji and its count; data-ids is who
+     gave it, which the rule in <style id="mine"> presses for the reader */}}
+{{define "rxs"}}{{if .Reactions}}<div class="rxs">{{range .Reactions}}<button type="button" class="btn rx" data-e="{{.Emoji}}" data-ids="{{words .By}}" aria-label="{{T "rx.label" "name" (rxname .Emoji) "n" (len .By)}}" title="{{T "rx.tip" "n" (len .By)}}"><span class="em">{{.Emoji}}</span><span class="n">{{len .By}}</span></button>{{end}}</div>{{end}}{{end}}
 
 {{/* The Navigation window (PLAN.md, The signed-in reader's desk): a
      signed-in reader's Home, Notifications, Bookmarks and Profile. The
@@ -4174,6 +4769,7 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
     {{if .Card}}<div class="card{{if .Player}} yt{{end}}">{{with .Player}}<div class="ytv" data-yt="{{.ID}}"{{if .Start}} data-start="{{.Start}}"{{end}}><a class="ytgo" href="{{$.Card.URL}}" target="_blank" rel="noopener nofollow">{{if $.Card.Image}}<img src="/v1/embed/{{$.Card.Image}}" alt="" loading="lazy">{{end}}<span class="btn">{{template "play"}}{{T "play"}}</span></a></div>{{end}}<a class="cm" href="{{.Card.URL}}" target="_blank" rel="noopener nofollow">{{if and .Card.Image (not .Player)}}<span class="ci"><img src="/v1/embed/{{.Card.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="ct">{{.Card.Title}}</span>{{if .Card.Desc}}<span class="cd">{{.Card.Desc}}</span>{{end}}<span class="ch">{{.Card.Host}}</span></span></a>{{if .Card.Archive}}<a class="arch" href="{{.Card.Archive}}" target="_blank" rel="noopener nofollow">{{T "archived"}}{{with .Card.ArchiveDate}} · {{.}}{{end}}</a>{{end}}</div>{{end}}
     {{with .PostCard}}<div class="card qcard"><a class="cm" href="/p/{{.ID}}{{$.Q}}">{{if .Image}}<span class="ci"><img src="/v1/embed/{{.Image}}" alt="" loading="lazy"></span>{{end}}<span class="cb"><span class="qh"><span class="qav">{{if .Avatar}}<img src="/v1/embed/{{.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Author}}.svg" alt="">{{end}}</span><b>{{.Name}}</b><span class="mono">{{.Author}}</span><span class="qw">· <time datetime="{{.Stamp}}">{{.When}}</time></span></span>{{if .Text}}<span class="qt">{{.Text}}</span>{{end}}</span></a></div>{{end}}
     {{if or .Images .Pictures .Videos .Sounds .Files .Pages}}<div class="embeds">{{range .Images}}{{if .Drawing}}<div class="drawing"><a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "picture"}}{{end}}"><img class="draw" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="/v1/embed/{{.CID}}" data-w="{{.Width}}" data-h="{{.Height}}" style="width:{{.Width}}px;height:{{.Height}}px" alt="{{.Alt}}"><noscript><img class="draw" src="/v1/embed/{{.CID}}" width="{{.Width}}" height="{{.Height}}" loading="lazy" alt=""></noscript></a><button type="button" class="btn again">{{T "replay"}}</button></div>{{else}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "picture"}}{{end}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}"></a>{{end}}{{end}}{{range .Pictures}}<a class="pic" href="/v1/embed/{{.CID}}" data-name="{{.Name}}" title="{{.URL}}"><img src="/v1/embed/{{.CID}}" alt=""></a>{{end}}{{range .Videos}}<div class="vid"{{if .Loop}} data-loop{{end}} style="{{.Box}}"><video src="/v1/embed/{{.CID}}"{{if .Poster}} poster="/v1/embed/{{.Poster}}"{{end}}{{if .Loop}} autoplay loop muted playsinline preload="auto"{{else}} controls playsinline preload="{{if .Poster}}none{{else}}metadata{{end}}"{{end}}{{if .Alt}} aria-label="{{.Alt}}"{{end}}></video></div>{{end}}{{range .Sounds}}<div class="aud">{{if .Poster}}<img class="wave" src="/v1/embed/{{.Poster}}" alt="">{{end}}<audio controls preload="none" src="/v1/embed/{{.CID}}"></audio><span class="afoot">{{if .Filename}}{{.Filename}}{{else}}{{T "sound"}}{{end}}{{with .Length}} · {{.}}{{end}}</span></div>{{end}}{{range .Pages}}<div><a class="page" href="/v1/embed/{{.CID}}" data-cid="{{.CID}}" data-name="{{if .Filename}}{{.Filename}}{{else}}{{T "page"}}{{end}}">{{if .Filename}}{{.Filename}}{{else}}{{T "page"}}{{end}}</a><a class="pagedl" href="/v1/embed/{{.CID}}" download>{{T "download"}}</a></div>{{end}}{{range .Files}}<a class="file" href="/v1/embed/{{.CID}}">{{if .Filename}}{{.Filename}}{{else}}{{.CID}}{{end}} ({{.MIME}})</a>{{end}}</div>{{end}}
+    {{template "rxs" .}}
     {{if .InThread}}<div class="foot re"><a class="rlink" role="button" href="/p/{{.ID}}{{.Q}}">{{T "reply"}}</a>{{template "del" .}}</div>
     {{else if and (not .ReplyTo) .Replies}}<div class="foot"><a class="count" href="/p/{{.ID}}{{.Q}}">{{T "replies" "n" .Replies}} ▸</a>{{with .Latest}}<a class="latest" href="{{.Href}}"><b>{{.Name}}</b> {{.Text}}</a>{{end}}{{template "del" .}}</div>
     {{else}}<div class="foot own">{{template "del" .}}</div>{{end}}
