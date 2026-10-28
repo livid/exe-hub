@@ -64,8 +64,8 @@ func TestPostMark(t *testing.T) {
 	}
 }
 
-// a post.react names a post by id and one emoji of Reactions, exactly
-// as the set spells it, and says the state it wants
+// a post.react names a post by id and one fully-qualified emoji, exactly
+// as Unicode spells it, and says the state it wants
 func TestPostReact(t *testing.T) {
 	post := strings.Repeat("ab", 32)
 	for _, c := range []struct {
@@ -75,6 +75,9 @@ func TestPostReact(t *testing.T) {
 		{`{"post":"` + post + `","emoji":"🎉","on":true}`, true},
 		{`{"post":"` + post + `","emoji":"❤️","on":false}`, true},
 		{`{"post":"` + post + `","emoji":"🤝"}`, true},
+		{`{"post":"` + post + `","emoji":"🦄","on":true}`, true},   // beyond the picker's own
+		{`{"post":"` + post + `","emoji":"👍🏽","on":true}`, true},  // a skin tone
+		{`{"post":"` + post + `","emoji":"🏽","on":true}`, false},  // a skin tone alone
 		{`{"post":"` + post + `","emoji":"❤","on":true}`, false},  // without its U+FE0F
 		{`{"post":"` + post + `","emoji":"🎉🎉","on":true}`, false}, // two
 		{`{"post":"` + post + `","emoji":"BUY","on":true}`, false},
@@ -90,12 +93,5 @@ func TestPostReact(t *testing.T) {
 		if r, _ := op.(*PostReact); c.ok && (r == nil || r.Post != post) {
 			t.Errorf("%s: op %#v", c.body, op)
 		}
-	}
-	seen := map[string]bool{}
-	for _, r := range Reactions {
-		if seen[r] {
-			t.Errorf("%q twice in Reactions", r)
-		}
-		seen[r] = true
 	}
 }

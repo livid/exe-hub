@@ -905,6 +905,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
 .rxp input:focus { outline: none; }
 .rxp .rxp-h { padding: 0 8px; font-size: 11px; font-weight: bold; line-height: 16px; }
+.rxp .rxp-b { overflow-y: auto; overscroll-behavior: contain; }
 .rxp .rxp-g { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); padding: 2px 6px 6px; }
 .rxp .rxp-sep { height: 0; margin: 0 0 4px; border-top: 1px solid #999; border-bottom: 1px solid #fff; }
 .rxp .rxp-none { padding: 0 8px 8px; font-size: 11px; color: #555; }
@@ -2333,6 +2334,8 @@ document.addEventListener("change", e => {
   // a person's page, in the language this one was asked in
   const LQ = (q => q ? "?lang=" + encodeURIComponent(q) : "")(new URLSearchParams(location.search).get("lang"));
   const nameOf = e => NAME.get(e) || e;
+  // a button's own name, as the hub named its emoji: one beyond the 24
+  const named = root => { for (const b of root.querySelectorAll(".rx[data-name]")) if (!NAME.has(b.dataset.e)) NAME.set(b.dataset.e, b.dataset.name); };
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   const face = (id, avatar, big) => {
     const box = el("span", "av"), img = el("img");
@@ -2349,6 +2352,7 @@ document.addEventListener("change", e => {
   // whether one is the reader's, and aria-pressed the same where a press
   // gives or takes back. The look is the head's rule, by data-ids.
   function dress(root = document) {
+    named(root);
     const me = reader(), can = !!signer() && !!window.hubReact;
     for (const b of root.querySelectorAll(".rx[data-e]")) {
       const ids = idsOf(b), n = ids.length, mine = !!me && ids.includes(me), name = nameOf(b.dataset.e);
@@ -2390,6 +2394,7 @@ document.addEventListener("change", e => {
       b = el("button", "btn rx");
       b.type = "button";
       b.dataset.e = e;
+      if (NAME.has(e)) b.dataset.name = NAME.get(e);
       b.append(el("span", "em", e), el("span", "n"));
       row.append(b);
     }
@@ -2444,11 +2449,55 @@ document.addEventListener("change", e => {
     return { w, frame };
   };
 
+  // ---- every emoji's name, for the search ----
+  // The hub's tables, this page's language and English (HUB.rxnames),
+  // asked for once, at the first word typed: [[emoji, name, keywords?]]
+  // in Unicode's order. Each row of the search's is the emoji and what a
+  // word may match; a hub out of reach leaves the picker's own 24.
+  let all = null, asked = null;
+  const loadNames = () => asked || (asked = Promise.all((HUB.rxnames || []).map(u => fetch(u).then(r => r.ok ? r.json() : Promise.reject(r.status))))
+    .then(tables => {
+      const by = new Map();
+      tables.forEach((rows, k) => {
+        for (const [e, name, keys] of rows) {
+          if (k === 0 && !NAME.has(e)) NAME.set(e, name);
+          const r = by.get(e) || { e, names: [], keys: "" };
+          r.names.push(name);
+          r.keys += " " + (keys || "");
+          by.set(e, r);
+        }
+      });
+      all = [...by.values()];
+    }).catch(() => { asked = null; }));
+  // a skin tone's sequence stands in a search only when a word names its
+  // tone (the part of its name after the colon), so "thumbs" finds 👍
+  // and "thumbs dark" 👍🏿
+  const TONE = /[\u{1F3FB}-\u{1F3FF}]/u;
+  // one emoji, as far as this browser knows them: what the counts kept
+  // here may name
+  const isEmoji = (() => { try { const re = new RegExp("^\\p{RGI_Emoji}$", "v"); return s => re.test(s); } catch (x) { return s => /^\p{Extended_Pictographic}/u.test(s); } })();
+  function search(words) {
+    const rows = all || RX.map(([e, name]) => ({ e, names: [name], keys: "" }));
+    const hits = [];
+    for (const [i, r] of rows.entries()) {
+      const names = r.names.map(n => n.toLowerCase()), text = names.join(" ") + " " + r.keys.toLowerCase();
+      if (!words.every(w => text.includes(w))) continue;
+      if (TONE.test(r.e) && !words.some(w => names.some(n => (n.split(/[:：]/)[1] || "").includes(w)))) continue;
+      // a name that begins with the words first, then one with a word
+      // that does, then the rest, each in Unicode's order
+      const q = words.join(" ");
+      const rank = names.some(n => n.startsWith(q)) ? 0 : names.some(n => n.split(/[\s:：,-]+/).some(x => x.startsWith(words[0]))) ? 1 : 2;
+      hits.push([rank, i, r.e]);
+    }
+    return hits.sort((a, b) => a[0] - b[0] || a[1] - b[1]).slice(0, 64).map(h => h[2]);
+  }
+
   // ---- the picker ----
-  // Frequently Used is the reader's eight most used on this browser, the
-  // set's first eight until there are counts; Smileys and More the
-  // other sixteen in the set's order. A search narrows the cells to the
-  // names that hold every word, in the page's language or in English.
+  // Frequently Used is the reader's eight most used on this browser, any
+  // emoji, the picker's own first eight until there are counts; Smileys
+  // and More the rest of its own 24, sixteen. A search reaches every
+  // emoji, by the names that hold every word typed, in the page's
+  // language or in English, and their keywords.
   function picker(btn) {
     const post = btn.closest(".post");
     if (!post) return;
@@ -2458,10 +2507,13 @@ document.addEventListener("change", e => {
     let used = {};
     try { used = JSON.parse(localStorage.getItem(USED) || "{}") || {}; } catch (e) {}
     const u = e => typeof used[e] === "number" ? used[e] : 0;
-    const order = RX.map((r, i) => [r, i]);
-    const freq = order.slice().sort((a, b) => u(b[0][0]) - u(a[0][0]) || a[1] - b[1]).slice(0, 8);
-    const more = order.filter(x => !freq.includes(x));
+    const quick = RX.map(r => r[0]);
+    const ranked = Object.keys(used).filter(e => u(e) > 0 && isEmoji(e)).sort((a, b) => u(b) - u(a) || (quick.indexOf(a) + 1 || 99) - (quick.indexOf(b) + 1 || 99));
+    const freq = [...new Set(ranked.concat(quick))].slice(0, 8);
+    const more = quick.filter(e => !freq.includes(e)).slice(0, 16);
     let node, status, foot;
+    // a name the page does not hold yet (a used emoji beyond the 24) comes with the tables
+    if (freq.some(e => !NAME.has(e))) loadNames().then(() => { for (const c of node.querySelectorAll(".ec")) c.setAttribute("aria-label", nameOf(c.dataset.e)); });
     const box = el("div", "rxp-b"), q = el("input");
     q.type = "text";
     q.placeholder = T("rx.search");
@@ -2474,25 +2526,30 @@ document.addEventListener("change", e => {
       const s = e ? e + " " + nameOf(e) + (mine.has(e) ? " · " + T("rx.yours") : "") : T("rx.choose");
       if (status) status.textContent = s;
     };
-    const cell = ([r]) => {
-      const c = el("button", "ec" + (mine.has(r[0]) ? " mine" : ""), r[0]);
+    const cell = e => {
+      const c = el("button", "ec" + (mine.has(e) ? " mine" : ""), e);
       c.type = "button";
-      c.dataset.e = r[0];
-      c.setAttribute("aria-label", r[1]);
-      if (mine.has(r[0])) c.setAttribute("aria-pressed", "true");
+      c.dataset.e = e;
+      c.setAttribute("aria-label", nameOf(e));
+      if (mine.has(e)) c.setAttribute("aria-pressed", "true");
       return c;
     };
     const grid = cells => { const g = el("div", "rxp-g"); g.append(...cells.map(cell)); return g; };
     const browse = () => {
       box.replaceChildren(el("div", "rxp-h", T("rx.frequent")), grid(freq), el("div", "rxp-sep"), el("div", "rxp-h", T("rx.more")), grid(more));
+      box.scrollTop = 0;
     };
-    const find = () => {
-      const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let typed = 0;
+    const find = async () => {
+      const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean), at = ++typed;
       if (!words.length) { browse(); return; }
-      const hits = order.filter(([r]) => words.every(w => r[1].toLowerCase().includes(w) || r[2].toLowerCase().includes(w)));
+      await loadNames();
+      if (at !== typed || !node.isConnected) return; // a later word, or the picker gone
+      const hits = search(words);
       box.replaceChildren(el("div", "rxp-h", T("rx.results")));
       if (hits.length) box.append(grid(hits));
       else box.append(el("div", "rxp-none", T("rx.none", { q: q.value.trim() })));
+      box.scrollTop = 0;
     };
     browse();
     if (sheet) {
@@ -2501,8 +2558,8 @@ document.addEventListener("change", e => {
       const hint = el("span", "grow"), cancel = el("button", "btn", T("cancel"));
       cancel.type = "button";
       cancel.addEventListener("click", () => shut(true));
-      const first = RX.find(r => mine.has(r[0]));
-      hint.textContent = first ? T("rx.yours.tap", { e: first[0] }) : T("rx.choose");
+      const first = [...mine][0];
+      hint.textContent = first ? T("rx.yours.tap", { e: first }) : T("rx.choose");
       foot.append(hint, cancel);
       frame.append(qrow, box, foot);
       node = w;
@@ -2538,14 +2595,15 @@ document.addEventListener("change", e => {
     open = { node, from: btn, fixed: sheet, close: () => btn.setAttribute("aria-expanded", "false") };
     if (sheet) { open.veil = veil(); open.veil.addEventListener("click", () => shut(true)); }
     document.body.append(node);
+    // the cells keep the height they browse at, so the status line (the
+    // sheet's foot) stays put while a search narrows them, and what a
+    // search finds past it scrolls
+    box.style.height = box.offsetHeight + "px";
     if (!sheet) {
       // hung under its button, right edges aligned, kept on the page
       const r = btn.getBoundingClientRect();
       node.style.left = Math.max(8 + scrollX, r.right + scrollX - node.offsetWidth) + "px";
       node.style.top = r.bottom + scrollY + 2 + "px";
-      // the cells keep the height they browse at, so the status line
-      // stays put under the pointer while a search narrows them
-      box.style.minHeight = box.offsetHeight + "px";
       q.focus({ preventScroll: true });
     }
   }
@@ -4712,7 +4770,7 @@ document.addEventListener("change", e => {
 {{/* the row of reactions under a post (PLAN.md, Reactions): a push
      button per emoji given, the emoji and its count; data-ids is who
      gave it, which the rule in <style id="mine"> presses for the reader */}}
-{{define "rxs"}}{{if .Reactions}}<div class="rxs">{{range .Reactions}}<button type="button" class="btn rx" data-e="{{.Emoji}}" data-ids="{{words .By}}" aria-label="{{T "rx.label" "name" (rxname .Emoji) "n" (len .By)}}" title="{{T "rx.tip" "n" (len .By)}}"><span class="em">{{.Emoji}}</span><span class="n">{{len .By}}</span></button>{{end}}</div>{{end}}{{end}}
+{{define "rxs"}}{{if .Reactions}}<div class="rxs">{{range .Reactions}}<button type="button" class="btn rx" data-e="{{.Emoji}}" data-name="{{rxname .Emoji}}" data-ids="{{words .By}}" aria-label="{{T "rx.label" "name" (rxname .Emoji) "n" (len .By)}}" title="{{T "rx.tip" "n" (len .By)}}"><span class="em">{{.Emoji}}</span><span class="n">{{len .By}}</span></button>{{end}}</div>{{end}}{{end}}
 
 {{/* The Navigation window (PLAN.md, The signed-in reader's desk): a
      signed-in reader's Home, Notifications, Bookmarks and Profile. The

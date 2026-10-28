@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"slices"
 	"strings"
 
-	"exehub/internal/envelope"
+	"exehub/internal/emoji"
 	"exehub/internal/lang"
 
 	stats "github.com/livid/exe-stats"
@@ -126,34 +127,47 @@ func (l *webLocale) T(key string, kv ...any) string {
 // (Erniu's report, 2026-10-25). The wallet says the rest in its own
 // language.
 func (d *webData) JS() map[string]any {
-	return map[string]any{"s": d.L.S, "loc": d.DateLoc, "siws": webStrings["en"]["signin.stmt"], "rx": d.L.rxTable()}
+	return map[string]any{"s": d.L.S, "loc": d.DateLoc, "siws": webStrings["en"]["signin.stmt"],
+		"rx": d.L.rxTable(), "rxnames": d.L.rxNames()}
 }
 
-// rxSlugs names each emoji a post.react may give (envelope.Reactions)
-// for the catalogs: its name is "rx.n." and the slug, in every language
-// (PLAN.md, Reactions).
-var rxSlugs = map[string]string{
-	"👍": "thumbsup", "❤️": "heart", "🎉": "party", "🔥": "fire", "👀": "eyes", "🙏": "pray", "😂": "joy", "🚀": "rocket",
-	"😀": "grin", "😅": "sweat", "😍": "hearteyes", "🤔": "thinking", "😮": "openmouth", "😢": "cry", "👏": "clap", "🙌": "raised",
-	"💯": "hundred", "✅": "check", "⭐": "star", "☕": "coffee", "🍜": "ramen", "🦉": "owl", "🐛": "bug", "🤝": "handshake",
+// rxQuick is the picker's own 24, in its order (PLAN.md, Reactions —
+// Add Reaction): the mockup's, the first eight its Frequently Used until
+// the reader has used some. A search reaches every emoji.
+var rxQuick = []string{
+	"👍", "❤️", "🎉", "🔥", "👀", "🙏", "😂", "🚀",
+	"😀", "😅", "😍", "🤔", "😮", "😢", "👏", "🙌",
+	"💯", "✅", "⭐", "☕", "🍜", "🦉", "🐛", "🤝",
 }
 
-// rxName is an emoji's name in this language, the emoji itself for one
-// the hub does not offer.
+// rxName is an emoji's name in this language, as Unicode's CLDR gives
+// it; the emoji itself for no emoji.
 func (l *webLocale) rxName(e string) string {
-	if slug, ok := rxSlugs[e]; ok {
-		return l.T("rx.n." + slug)
+	if n := emoji.Name(l.Code, e); n != "" {
+		return n
 	}
 	return e
 }
 
-// rxTable is the picker's emoji, in the set's order, each with its name
-// in this language and in English: a search finds an emoji by either.
-func (l *webLocale) rxTable() [][3]string {
-	en := webLocales["en"]
-	out := make([][3]string, len(envelope.Reactions))
-	for i, e := range envelope.Reactions {
-		out[i] = [3]string{e, l.rxName(e), en.rxName(e)}
+// rxTable is the picker's own 24, each with its name in this language.
+func (l *webLocale) rxTable() [][2]string {
+	out := make([][2]string, len(rxQuick))
+	for i, e := range rxQuick {
+		out[i] = [2]string{e, l.rxName(e)}
+	}
+	return out
+}
+
+// rxNames is where the picker's search reads every emoji's name: this
+// language's table, then English's, which a search matches too (one
+// address on an English page). Each carries its table's version, so a
+// browser keeps it for good.
+func (l *webLocale) rxNames() []string {
+	var out []string
+	for _, lang := range []string{l.Code, "en"} {
+		if _, ver := emoji.Names(lang); ver != "" && !slices.Contains(out, "/v1/emoji/"+lang+"?v="+ver) {
+			out = append(out, "/v1/emoji/"+lang+"?v="+ver)
+		}
 	}
 	return out
 }
@@ -374,31 +388,6 @@ var webStrings = map[string]map[string]string{
 		"rx.done":       "Done",
 		"rx.added":      "Reaction added.",
 		"rx.removed":    "Reaction removed.",
-		// each emoji's name, the picker's status line and what its search finds (rxSlugs)
-		"rx.n.thumbsup":  "Thumbs Up",
-		"rx.n.heart":     "Red Heart",
-		"rx.n.party":     "Party Popper",
-		"rx.n.fire":      "Fire",
-		"rx.n.eyes":      "Eyes",
-		"rx.n.pray":      "Folded Hands",
-		"rx.n.joy":       "Face with Tears of Joy",
-		"rx.n.rocket":    "Rocket",
-		"rx.n.grin":      "Grinning Face",
-		"rx.n.sweat":     "Grinning Face with Sweat",
-		"rx.n.hearteyes": "Smiling Face with Heart-Eyes",
-		"rx.n.thinking":  "Thinking Face",
-		"rx.n.openmouth": "Face with Open Mouth",
-		"rx.n.cry":       "Crying Face",
-		"rx.n.clap":      "Clapping Hands",
-		"rx.n.raised":    "Raising Hands",
-		"rx.n.hundred":   "Hundred Points",
-		"rx.n.check":     "Check Mark",
-		"rx.n.star":      "Star",
-		"rx.n.coffee":    "Hot Beverage",
-		"rx.n.ramen":     "Steaming Bowl",
-		"rx.n.owl":       "Owl",
-		"rx.n.bug":       "Bug",
-		"rx.n.handshake": "Handshake",
 		// the Profile dialog
 		"profile.title": "Profile",
 		"pic":           "Picture",
@@ -643,30 +632,6 @@ var webStrings = map[string]map[string]string{
 		"rx.done":              "完成",
 		"rx.added":             "已添加回应。",
 		"rx.removed":           "已收回回应。",
-		"rx.n.thumbsup":        "竖起大拇指",
-		"rx.n.heart":           "红心",
-		"rx.n.party":           "拉炮彩带",
-		"rx.n.fire":            "火",
-		"rx.n.eyes":            "双眼",
-		"rx.n.pray":            "双手合十",
-		"rx.n.joy":             "笑哭了",
-		"rx.n.rocket":          "火箭",
-		"rx.n.grin":            "咧嘴笑脸",
-		"rx.n.sweat":           "苦笑",
-		"rx.n.hearteyes":       "花痴",
-		"rx.n.thinking":        "想一想",
-		"rx.n.openmouth":       "吃惊",
-		"rx.n.cry":             "哭",
-		"rx.n.clap":            "鼓掌",
-		"rx.n.raised":          "举双手",
-		"rx.n.hundred":         "一百分",
-		"rx.n.check":           "勾号",
-		"rx.n.star":            "星星",
-		"rx.n.coffee":          "热饮",
-		"rx.n.ramen":           "面条",
-		"rx.n.owl":             "猫头鹰",
-		"rx.n.bug":             "毛毛虫",
-		"rx.n.handshake":       "握手",
 		"profile.title":        "资料",
 		"pic":                  "头像",
 		"choose":               "选择图片…",
@@ -908,30 +873,6 @@ var webStrings = map[string]map[string]string{
 		"rx.done":              "完成",
 		"rx.added":             "已加入回應。",
 		"rx.removed":           "已收回回應。",
-		"rx.n.thumbsup":        "豎起大拇指",
-		"rx.n.heart":           "紅心",
-		"rx.n.party":           "拉炮彩帶",
-		"rx.n.fire":            "火",
-		"rx.n.eyes":            "雙眼",
-		"rx.n.pray":            "雙手合十",
-		"rx.n.joy":             "笑哭了",
-		"rx.n.rocket":          "火箭",
-		"rx.n.grin":            "咧嘴笑臉",
-		"rx.n.sweat":           "苦笑",
-		"rx.n.hearteyes":       "花癡",
-		"rx.n.thinking":        "想一想",
-		"rx.n.openmouth":       "吃驚",
-		"rx.n.cry":             "哭",
-		"rx.n.clap":            "鼓掌",
-		"rx.n.raised":          "舉雙手",
-		"rx.n.hundred":         "一百分",
-		"rx.n.check":           "勾號",
-		"rx.n.star":            "星星",
-		"rx.n.coffee":          "熱飲",
-		"rx.n.ramen":           "麵條",
-		"rx.n.owl":             "貓頭鷹",
-		"rx.n.bug":             "毛毛蟲",
-		"rx.n.handshake":       "握手",
 		"profile.title":        "個人資料",
 		"pic":                  "頭像",
 		"choose":               "選擇圖片…",
@@ -1169,30 +1110,6 @@ var webStrings = map[string]map[string]string{
 		"rx.done":              "完了",
 		"rx.added":             "リアクションを追加しました。",
 		"rx.removed":           "リアクションを取り消しました。",
-		"rx.n.thumbsup":        "サムズアップ",
-		"rx.n.heart":           "赤いハート",
-		"rx.n.party":           "クラッカー",
-		"rx.n.fire":            "炎",
-		"rx.n.eyes":            "目",
-		"rx.n.pray":            "合掌",
-		"rx.n.joy":             "うれし泣き",
-		"rx.n.rocket":          "ロケット",
-		"rx.n.grin":            "にっこり笑顔",
-		"rx.n.sweat":           "冷や汗の笑顔",
-		"rx.n.hearteyes":       "目がハート",
-		"rx.n.thinking":        "考え中",
-		"rx.n.openmouth":       "口を開けた顔",
-		"rx.n.cry":             "泣き顔",
-		"rx.n.clap":            "拍手",
-		"rx.n.raised":          "ばんざい",
-		"rx.n.hundred":         "100点",
-		"rx.n.check":           "チェックマーク",
-		"rx.n.star":            "星",
-		"rx.n.coffee":          "ホットドリンク",
-		"rx.n.ramen":           "ラーメン",
-		"rx.n.owl":             "フクロウ",
-		"rx.n.bug":             "毛虫",
-		"rx.n.handshake":       "握手",
 		"profile.title":        "プロフィール",
 		"pic":                  "画像",
 		"choose":               "画像を選択…",

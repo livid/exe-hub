@@ -7,6 +7,8 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/ed25519"
 	_ "embed"
 	"encoding/base64"
@@ -25,6 +27,7 @@ import (
 	"exehub/internal/avatar"
 	"exehub/internal/card"
 	"exehub/internal/config"
+	"exehub/internal/emoji"
 	"exehub/internal/envelope"
 	"exehub/internal/events"
 	"exehub/internal/gate"
@@ -220,6 +223,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/profile/{id}/bookmarks/ids", s.handleProfileBookmarkIDs)
 	mux.HandleFunc("GET /v1/post/{id}", s.handlePost)
 	mux.HandleFunc("GET /v1/post/{id}/reactions", s.handlePostReactions)
+	mux.HandleFunc("GET /v1/emoji/{lang}", handleEmojiNames)
 	mux.HandleFunc("GET /v1/search", s.handleSearch)
 	mux.HandleFunc("GET /v1/embed/{cid}", s.handleEmbed)
 	mux.HandleFunc("GET /v1/seq", s.handleSeq)
@@ -874,6 +878,54 @@ func (s *Server) handlePostReactions(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"post": id, "reactions": rs})
+}
+
+// handleEmojiNames is every emoji's name in one language, for the
+// picker's search (PLAN.md, Reactions — Add Reaction). The page asks for
+// it under the version that names its contents, so a browser keeps that
+// for good; any other address is checked each time. Gzipped once, for a
+// browser that takes it: the hub has no compression of its own, and the
+// host hub's readers come without Cloudflare's.
+func handleEmojiNames(w http.ResponseWriter, r *http.Request) {
+	lang := r.PathValue("lang")
+	raw, ver := emoji.Names(lang)
+	if raw == nil {
+		writeErr(w, http.StatusNotFound, errors.New("no names in that language"))
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "application/json; charset=utf-8")
+	h.Set("ETag", `"`+ver+`"`)
+	h.Set("Vary", "Accept-Encoding")
+	if r.URL.Query().Get("v") == ver {
+		h.Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		h.Set("Cache-Control", "no-cache")
+	}
+	if strings.Contains(r.Header.Get("If-None-Match"), `"`+ver+`"`) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		h.Set("Content-Encoding", "gzip")
+		w.Write(emojiGzip(lang, raw))
+		return
+	}
+	w.Write(raw)
+}
+
+var emojiGz sync.Map // lang → gzipped table
+
+func emojiGzip(lang string, raw []byte) []byte {
+	if b, ok := emojiGz.Load(lang); ok {
+		return b.([]byte)
+	}
+	var buf bytes.Buffer
+	z, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	z.Write(raw)
+	z.Close()
+	emojiGz.Store(lang, buf.Bytes())
+	return buf.Bytes()
 }
 
 // profileIDRe is a profile id: 16 lower-case hex digits.

@@ -1,14 +1,19 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"exehub/internal/config"
+	"exehub/internal/emoji"
 	"exehub/internal/envelope"
 	"exehub/internal/identity"
 )
@@ -31,14 +36,14 @@ func TestWebReactions(t *testing.T) {
 	ingest(t, s, mePriv, mePub, 4, "post.react", map[string]any{"post": p, "emoji": "❤️", "on": true})
 	h := s.Handler()
 
-	row := `<div class="rxs"><button type="button" class="btn rx" data-e="🎉" data-ids="` + bob + ` ` + me + `" aria-label="Party Popper, 2" title="2 people. Right-click to see who."><span class="em">🎉</span><span class="n">2</span></button>` +
-		`<button type="button" class="btn rx" data-e="❤️" data-ids="` + me + `" aria-label="Red Heart, 1" title="1 person. Right-click to see who."><span class="em">❤️</span><span class="n">1</span></button></div>`
+	row := `<div class="rxs"><button type="button" class="btn rx" data-e="🎉" data-name="Party Popper" data-ids="` + bob + ` ` + me + `" aria-label="Party Popper, 2" title="2 people. Right-click to see who."><span class="em">🎉</span><span class="n">2</span></button>` +
+		`<button type="button" class="btn rx" data-e="❤️" data-name="Red Heart" data-ids="` + me + `" aria-label="Red Heart, 1" title="1 person. Right-click to see who."><span class="em">❤️</span><span class="n">1</span></button></div>`
 	for _, path := range []string{"/", "/p/" + p, "/u/" + me, "/search?q=exe"} {
 		_, page := get(t, h, path)
 		if !strings.Contains(page, row) {
 			t.Errorf("%s: no row of reactions, or not as given", path)
 		}
-		if !strings.Contains(page, `window.hubMine = id =>`) || !strings.Contains(page, `"rx":[["👍","Thumbs Up","Thumbs Up"],["❤️","Red Heart","Red Heart"]`) {
+		if !strings.Contains(page, `window.hubMine = id =>`) || !strings.Contains(page, `"rx":[["👍","Thumbs Up"],["❤️","Red Heart"]`) {
 			t.Errorf("%s: no rule for the reader's own, or no emoji table for the script", path)
 		}
 	}
@@ -102,21 +107,63 @@ func TestWebReactions(t *testing.T) {
 		t.Errorf("who on no post: %d", code)
 	}
 
-	// every emoji a hub offers has a name in every catalog
-	for _, e := range envelope.Reactions {
-		slug, ok := rxSlugs[e]
-		if !ok {
-			t.Errorf("%s has no slug", e)
-			continue
+	// the picker's own 24 are emoji a hub takes, each named in every
+	// language the pages speak
+	for _, e := range rxQuick {
+		if !emoji.Is(e) {
+			t.Errorf("%s is no emoji a hub takes", e)
 		}
 		for code, l := range webLocales {
-			if _, ok := l.S["rx.n."+slug]; !ok {
+			if l.rxName(e) == e {
 				t.Errorf("%s: no name for %s", code, e)
 			}
 		}
 	}
-	if len(rxSlugs) != len(envelope.Reactions) {
-		t.Errorf("%d slugs for %d emoji", len(rxSlugs), len(envelope.Reactions))
+
+	// one beyond the 24: its row named by Unicode's name for it
+	ingest(t, s, bobPriv, bobPub, 3, "post.react", map[string]any{"post": bare, "emoji": "🦄", "on": true})
+	if _, home := get(t, h, "/"); !strings.Contains(home, `data-e="🦄" data-name="Unicorn" data-ids="`+bob+`" aria-label="Unicorn, 1"`) {
+		t.Error("home: a reaction beyond the picker's own is not named")
+	}
+	if _, ja := get(t, h, "/?lang=ja"); !strings.Contains(ja, `data-name="ユニコーンの顔"`) || !strings.Contains(ja, `"rxnames":["/v1/emoji/ja?v=`) || !strings.Contains(ja, `","/v1/emoji/en?v=`) {
+		t.Error("home in Japanese: no Japanese name, or the search's tables are not offered")
+	}
+}
+
+// TestEmojiNames: every emoji's name in one language, kept for good under
+// its version, gzipped for a browser that takes it, checked again under
+// any other address.
+func TestEmojiNames(t *testing.T) {
+	h := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}}).Handler()
+	raw, ver := emoji.Names("zh")
+	req := httptest.NewRequest("GET", "http://hub.example/v1/emoji/zh?v="+ver, nil)
+	req.Header.Set("Accept-Encoding", "gzip, br")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 200 || w.Header().Get("Content-Encoding") != "gzip" || !strings.Contains(w.Header().Get("Cache-Control"), "immutable") || w.Body.Len() > len(raw)/3 {
+		t.Fatalf("zh: %d %v, %d bytes of %d", w.Code, w.Header(), w.Body.Len(), len(raw))
+	}
+	z, err := gzip.NewReader(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := io.ReadAll(z); !bytes.Equal(got, raw) {
+		t.Error("zh: the gzipped table is not the table")
+	}
+	code, body := get(t, h, "/v1/emoji/en")
+	if code != 200 || !strings.HasPrefix(body, `[["😀","Grinning Face"`) {
+		t.Errorf("en: %d %.60s", code, body)
+	}
+	req = httptest.NewRequest("GET", "http://hub.example/v1/emoji/en", nil)
+	_, enVer := emoji.Names("en")
+	req.Header.Set("If-None-Match", `"`+enVer+`"`)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusNotModified || w.Header().Get("Cache-Control") != "no-cache" {
+		t.Errorf("en, asked again without its version: %d %v", w.Code, w.Header())
+	}
+	if code, _ := get(t, h, "/v1/emoji/fr"); code != http.StatusNotFound {
+		t.Errorf("fr: %d", code)
 	}
 }
 

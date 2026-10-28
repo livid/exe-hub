@@ -227,8 +227,8 @@ Envelope: `{type, author (pubkey b64), seq, ts, body}`.
   this hub holds, one's own too; a post it does not hold is refused.
   Gated like `profile.set` (bans, the token gate, an invite), with no
   cooldown. Local: it never replicates.
-- `post.react` — `{post, emoji, on}`: gives one emoji of the fixed set
-  to a post or takes it back — the state asked for (see Reactions).
+- `post.react` — `{post, emoji, on}`: gives one of Unicode's emoji to a
+  post or takes it back — the state asked for (see Reactions).
   Gated like `post.bookmark`, no cooldown; it replicates, and the newest
   by its own ts stands.
 - `ban.set` / `ban.lift` — admin-only (author must be a config-assigned
@@ -1915,16 +1915,21 @@ mockups are the look; this is what stands behind them.
   holds, one's own too; a post it does not hold is refused (400). An
   author gives each emoji to a post once; several emoji to one post are
   several rows.
-- **Which emoji.** A fixed set, `envelope.Reactions`, in the picker's
-  order: the mockup's 24 — 👍 ❤️ 🎉 🔥 👀 🙏 😂 🚀, then 😀 😅 😍 🤔 😮 😢
-  👏 🙌 💯 ✅ ⭐ ☕ 🍜 🦉 🐛 🤝 — each the exact string the set holds (❤️
-  with its U+FE0F). Anything else is refused at `Op()`. A fixed set
-  because every one is a signed line in a log that replicates: a set
-  every hub can name and draw keeps that log free of words passed off
-  as a reaction, and gives the picker's search a name to find each by.
-  The set grows by appending; a hub that does not know an emoji yet
-  refuses it from a peer too, so a new one ships to both instances
-  before a page offers it.
+- **Which emoji.** Any one of Unicode 16.0's fully-qualified emoji —
+  3,781 sequences in emoji-test.txt, skin tones, flags and keycaps
+  among them — spelled exactly as Unicode spells it (❤️ with its
+  U+FE0F, not ❤ bare; no skin tone alone). Anything else, words or two
+  emoji, is refused at `Op()`: every reaction is a signed line in a log
+  that replicates, and a test against Unicode's own list keeps that log
+  free of words passed off as a reaction. 16.0 because it is the
+  version the preview pictures were cut from (internal/preview), so
+  every reaction is one the hub can draw. Livid asked for the full set
+  the same day, over a first build that took only the picker's 24.
+  `internal/emoji` holds the list and CLDR 46's names for it in the
+  pages' four languages, both written by its `genemoji.py` from
+  Unicode's and CLDR's files, never by hand. A newer Unicode is a run
+  of that script, shipped to both instances together: a hub refuses an
+  emoji it does not know, a peer's too.
 - **It replicates.** A reaction is content a reader sees on the post,
   so `post.react` is a content op beside `post.mark` (Aggregation —
   What replicates) and a reaction on either instance shows on both.
@@ -1975,16 +1980,26 @@ mockups are the look; this is what stands behind them.
   (signed in, a page with the Post window). It opens the picker hung
   under it, right edges aligned: a menu (the "@" list's dress), 244px
   wide, a search field at its head, "Frequently Used" — the reader's
-  eight most used here (counted on the browser, `exe-hub-reactions`;
-  the set's first eight until then) — over a rule, then "Smileys and
-  More", the other sixteen, eight to a row, and a status line naming the
-  emoji under the pointer ("🔥  Fire"), the way Key Caps does. A cell
-  inverts under the pointer as a menu row does; one the reader already
-  gave wears the pressed face, and picking it again takes it back
-  ("· yours, click to take it back"). Typing narrows the cells to the
-  names holding the words (in the page's language and in English):
-  "Results", or "No emoji is named “…”." Return picks the first; Escape,
-  a click outside or a second press of the button closes it.
+  eight most used here, any emoji (counted on the browser,
+  `exe-hub-reactions`; the picker's own first eight until then) — over a
+  rule, then "Smileys and More", sixteen more of the picker's own 24
+  (the mockup's: 👍 ❤️ 🎉 🔥 👀 🙏 😂 🚀 😀 😅 😍 🤔 😮 😢 👏 🙌 💯 ✅ ⭐ ☕
+  🍜 🦉 🐛 🤝), eight to a row, and a status line naming the emoji under
+  the pointer ("🔥  Fire"), the way Key Caps does. A cell inverts under
+  the pointer as a menu row does; one the reader already gave wears the
+  pressed face, and picking it again takes it back ("· yours, click to
+  take it back"). The search reaches every emoji: the first word typed
+  fetches the names — `GET /v1/emoji/{lang}`, the page's language and
+  English, about 50 KB each gzipped, under a version in the address so
+  the browser keeps them for good — and the cells narrow to the emoji
+  whose name or CLDR keywords hold every word, a name that begins with
+  them first, at most 64, scrolling inside the cells' own height so the
+  status line stays put: "Results", or "No emoji is named “…”." A skin
+  tone's sequence shows only when a word names its tone ("thumbs" finds
+  👍, "thumbs dark" 👍🏿), so a search is not six of every hand. A reaction
+  button carries its emoji's name (`data-name`), which the menu of who
+  reacted titles itself with. Return picks the first; Escape, a click
+  outside or a second press of the button closes it.
 - **Who reacted.** A right-click on a reaction (or the keyboard's
   context key) opens a contextual menu at the pointer: its head, dimmed
   and bold, "🎉  Party Popper · 9 people", then up to seven people with
@@ -2008,13 +2023,16 @@ mockups are the look; this is what stands behind them.
 - Not built: a notification for a reaction to one's post, and reactions
   in the exe Hub app (it ignores the event type until then).
 - Check: `go test ./internal/envelope ./internal/store ./internal/api
-  ./internal/replicate` (TestReactions: the op's rules, the set, last by
-  ts across orders, the taken-back row, a delete, Rebuild, the feed's
-  `reactions` and the who endpoint; replication carries them) and
+  ./internal/replicate ./internal/emoji` (TestReactions: the op's rules,
+  the set, last by ts across orders, the taken-back row, a delete,
+  Rebuild, the feed's `reactions` and the who endpoint; replication
+  carries them; TestIs and TestNames: Unicode's list exactly, a name for
+  every emoji in every language; TestEmojiNames: the tables' caching
+  and gzip) and
   `~/tools/playwright/exe-hub-reactions-test.js` against a scratch hub
   with the Wallet Standard mock (a reaction given from the picker and
-  taken back, the menu and the window of who, at device pixel ratios 1,
-  1.5 and 2 and on a phone).
+  taken back, one found by a search beyond the 24, the menu and the
+  window of who, at device pixel ratios 1, 1.5 and 2 and on a phone).
 
 ## Offline — what a reader has seen, kept on the device (built 2026-10-07)
 

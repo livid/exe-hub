@@ -18,6 +18,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"exehub/internal/emoji"
 	"exehub/internal/identity"
 )
 
@@ -111,33 +112,14 @@ type PostBookmark struct {
 	On   bool   `json:"on"`
 }
 
-// PostReact gives one emoji of Reactions to a post (On) or takes it
-// back (PLAN.md, Reactions): the state asked for, never a toggle, so two
-// hubs taking one author's reactions in a different order agree.
+// PostReact gives one emoji to a post (On) or takes it back (PLAN.md,
+// Reactions): the state asked for, never a toggle, so two hubs taking
+// one author's reactions in a different order agree. The emoji is one of
+// Unicode's fully-qualified sequences (package emoji).
 type PostReact struct {
 	Post  string `json:"post"`
 	Emoji string `json:"emoji"`
 	On    bool   `json:"on"`
-}
-
-// Reactions is every emoji a post.react may give, in the picker's order
-// (PLAN.md, Reactions — Which emoji): each the exact string, ❤️ with its
-// U+FE0F. The set grows by appending; a hub that does not know an emoji
-// yet refuses it.
-var Reactions = []string{
-	"👍", "❤️", "🎉", "🔥", "👀", "🙏", "😂", "🚀",
-	"😀", "😅", "😍", "🤔", "😮", "😢", "👏", "🙌",
-	"💯", "✅", "⭐", "☕", "🍜", "🦉", "🐛", "🤝",
-}
-
-// IsReaction reports whether e is one of Reactions.
-func IsReaction(e string) bool {
-	for _, r := range Reactions {
-		if r == e {
-			return true
-		}
-	}
-	return false
 }
 
 // BanSet / BanLift target a profile id (pubkey fingerprint), admin-only.
@@ -340,8 +322,8 @@ func (e *Envelope) Op() (any, error) {
 		if !validMsgID(v.Post) {
 			return nil, errors.New("post: not a post id")
 		}
-		if !IsReaction(v.Emoji) {
-			return nil, errors.New("emoji: not one a hub offers")
+		if !emoji.Is(v.Emoji) {
+			return nil, errors.New("emoji: not one of Unicode's fully-qualified emoji")
 		}
 		return v, nil
 	case "ban.set":
