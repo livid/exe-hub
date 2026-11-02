@@ -2027,8 +2027,12 @@ mockups are the look; this is what stands behind them.
   row in its own plain buttons — the hairline box, square, no darker
   under the mouse — the reader's own in ink, read-only: a press shows
   who.
-- Not built: a notification for a reaction to one's post, and reactions
-  in the exe Hub app (it ignores the event type until then).
+- The exe Hub app draws them too (exe 16843c6, 2026-11-02): the row
+  under a post, a click that signs `post.react` through the daemon with
+  the node's key, Add Reaction's picker with the search over
+  `GET /v1/emoji/en`, and who reacted on a right-click or a held
+  finger; its `post.react` event refetches the post and redraws the
+  row. Not built: a notification for a reaction to one's post.
 - Check: `go test ./internal/envelope ./internal/store ./internal/api
   ./internal/replicate ./internal/emoji` (TestReactions: the op's rules,
   the set, last by ts across orders, the taken-back row, a delete,
