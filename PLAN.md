@@ -627,7 +627,12 @@ step the front picture window through them in place, as the desktop's
 Image window steps its set — no wrap at either end, the window kept on
 its centre and the old picture shown until the next is in, "2 of 4"
 after the size on its status line, and a step to a picture open in a
-window of its own closes that one (Livid, 2026-11-03) — and,
+window of its own closes that one once the picture is in (Livid,
+2026-11-03); a step whose picture cannot be fetched leaves the window
+on the picture it shows, and the next step counts from that one, not
+from a step pressed earlier and still pending (Codex's case, the same
+day; `exe-hub-viewer-step-test.js` in ~/tools/playwright holds it
+back) — and,
 on the home page's first page and every thread, the live script
 (below), the first page alone wearing the Notify bell (see
 Notifications). Without script the link opens the picture and the

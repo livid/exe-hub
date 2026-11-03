@@ -923,7 +923,11 @@ func TestWebPicture(t *testing.T) {
 	}
 	// Left and Right step the front picture window through its post's
 	// pictures, counted on its status line
-	for _, want := range []string{`step(top, e.key === "ArrowRight" ? 1 : -1)`, `box.querySelectorAll("a.pic")`, `T("pic.of", { i: at + 1, all: all.length })`, `"pic.of":"{i} of {all}"`} {
+	// (a failed step leaves the window on the picture it shows and counts
+	// from it; a picture's own window closes once the picture is in)
+	for _, want := range []string{`step(top, e.key === "ArrowRight" ? 1 : -1)`, `box.querySelectorAll("a.pic")`, `T("pic.of", { i: at + 1, all: all.length })`, `"pic.of":"{i} of {all}"`,
+		`if (w.turn !== turn || !w.dataset.at) return;`, `w.dataset.src = w.dataset.at;`,
+		`for (const o of document.querySelectorAll(".viewer")) if (o !== w && o.dataset.src === src) o.remove();`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("viewer script missing %q", want)
 		}

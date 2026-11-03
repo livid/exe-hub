@@ -1974,9 +1974,12 @@ document.addEventListener("change", e => {
   // steps to the post's next picture kept on its centre, the old picture
   // shown until the new one is in. A drawing (its img in the feed is
   // img.draw) is shown as the feed shows it, the pad's pixels, and
-  // replays as it comes in. Of quick steps the last one wins.
+  // replays as it comes in. Of quick steps the last one wins (w.turn
+  // counts them). The window claims the picture it is stepping to
+  // (dataset.src, so a click on that picture raises this window) and
+  // keeps apart the one on screen (dataset.at).
   const show = (w, a) => {
-    const src = a.href, dr = a.querySelector(":scope > img.draw"), was = w.from, wasSrc = w.dataset.src;
+    const src = a.href, dr = a.querySelector(":scope > img.draw"), turn = w.turn = (w.turn || 0) + 1;
     w.from = a;
     w.dataset.src = src;
     const img = document.createElement("img");
@@ -1984,11 +1987,16 @@ document.addEventListener("change", e => {
     fit(img);
     img.onload = () => {
       img.onload = img.onerror = null;
-      if (w.from !== a || !w.isConnected) return;
+      if (w.turn !== turn || !w.isConnected) return;
       const old = w.querySelector(".frame > img"), x = w.offsetLeft + w.offsetWidth / 2, y = w.offsetTop + w.offsetHeight / 2;
       if (old) old.replaceWith(img); else w.querySelector(".frame").prepend(img);
+      w.dataset.at = src;
+      // the picture's own window, had it one, goes now that this one
+      // shows it (one picture, one window) — not before, so a step that
+      // fails leaves both windows as they were
+      for (const o of document.querySelectorAll(".viewer")) if (o !== w && o.dataset.src === src) o.remove();
       w.querySelector(".title").textContent = a.dataset.name;
-      const all = set(w), at = all.indexOf(a);
+      const all = set(w), at = all.indexOf(w.from);
       w.querySelector(".statusbar span").textContent = img.naturalWidth + " \u00d7 " + img.naturalHeight +
         (all.length > 1 && at >= 0 ? " \u00b7 " + T("pic.of", { i: at + 1, all: all.length }) : "");
       const { clientWidth: vw, clientHeight: vh } = document.documentElement;
@@ -2002,12 +2010,17 @@ document.addEventListener("change", e => {
       }
       w.style.visibility = "visible";
     };
-    // a step that cannot be fetched leaves the window as it was
+    // a step that cannot be fetched leaves the window on the picture it
+    // shows, and the next step counts from that one — not from an earlier
+    // step still pending when this one was pressed (Codex's case,
+    // 2026-11-03: two quick Rights that both failed left the window on
+    // picture 1 and the next Right on 3). A later step's own handlers
+    // decide for it.
     img.onerror = () => {
       img.onload = img.onerror = null;
-      if (w.from !== a || !w.querySelector(".frame > img")) return;
-      w.from = was;
-      w.dataset.src = wasSrc;
+      if (w.turn !== turn || !w.dataset.at) return;
+      w.dataset.src = w.dataset.at;
+      w.from = null; // set() finds the shown picture's link again by its address
     };
     if (dr) {
       img.className = "draw";
@@ -2019,14 +2032,13 @@ document.addEventListener("change", e => {
   // Left and Right in a picture's window step through the pictures of
   // its post, as the desktop's Image window steps through its set: no
   // wrap at either end, and a step to a picture open in a window of its
-  // own closes that one, so one picture still has one window.
+  // own closes that one once the picture is in (show), so one picture
+  // still has one window.
   const step = (w, d) => {
     const all = set(w);
     if (all.length < 2) return false;
     const to = all[all.indexOf(w.from) + d];
     if (!to) return true;
-    const dup = shown(to.href);
-    if (dup && dup !== w) dup.remove();
     show(w, to);
     return true;
   };
