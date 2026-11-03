@@ -1940,17 +1940,18 @@ document.addEventListener("change", e => {
   // the document's client box, which leaves out the scrollbar and, on a
   // phone, the browser's toolbars (vw/vh do neither); 40px spare across,
   // 90px down for the title bar, status line and a margin
-  const fit = w => {
+  const fit = img => {
+    if (!img) return;
     const { clientWidth: vw, clientHeight: vh } = document.documentElement;
-    const img = w.querySelector("img");
     img.style.maxWidth = Math.max(80, vw - 40) + "px";
     img.style.maxHeight = Math.max(60, vh - 90) + "px";
   };
   // every viewer is kept on the screen; a page window has no picture to
-  // fit (its own listener below sizes its frame), and fitting one threw,
-  // which left it and the viewers after it where the old size put them
+  // fit (its own listener below sizes its frame), nor has a picture's
+  // window before its first picture is in, and fitting one threw, which
+  // left it and the viewers after it where the old size put them
   addEventListener("resize", () => document.querySelectorAll(".viewer").forEach(w => {
-    if (!w.classList.contains("pageview")) fit(w);
+    fit(w.querySelector(".frame > img"));
     const { clientWidth: vw, clientHeight: vh } = document.documentElement;
     w.style.left = Math.max(0, Math.min(w.offsetLeft, vw - w.offsetWidth)) + "px";
     w.style.top = Math.max(0, Math.min(w.offsetTop, vh - w.offsetHeight)) + "px";
@@ -1958,30 +1959,55 @@ document.addEventListener("change", e => {
   // one window a picture (or a page): a second click on one already open
   // raises its window where it is, moved or not, instead of stacking another
   const shown = src => [...document.querySelectorAll(".viewer")].find(w => w.dataset.src === src);
-  // a drawing (dr, its img in the feed) is shown as the feed shows it,
-  // the pad's pixels, and replays as its window opens
-  const open = (src, name, dr) => {
-    const had = shown(src);
-    if (had) { front(had); return; }
-    const w = document.createElement("div");
-    w.className = "window viewer";
+  // A post's pictures, in its order, for the window showing one of them
+  // (w.from, its link in the post). A live page may have swapped the
+  // post since, and then its link is found again by the address.
+  const set = w => {
+    if (!w.from || !w.from.isConnected) w.from = [...document.querySelectorAll("a.pic")].find(a => a.href === w.dataset.src);
+    const box = w.from && w.from.closest(".embeds");
+    return box ? [...box.querySelectorAll("a.pic")] : [];
+  };
+  // Puts the picture of a (an a.pic in a post) in w. Nothing changes
+  // until its bytes are in, so a window is sized and placed once and
+  // never jumps: a new one centred when it is the only viewer open, each
+  // further one stepped down and right of the ones still open; one that
+  // steps to the post's next picture kept on its centre, the old picture
+  // shown until the new one is in. A drawing (its img in the feed is
+  // img.draw) is shown as the feed shows it, the pad's pixels, and
+  // replays as it comes in. Of quick steps the last one wins.
+  const show = (w, a) => {
+    const src = a.href, dr = a.querySelector(":scope > img.draw"), was = w.from, wasSrc = w.dataset.src;
+    w.from = a;
     w.dataset.src = src;
-    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
-      '<span class="title"></span><span class="stripe"></span></div>' +
-      '<div class="frame"><img alt=""><div class="statusbar"><span></span></div></div>';
-    w.querySelector(".title").textContent = name;
-    const img = w.querySelector("img");
-    fit(w);
-    // sized and placed only once the picture is in, so it never jumps:
-    // centred when it is the only viewer open, each further one stepped
-    // down and right of the ones still open
+    const img = document.createElement("img");
+    img.alt = "";
+    fit(img);
     img.onload = () => {
-      const k = (document.querySelectorAll(".viewer").length - 1) % 8;
-      w.querySelector(".statusbar span").textContent = img.naturalWidth + " \u00d7 " + img.naturalHeight;
+      img.onload = img.onerror = null;
+      if (w.from !== a || !w.isConnected) return;
+      const old = w.querySelector(".frame > img"), x = w.offsetLeft + w.offsetWidth / 2, y = w.offsetTop + w.offsetHeight / 2;
+      if (old) old.replaceWith(img); else w.querySelector(".frame").prepend(img);
+      w.querySelector(".title").textContent = a.dataset.name;
+      const all = set(w), at = all.indexOf(a);
+      w.querySelector(".statusbar span").textContent = img.naturalWidth + " \u00d7 " + img.naturalHeight +
+        (all.length > 1 && at >= 0 ? " \u00b7 " + T("pic.of", { i: at + 1, all: all.length }) : "");
       const { clientWidth: vw, clientHeight: vh } = document.documentElement;
-      w.style.left = Math.max(8, (vw - w.offsetWidth) / 2 + k * 24) + "px";
-      w.style.top = Math.max(8, (vh - w.offsetHeight) / 2 + k * 24) + "px";
+      if (old) {
+        w.style.left = Math.max(0, Math.min(vw - w.offsetWidth, x - w.offsetWidth / 2)) + "px";
+        w.style.top = Math.max(0, Math.min(vh - w.offsetHeight, y - w.offsetHeight / 2)) + "px";
+      } else {
+        const k = (document.querySelectorAll(".viewer").length - 1) % 8;
+        w.style.left = Math.max(8, (vw - w.offsetWidth) / 2 + k * 24) + "px";
+        w.style.top = Math.max(8, (vh - w.offsetHeight) / 2 + k * 24) + "px";
+      }
       w.style.visibility = "visible";
+    };
+    // a step that cannot be fetched leaves the window as it was
+    img.onerror = () => {
+      img.onload = img.onerror = null;
+      if (w.from !== a || !w.querySelector(".frame > img")) return;
+      w.from = was;
+      w.dataset.src = wasSrc;
     };
     if (dr) {
       img.className = "draw";
@@ -1989,6 +2015,30 @@ document.addEventListener("change", e => {
       drawFit(img, document.documentElement.clientWidth - 40);
       drawReplay(img);
     } else img.src = src;
+  };
+  // Left and Right in a picture's window step through the pictures of
+  // its post, as the desktop's Image window steps through its set: no
+  // wrap at either end, and a step to a picture open in a window of its
+  // own closes that one, so one picture still has one window.
+  const step = (w, d) => {
+    const all = set(w);
+    if (all.length < 2) return false;
+    const to = all[all.indexOf(w.from) + d];
+    if (!to) return true;
+    const dup = shown(to.href);
+    if (dup && dup !== w) dup.remove();
+    show(w, to);
+    return true;
+  };
+  const open = a => {
+    const had = shown(a.href);
+    if (had) { front(had); return; }
+    const w = document.createElement("div");
+    w.className = "window viewer";
+    w.innerHTML = '<div class="titlebar"><span class="tbox close" title="' + T("close") + '"></span><span class="stripe"></span>' +
+      '<span class="title"></span><span class="stripe"></span></div>' +
+      '<div class="frame"><div class="statusbar"><span></span></div></div>';
+    show(w, a);
     document.body.append(w);
     front(w);
     w.addEventListener("pointerdown", () => front(w), true);
@@ -2098,7 +2148,7 @@ document.addEventListener("change", e => {
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; // a new tab is still a new tab
     e.preventDefault();
     if (a.classList.contains("page")) openPage(a.href, a.dataset.name, a.dataset.cid);
-    else open(a.href, a.dataset.name, a.querySelector(":scope > img.draw"));
+    else open(a);
   });
   // /p/{id}#page={cid} opens that page as the thread loads, and a hash typed
   // into the bar afterwards opens (or raises) its page the same way
@@ -2108,10 +2158,21 @@ document.addEventListener("change", e => {
   };
   byHash();
   addEventListener("hashchange", byHash);
+  const topViewer = () => [...document.querySelectorAll(".viewer")].sort((a, b) => b.style.zIndex - a.style.zIndex)[0];
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    const top = [...document.querySelectorAll(".viewer")].sort((a, b) => b.style.zIndex - a.style.zIndex)[0];
+    const top = topViewer();
     if (top) { top.remove(); mark(); }
+  });
+  // only the front window, and only a picture's: a key typed into a field
+  // (the composer, a search) or held with a modifier stays the browser's
+  document.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+    const top = topViewer();
+    if (!top || top.classList.contains("pageview")) return;
+    if (step(top, e.key === "ArrowRight" ? 1 : -1)) e.preventDefault();
   });
 })();
 </script>{{end}}

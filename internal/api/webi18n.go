@@ -264,6 +264,7 @@ var webStrings = map[string]map[string]string{
 		"zoom":      "Zoom",
 		"loading":   "Loading…",
 		"page.fail": "Could not load the page: {err}",
+		"pic.of":    "{i} of {all}", // on a picture window's status line, in a post of several
 		// the button beside a fenced code block, and its word for a moment after a press
 		"copy":   "Copy",
 		"copied": "Copied",
@@ -518,6 +519,7 @@ var webStrings = map[string]map[string]string{
 		"zoom":                 "缩放",
 		"loading":              "正在载入…",
 		"page.fail":            "无法载入页面：{err}",
+		"pic.of":               "第 {i} 张，共 {all} 张",
 		"copy":                 "复制",
 		"copied":               "已复制",
 		"tr.from":              "译自{lang}",
@@ -759,6 +761,7 @@ var webStrings = map[string]map[string]string{
 		"zoom":                 "縮放",
 		"loading":              "正在載入…",
 		"page.fail":            "無法載入頁面：{err}",
+		"pic.of":               "第 {i} 張，共 {all} 張",
 		"copy":                 "複製",
 		"copied":               "已複製",
 		"tr.from":              "譯自{lang}",
@@ -996,6 +999,7 @@ var webStrings = map[string]map[string]string{
 		"zoom":                 "ズーム",
 		"loading":              "読み込み中…",
 		"page.fail":            "ページを読み込めませんでした：{err}",
+		"pic.of":               "{i} / {all}",
 		"copy":                 "コピー",
 		"copied":               "コピー済み",
 		"tr.from":              "{lang}から翻訳",

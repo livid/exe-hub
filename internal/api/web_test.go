@@ -921,6 +921,13 @@ func TestWebPicture(t *testing.T) {
 	if !strings.Contains(body, `find(w => w.dataset.src === src)`) || !strings.Contains(body, `if (had) { front(had); return; }`) {
 		t.Error("viewer does not raise the window a picture already has")
 	}
+	// Left and Right step the front picture window through its post's
+	// pictures, counted on its status line
+	for _, want := range []string{`step(top, e.key === "ArrowRight" ? 1 : -1)`, `box.querySelectorAll("a.pic")`, `T("pic.of", { i: at + 1, all: all.length })`, `"pic.of":"{i} of {all}"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("viewer script missing %q", want)
+		}
+	}
 }
 
 // TestWebDrawing: a PNG that declares a pad's size is a drawing: its box
@@ -1238,7 +1245,7 @@ func TestWebPage(t *testing.T) {
 	}
 	for _, want := range []string{`sandbox="allow-scripts allow-popups allow-forms allow-modals"`, `closest("a.pic, a.page")`, `#page=`,
 		`'<base href="about:srcdoc">'`, `.srcdoc = withBase(text)`,
-		`if (!w.classList.contains("pageview")) fit(w);`} { // a page window has no picture to fit
+		`fit(w.querySelector(".frame > img"));`} { // a page window has no picture to fit
 		if !strings.Contains(body, want) {
 			t.Errorf("page script missing %q", want)
 		}

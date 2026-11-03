@@ -622,7 +622,12 @@ cascading, dragged by its title bar, closed by its box or Escape, size
 in pixels on its status line), like the desktop's PictureViewer; a
 second click on a picture already open raises its window where it is
 rather than stacking another (Livid, 2026-09-22), and a page's window
-is kept the same way — and,
+is kept the same way; in a post of several pictures, Left and Right
+step the front picture window through them in place, as the desktop's
+Image window steps its set — no wrap at either end, the window kept on
+its centre and the old picture shown until the next is in, "2 of 4"
+after the size on its status line, and a step to a picture open in a
+window of its own closes that one (Livid, 2026-11-03) — and,
 on the home page's first page and every thread, the live script
 (below), the first page alone wearing the Notify bell (see
 Notifications). Without script the link opens the picture and the
