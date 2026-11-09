@@ -17,5 +17,6 @@
   "cooldown": 60,
   "media": { "encoder": "auto", "max_mb": 256, "max_video_s": 180, "max_audio_s": 600 },
   "stats": { "enabled": true, "timezone": "America/Los_Angeles" },
+  "access_log": { "enabled": false, "path": "access.jsonl", "max_size_mb": 50, "max_backups": 7, "max_age_days": 7, "trusted_proxies": [] },
   "ollama": { "base_url": "http://127.0.0.1:11434", "model": "glm-5.3:cloud", "effort": "max", "parallel": 1 }
 }

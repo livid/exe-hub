@@ -21,6 +21,8 @@ require (
 )
 
 require (
+	github.com/felixge/httpsnoop v1.0.4
 	github.com/livid/exe-stats v0.3.0
 	github.com/rivo/uniseg v0.4.7
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )

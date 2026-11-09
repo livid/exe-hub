@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 
 	stats "github.com/livid/exe-stats"
 
+	"exehub/internal/accesslog"
 	"exehub/internal/api"
 	"exehub/internal/card"
 	"exehub/internal/config"
@@ -39,6 +41,7 @@ import (
 
 func main() {
 	cfgPath := flag.String("config", "config.json", "path to config.json")
+	checkConfig := flag.Bool("check-config", false, "validate config and exit without starting the daemon")
 	stateDir := flag.String("state", "", "state directory (default $EXE_HUB_STATE, else ~/.exe-hub)")
 	sig := flag.String("s", "", `send a signal to the running daemon: "reload" re-reads config (nginx-style; editing the file alone changes nothing)`)
 	redo := flag.String("retranslate", "", "forget one post's kept translations so the running daemon makes them again: the post's id, or the first 12 characters or more of it")
@@ -46,6 +49,13 @@ func main() {
 	redoNote := flag.String("note", "", "with -retranslate: an editor's note on the post for its translator, kept with the post — what a terse or ambiguous line means")
 	resum := flag.String("resummarize", "", "forget one thread's newest summary so the running daemon writes it again: the root post's id, or the first 12 characters or more of it")
 	flag.Parse()
+	if *checkConfig {
+		if _, err := config.Load(*cfgPath); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("configuration is valid")
+		return
+	}
 
 	if *stateDir == "" {
 		// the container sets EXE_HUB_STATE, so its side commands (-s
@@ -214,6 +224,15 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		return err
 	}
 	holder := config.NewHolder(cfg)
+	var requests *accesslog.Logger
+	if cfg.AccessLog != nil && cfg.AccessLog.Enabled {
+		requests, err = accesslog.New(*cfg.AccessLog, stateDir)
+		if err != nil {
+			return err
+		}
+		defer requests.Close()
+		log.Printf("access log: JSON requests to %s", requests.Path)
+	}
 
 	hub, err := identity.Load(stateDir)
 	if err != nil {
@@ -368,7 +387,11 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		}
 		log.Printf("stats: counting page views, days in %s, kept %s", cfg.Stats.Location, kept)
 	}
-	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler()}
+	handler := srv.Handler()
+	if requests != nil {
+		handler = requests.Middleware(handler)
+	}
+	httpSrv := &http.Server{Addr: cfg.Listen, Handler: handler}
 
 	// Pull from curated peers (peer.add ops); the loop re-reads the peers
 	// table each pass, so curation applies without a restart.
@@ -393,6 +416,10 @@ func serve(cfgPath, stateDir, pidPath string) error {
 			if next.Listen != holder.Get().Listen {
 				log.Printf("reload: listen changed (%s -> %s) — needs a restart, ignoring that field", holder.Get().Listen, next.Listen)
 				next.Listen = holder.Get().Listen
+			}
+			if !reflect.DeepEqual(next.AccessLog, holder.Get().AccessLog) {
+				log.Printf("reload: access_log changed — needs a restart, keeping startup settings")
+				next.AccessLog = holder.Get().AccessLog
 			}
 			holder.Set(next)
 			log.Printf("reload: config applied (gate=%s, admins=%d, allow_replication=%v, cooldown=%ds)",

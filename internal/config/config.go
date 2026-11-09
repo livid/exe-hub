@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"exehub/internal/accesslog"
 )
 
 // MintReq is one acceptable holding: at least MinAmount of Mint.
@@ -66,6 +68,9 @@ type Config struct {
 	// Ollama turns on naming each post's language by a model (PLAN.md,
 	// Post language). Absent leaves it off. Read at start only, like Media.
 	Ollama *Ollama `json:"ollama,omitempty"`
+	// AccessLog is private JSON request logging, disabled unless enabled.
+	// Read at startup only, independently of page-view analytics.
+	AccessLog *accesslog.Config `json:"access_log,omitempty"`
 }
 
 // Ollama is the model server the hub asks: a local Ollama, or
@@ -149,6 +154,11 @@ func Load(path string) (*Config, error) {
 	}
 	if c.IPFSAPI == "" {
 		c.IPFSAPI = "http://127.0.0.1:5001"
+	}
+	if c.AccessLog != nil {
+		if err := c.AccessLog.Normalize(); err != nil {
+			return nil, err
+		}
 	}
 	if m := c.Media; m != nil {
 		if m.MaxMB <= 0 {

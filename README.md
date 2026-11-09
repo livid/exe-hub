@@ -226,6 +226,54 @@ when the hub sits behind it. `"stats": {"enabled": false}` in the config
 turns it off, `"timezone"` sets where the days begin, and page views are
 kept forever unless `"retention_days"` says how long.
 
+## JSON access logs
+
+To investigate requests and bandwidth, enable a separate private JSONL file:
+
+```json
+"access_log": {
+  "enabled": true,
+  "path": "access.jsonl",
+  "max_size_mb": 50,
+  "max_backups": 7,
+  "max_age_days": 7,
+  "trusted_proxies": ["172.30.0.1/32"]
+}
+```
+
+The relative path is inside the hub's state directory (`~/.exe-hub` by
+default). The logger creates private mode-0600 files, rotates at 50 MiB,
+compresses old files and retains at most seven backups for at most seven
+days. No `access_log` block, or `enabled: false`, leaves it off. Restart to
+apply these settings. Only one process may write a given log path. Check
+configuration before restarting with `./exe-hub -check-config -config config.json`;
+this validates the JSON/settings without starting workers or opening the database.
+
+Each completed request is one `type: "http_access"` JSON object: timestamps,
+method, scheme/host/path, sanitized query and Referer, user agent and selected
+browser/range headers, socket peer and attributed client IP, Cloudflare Ray
+and country, status, request body bytes read, response body bytes written,
+content metadata, first-response/total milliseconds and completion outcome.
+Streams are logged on completion. Body counts are before a downstream proxy
+compresses them; Cloudflare cache hits and edge-blocked requests never reach
+the origin and must be investigated with Cloudflare analytics.
+
+Set `trusted_proxies` to the actual proxy CIDRs for your deployment. It is
+empty by default: client headers never override the socket address then.
+Only a trusted socket peer permits CF-Connecting-IP or X-Forwarded-For
+attribution, forwarded scheme, CF-Ray and CF-IPCountry. Always check
+`client_ip_source` and `trusted_proxy` when interpreting an address.
+
+Bodies, cookies, authorization and signature headers are excluded. Secret-like
+query parameters are redacted in query and Referer, and Referer userinfo and
+fragments are removed. Ordinary query values can still contain search text;
+keep these files private. For example, largest origin responses:
+
+```sh
+jq -r '[.response_bytes, .status, .path, .client_ip] | @tsv' ~/.exe-hub/access.jsonl | sort -nr | head
+tail -f ~/.exe-hub/access.jsonl | jq -c 'select(.path == "/stats")'
+```
+
 ## Hub to hub
 
 `allow_replication` lets other hubs pull this one's local-origin content

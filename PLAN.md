@@ -199,6 +199,40 @@ Mechanics (the questions v1 deferred, now settled):
   an invalid config keeps the old one and logs the error. `admins`, gate
   settings, and `allow_replication` all take effect on reload.
 
+## JSON access logs (2026-11-09)
+
+- Optional `access_log` config, disabled unless `enabled` is true. This is a
+  request log for investigation, separate from page-view analytics: every
+  completed HTTP request is one JSON line, including `/stats`, APIs, embeds,
+  errors and OPTIONS. Long-lived streams are logged when they finish.
+- Records include UTC start/completion, method, host, escaped path, sanitized
+  query and Referer, user agent, selected fetch/range/accept headers, direct
+  peer and attributed client IP, Cloudflare Ray/country when trusted, status,
+  body bytes read/written, content metadata, first-response and total timing,
+  and completion/cancellation/write-error state. Body bytes are at the hub,
+  before compression by a downstream proxy; they are not WAN byte counts.
+- Forwarded client/scheme and Cloudflare metadata are honored only when the
+  socket peer matches explicit `trusted_proxies` CIDRs (default none).
+  Prefer a valid CF-Connecting-IP; otherwise walk X-Forwarded-For from the
+  trusted end to the first untrusted address. Always retain the socket peer
+  and attribution source. Headers alone do not identify a person or operator.
+- Never log request/response bodies, cookies, Authorization or signature
+  headers. Secret-like query parameters are redacted in both query and
+  Referer; Referer userinfo/fragments are removed. Text fields are bounded.
+  Ordinary query values can still include searches: logs are private files,
+  mode 0600, not exposed through the HTTP API.
+- Default path `access.jsonl`, relative to the state directory; size rotation
+  defaults to 50 MiB, seven gzip backups, seven-day backup retention. These
+  are maximum retention limits, not a guarantee of seven days of history.
+  File access/creation is checked at startup. Runtime write failures are
+  reported at most once a minute without failing the served request.
+- Read at startup only, like media. Changes require restart. HTTP writer
+  interfaces and streaming/byte-range/conditional behavior are preserved.
+  `-check-config -config <file>` validates configuration and exits before
+  creating state, starting workers or opening the database.
+  Edge cache hits and edge-blocked requests never reach this logger; combine
+  it with Cloudflare analytics for that part of traffic.
+
 ## Envelope & operations
 
 Envelope: `{type, author (pubkey b64), seq, ts, body}`.
