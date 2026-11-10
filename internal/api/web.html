@@ -658,8 +658,11 @@ html[data-saved] .saved { display: flex; }
 /* the guide (PLAN.md, The token page — The guide): for a wallet signed in
    that holds too little to post, a row over the status line on the
    note's yellow — what it holds and what posting takes, and Buy, the
-   way to the Buy window, at its right */
-.compose .guide { box-sizing: border-box; padding: 5px 8px; border: 1px solid #262626; background: #ffffc9; box-shadow: inset 1px 1px 0 #fff; }
+   way to the Buy window, at its right. It stands 8px clear of the
+   status line and its buttons under it, as the text field stands 8px
+   clear of it (Livid, 2026-11-10: "needs proper spacing between that
+   yellow block and button rows below"). */
+.compose .guide { box-sizing: border-box; margin: 0 0 8px; padding: 5px 8px; border: 1px solid #262626; background: #ffffc9; box-shadow: inset 1px 1px 0 #fff; }
 .compose .guide[hidden] { display: none; }
 .compose .guide .grow { color: #262626; }
 .compose .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2412,7 +2415,7 @@ function hubAnswers() {
 
   // ---- the window ----
   const show = () => {
-    title.textContent = T("buy.title", { symbol: o.symbol });
+    title.textContent = T("buy.title", { symbol: o.ticker });
     veil.hidden = false;
     settle();
     ask();
@@ -2433,7 +2436,10 @@ function hubAnswers() {
     if (!opts || !opts.mint || typeof opts.dec !== "number") return false;
     if ((phase === "busy" || phase === "sent") && opts.mint === o.mint) { show(); return true; }
     if (phase === "busy" || phase === "sent") return false;
-    o = Object.assign({ symbol: T("token.tokens"), jup: "https://jup.ag/swap?sell=" + PAY.SOL.mint + "&buy=" + encodeURIComponent(opts.mint) }, opts);
+    o = Object.assign({ jup: "https://jup.ag/swap?sell=" + PAY.SOL.mint + "&buy=" + encodeURIComponent(opts.mint) }, opts);
+    // the window's title names the token as a ticker, $V2EX; the amounts
+    // in its rows keep the bare symbol
+    o.ticker = o.symbol ? "$" + o.symbol : T("token.tokens");
     if (!o.symbol) o.symbol = T("token.tokens");
     phase = "idle"; account = null;
     // the least quantity that covers what is wanted; the largest when none does
@@ -3880,7 +3886,9 @@ document.addEventListener("change", e => {
     const symbol = m.symbol || T("token.tokens"), read = m.held !== undefined;
     return { m, symbol, short: Math.max(0, count(m.amount) - (read ? count(m.held) : 0)),
       text: read ? T("guide.held", { held: m.held, need: m.amount, symbol }) : T("guide.need", { need: m.amount, symbol }),
-      buy: T("guide.buy", { symbol }) };
+      // the button names the token as a ticker, $V2EX (Livid, 2026-11-10);
+      // a token nobody has named yet is "tokens", with no sign
+      buy: T("guide.buy", { symbol: m.symbol ? "$" + m.symbol : symbol }) };
   }
   function line(left) {
     const v = verdict;
@@ -4070,7 +4078,7 @@ document.addEventListener("change", e => {
   if (guideBuy) guideBuy.addEventListener("click", () => {
     const l = lack();
     if (!l || !me || busy) return;
-    hubBuy({ mint: l.m.mint, dec: l.m.decimals, symbol: l.symbol, qty: l.short, wallet: me.name, address: me.address,
+    hubBuy({ mint: l.m.mint, dec: l.m.decimals, symbol: l.m.symbol, qty: l.short, wallet: me.name, address: me.address,
       opener: guideBuy, after: bought, closed: () => { if (guide.hidden && !text.disabled) text.focus(); } });
   });
   // a check that could not land is made again; the remembered all-clear

@@ -2257,15 +2257,18 @@ for markets, history, holders, metadata and social.
   to do, where the reader is:
   - **The row.** Over the status line, on the note's yellow: "This
     wallet holds 0 V2EX. To post here it needs 10,000." and, at its
-    right, a push button, **Buy V2EX…**. The status line under it says
-    only "This address can read but not post yet." A row of its own,
-    as every button has. It is there when the gate's answer is "below"
+    right, a push button, **Buy $V2EX…** — the token named as a
+    ticker, with its dollar sign, there and in the Buy window's title
+    ("Buy $V2EX"); the amounts keep the bare symbol. The status line
+    under it says only "This address can read but not post yet." A row
+    of its own, as every button has, 8px clear of the text field above
+    it and of the status line and its buttons below. It is there when the gate's answer is "below"
     for a token whose decimals are known, and gone on any other answer
     and at Sign Out. A wallet found short is remembered so (the row's
     two strings, with the wallet's name and address), and the row
     stands from the first paint of its next visit while the gate is
     asked again: nothing moves when the answer comes.
-  - **Buy V2EX…** opens the Buy window in place, over the page the
+  - **Buy $V2EX…** opens the Buy window in place, over the page the
     reader was on, set for them: the least of the three quantities that
     covers what they lack is pressed (holding 2,500 of 10,000: 10,000;
     of 15,000 and holding none: 20,000; the largest when none covers
