@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -186,7 +187,7 @@ func (g *Gate) balance(t *config.TokenGate, mint, addr string) (uint64, error) {
 	})
 	resp, err := g.client.Post(t.RPCURL, "application/json", bytes.NewReader(req))
 	if err != nil {
-		return 0, err
+		return 0, lineErr(err)
 	}
 	defer resp.Body.Close()
 	var out struct {
@@ -224,6 +225,20 @@ func (g *Gate) balance(t *config.TokenGate, mint, addr string) (uint64, error) {
 		total += n
 	}
 	return total, nil
+}
+
+// lineErr is a failed request's cause without the address it was sent
+// to. The RPC's address holds its API key, Go's client errors quote the
+// address they failed on (Post "https://…/?api-key=…": dial tcp …), and
+// a check that cannot be answered is reported to the author who asked:
+// unwrapped, the hub's key went out in a 403 whenever the RPC could not
+// be reached.
+func lineErr(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err
+	}
+	return err
 }
 
 const b58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"

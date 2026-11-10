@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"exehub/internal/config"
@@ -94,5 +95,30 @@ func TestLegacySingleMint(t *testing.T) {
 	m := c.Gate.Token.Mints
 	if len(m) != 1 || m[0].Mint != "MintAaa" || m[0].MinRaw != 1000 || c.Gate.Token.Mint != "" {
 		t.Fatalf("normalized = %+v (legacy mint %q)", m, c.Gate.Token.Mint)
+	}
+}
+
+// The RPC's address holds its API key, and a check the RPC cannot answer
+// is reported to whoever asked: the error must not quote the address.
+func TestUnavailableHidesRPCAddress(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(p, []byte(`{"gate":{"mode":"token","token":{"rpc_url":"http://127.0.0.1:1/?api-key=SECRETKEY",
+		"mints":[{"mint":"M","min_amount":"1"}],"recheck":"10m"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := config.Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, _, _ := ed25519.GenerateKey(nil)
+	err = New(config.NewHolder(c)).Check(pub)
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("check against a dead RPC = %v, want ErrUnavailable", err)
+	}
+	if strings.Contains(err.Error(), "SECRETKEY") || strings.Contains(err.Error(), "api-key") {
+		t.Errorf("the error quotes the RPC's address: %v", err)
+	}
+	if !strings.Contains(err.Error(), "connect") {
+		t.Errorf("the error lost its cause: %v", err)
 	}
 }
