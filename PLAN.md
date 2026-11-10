@@ -2434,8 +2434,8 @@ grids?", then "do it, use memcache".
   `/u/{id}/pictures/{day}` from the Pictures grid, the page's `?lang=`
   riding; a square with none is not. The day's page is the profile's
   window with the tab's key down and the grid at the top, the day's
-  square marked — a black ring with a white ring inside it over its
-  own colour, `aria-current="page"` — and under the grid a line in the
+  square marked — a 2px black ring over its own colour, where today's
+  is 1px, `aria-current="page"` — and under the grid a line in the
   page's type: the day's name in bold, the count ("12 posts", "4
   pictures"), and All posts or All pictures, the way back; then the
   posts of that day newest first, paged like a day of the Archives
@@ -2446,7 +2446,9 @@ grids?", then "do it, use memcache".
   (`dayWindow`: it begins in dayZone, today runs on, a day to come or
   what is not a date is no day), and a day with none of the profile's
   posts or pictures has no page, 404 "No such day". The square is the
-  way between days: the grid stays at the top of the day's page.
+  way between days: the grid stays at the top of the day's page. The
+  pager at the foot counts the day's posts with the singular kept ("1
+  post"), as the profile's own count is now too.
 - **The days are the Archives'.** `store.AuthorDays(author, loc)` is
   `PostDays` for one profile: a post's day is its own time in the
   hub's day zone, a time more than ten minutes ahead of the hub's clock

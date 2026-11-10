@@ -424,9 +424,9 @@ a.mention { text-decoration: none; }
 .wk i, .wk a, .act-leg i { display: block; width: 9px; height: 9px; }
 /* a square with a count is the link to that day's posts or pictures
    (PLAN.md, Activity — a square is a link); the day the page shows
-   wears a black ring with a white ring inside it, over its own colour */
+   wears a 2px black ring over its own colour, today's ring is 1px */
 .wk a { text-decoration: none; }
-.wk .sel { box-shadow: inset 0 0 0 1px #262626, inset 0 0 0 2px #fff; }
+.wk .sel { box-shadow: inset 0 0 0 2px #262626; }
 .dayhead { padding: 0 12px 10px; font-size: 12px; line-height: 16px; }
 .dayhead a { font-weight: bold; text-decoration: none; }
 .dayhead a:hover { text-decoration: underline; }
@@ -436,7 +436,7 @@ a.mention { text-decoration: none; }
 .wk .l3, .act-leg .l3 { background: #6666cc; }
 .wk .l4, .act-leg .l4 { background: #333399; }
 .wk .now { box-shadow: inset 0 0 0 1px #262626; }
-.wk .now.sel { box-shadow: inset 0 0 0 1px #262626, inset 0 0 0 2px #fff; }
+.wk .now.sel { box-shadow: inset 0 0 0 2px #262626; }
 .act-key { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; line-height: 14px; }
 .act-leg { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
 .act-leg i:first-of-type { margin-left: 4px; }
@@ -5626,7 +5626,7 @@ document.addEventListener("change", e => {
 
 {{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "day"}}/archives/{{.Day}}?{{else if eq .Page "profile"}}/u/{{.Profile.ID}}{{if .Day}}/{{.Day}}{{end}}?{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}/u/{{.NavFor}}/{{.Page}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "day"}}{{T "archives.posts" "n" .Count}}{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}{{else if eq .Page "profile"}}{{if .Day}}{{.DayCount}}{{else if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "day"}}{{T "archives.posts" "n" .Count}}{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}{{else if eq .Page "profile"}}{{if .Day}}{{T "archives.posts" "n" .DayCount}}{{else if .Since}}{{T "archives.posts" "n" .Count}}{{else}}{{T "archives.posts" "n" (len .Posts)}}{{end}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}{{template "lang" .}}</form>
 {{end}}
