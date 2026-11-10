@@ -3573,6 +3573,42 @@ the page works without JavaScript (a small script keeps it current).
   navigation lands, so the check reads the in-between state through a
   proxy the page beats to: `~/tools/playwright/exe-hub-stats-range-check.js`.)
   `/stats` itself is never counted, so the second load counts nothing.
+- **The chart as lines or as bars** (exe-stats v0.4.0, the package's
+  own work since v0.3.0, come to the hub with it 2026-11-10): a
+  segmented control beside the online count picks, the browser
+  remembers the pick (`localStorage["exe-stats-chart"]`, read in the
+  head so the page is drawn once), and the pointer over a bucket, or a
+  tap, shows its time and counts in a tip; on a phone the numbers stand
+  three to a row. The desk is the package's, so the hub draws what
+  stats.v2core.com does.
+- **The desk never holds the hub up** (2026-11-10, exe-stats v0.4.0).
+  On 2026-11-09 a crawler walked the desk's filter links for two hours:
+  8,944 different queries, up to 379 at once, from rotating addresses
+  under a plain browser's name, past `robots.txt`. A filter never asked
+  before counts every day of its span from the hits, and the reports
+  read through the hub's one database connection, so the feed waited in
+  the same line: every one of the 1,168 feed loads over half a second
+  that day overlapped a slow `/stats`. Three things now keep them apart.
+  The reports read through connections of their own (`store.Reader`: a
+  read-only pool on `hub.db`, one a core less one, so a core is left to
+  the pages); only the desk's writes — a counted view's days, in one
+  transaction where it was one a day — still take the hub's connection.
+  exe-stats lets one report count days at a time, hands the one report
+  to every request for the same query, and when eight reports already
+  wait to count, turns the next away: `/stats` then answers 503 with
+  `Retry-After: 5` on the hub's error page ("The stats are busy…") and
+  `/v1/stats` the same as JSON; the script's refetch just keeps what it
+  shows. A report whose days are kept — the desk without filters, whose
+  days are counted ahead, and any filter read before — and one read
+  from memory (Today, 24 hours) wait on none of this. Measured on a
+  scratch hub over the public hub's page views (262,704 of them, 55
+  days), on two cores, replaying that crawl: a filter never asked
+  before, alone, 359 ms and now 165 ms (half of the old time was 55
+  syncs of the disk, a day each). With 64 at once the median report
+  took 12.5 s and the slowest 55 s, and the feed beside them 64 ms at
+  the median, 761 ms at worst; now a report is served within about 2 s
+  or turned away at once (1,211 of the 1,500 were), and the feed takes
+  1.6 ms at the median, under 30 ms at worst.
 - **Config**: `"stats": {"enabled": true, "timezone": "America/Los_Angeles",
   "retention_days": 0}` — on by default; off hides `/stats` and the
   link and counts nothing; read at start like `media`. Page views are

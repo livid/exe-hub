@@ -37,7 +37,8 @@ var (
 )
 
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string // the database file, for Reader
 	// OnMessage, when set, is called after every successfully committed
 	// ingest (direct or replicated; never for duplicates or Rebuild
 	// replays) — the live-events hook. It runs on the ingesting
@@ -66,7 +67,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err := s.init(); err != nil {
 		db.Close()
 		return nil, err
@@ -75,6 +76,28 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// Reader opens a second pool on the same file, read-only, of n
+// connections: WAL lets it read while the store's one connection
+// writes, so a package with long reads of its own tables (the stats
+// desk's reports) does not make the hub's queries wait in its line.
+// The caller closes it, before the store. A store in memory has no
+// file to open twice: nil, and the caller reads through DB.
+func (s *Store) Reader(n int) (*sql.DB, error) {
+	if s.path == "" || strings.Contains(s.path, ":memory:") || strings.Contains(s.path, "mode=memory") {
+		return nil, nil
+	}
+	rd, err := sql.Open("sqlite", s.path+"?_pragma=busy_timeout(5000)&_pragma=query_only(1)")
+	if err != nil {
+		return nil, err
+	}
+	rd.SetMaxOpenConns(max(1, n))
+	if err := rd.Ping(); err != nil {
+		rd.Close()
+		return nil, err
+	}
+	return rd, nil
+}
 
 func (s *Store) init() error {
 	_, err := s.db.Exec(`

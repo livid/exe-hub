@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -356,7 +357,18 @@ func serve(cfgPath, stateDir, pidPath string) error {
 	// Stats: the pages' own analytics (PLAN.md, Stats) — page views
 	// counted as they are served, kept for the retention, /stats to read.
 	if cfg.StatsOn() {
+		// the reports read through connections of their own, a core
+		// left to the pages, so the desk never stands in the line for
+		// the hub's one connection (PLAN.md, Stats)
+		reader, err := st.Reader(runtime.NumCPU() - 1)
+		if err != nil {
+			return err
+		}
+		if reader != nil {
+			defer reader.Close()
+		}
 		an, err := stats.New(st.DB(), stats.Options{
+			Reader:    reader,
 			Location:  cfg.Stats.Location,
 			PathLabel: srv.StatsPathLabel,
 			Title:     "Stats",

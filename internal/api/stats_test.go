@@ -124,10 +124,10 @@ func TestStatsPage(t *testing.T) {
 	for _, want := range []string{
 		`<a class="btn tab on" href="/stats?range=7d" aria-current="page">7 days</a>`, // the current range, held down, still a link
 		`href="/stats?range=30d"`,
-		`<div class="tl">Visitors</div><div class="tv">3</div>`,
-		`<div class="tl">Page views</div><div class="tv">4</div>`,
-		`<div class="tl">Sessions</div><div class="tv">3</div>`,
-		`<div class="tl">Bounce rate</div><div class="tv">67%</div>`,
+		`<div class="tl">Visitors</div><div class="tv" style="--em: 1.00">3</div>`,
+		`<div class="tl">Page views</div><div class="tv" style="--em: 1.00">4</div>`,
+		`<div class="tl">Sessions</div><div class="tv" style="--em: 1.00">3</div>`,
+		`<div class="tl">Bounce rate</div><div class="tv" style="--em: 2.69">67%</div>`,
 		`<polyline class="pv"`,
 		`Google`, `Direct`,
 		`Ann: A heading the words of the post`,        // a thread by its words
@@ -163,7 +163,7 @@ func TestStatsPage(t *testing.T) {
 		t.Fatalf("filtered = %d", code)
 	}
 	for _, want := range []string{
-		`<div class="tl">Visitors</div><div class="tv">1</div>`,
+		`<div class="tl">Visitors</div><div class="tv" style="--em: 1.00">1</div>`,
 		`<span class="chip">Country <b>Japan</b><a href="/stats?dev=browsers&amp;range=7d"`,
 		`<a class="btn tab on" href="/stats?country=JP&amp;dev=browsers&amp;range=7d#w-dev" aria-current="page">Browser</a>`,
 		`>Chrome</a>`,
@@ -181,7 +181,7 @@ func TestStatsPage(t *testing.T) {
 		t.Fatalf("bot view = %d", code)
 	}
 	for _, want := range []string{
-		`<div class="tl">Page views</div><div class="tv">1</div>`,
+		`<div class="tl">Page views</div><div class="tv" style="--em: 1.00">1</div>`,
 		`<span class="chip">Bot <b>Googlebot</b>`,
 		`>bot</a>`, // the Devices list: device "bot"
 	} {
@@ -194,7 +194,7 @@ func TestStatsPage(t *testing.T) {
 	}
 	// yesterday's span holds the old hit alone
 	_, body = get(t, h, "/stats?range=yesterday")
-	if !strings.Contains(body, `<div class="tl">Page views</div><div class="tv">1</div>`) {
+	if !strings.Contains(body, `<div class="tl">Page views</div><div class="tv" style="--em: 1.00">1</div>`) {
 		t.Error("yesterday's page view missing")
 	}
 	// the feed says who is here

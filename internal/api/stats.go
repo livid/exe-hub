@@ -11,6 +11,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	stats "github.com/livid/exe-stats"
 )
 
 // counted wraps a page handler so a served page is recorded as a hit.
@@ -57,6 +59,13 @@ func (s *Server) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.Stats.PageData(r)
+	if errors.Is(err, stats.ErrBusy) {
+		// the desk is counting other views and its line is full
+		// (PLAN.md, Stats): nothing was counted for this one
+		w.Header().Set("Retry-After", stats.RetryAfter)
+		s.webError(w, r, http.StatusServiceUnavailable, "err.statsbusy")
+		return
+	}
 	if err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "err.stats")
 		return
