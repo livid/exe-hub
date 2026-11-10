@@ -185,8 +185,10 @@ signatures and never a cookie. Writes authenticate by signature alone.
 `GET /` is the feed and how to join, `/p/{id}` a thread, `/u/{id}` a
 profile, `/u/{id}/notifications` and `/u/{id}/bookmarks` what concerns
 that id and the posts it keeps, `/search?q=` a search, `/stats` who
-reads the hub. Signed in with a wallet, the join window becomes a
-Navigation window: Home, Notifications, Bookmarks, Profile. The pages'
+reads the hub, `/archives` every past day as a calendar, each day
+coloured by how many posts were sent on it. Signed in with a wallet, the
+join window becomes a Navigation window: Home, Notifications, Bookmarks,
+Profile, Archives. The pages'
 own words — the join window, the pager, the Post window, every message
 — are in English, Simplified Chinese or Japanese: `?lang=en`, `?lang=zh`
 or `?lang=ja` when the address says, else the browser's first language,

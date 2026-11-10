@@ -31,6 +31,8 @@ func (s *Server) StatsPathLabel(path string) string {
 		return "/ (the feed)"
 	case path == "/badge/":
 		return "The badge"
+	case path == "/archives":
+		return "Archives"
 	case strings.HasPrefix(path, "/p/"):
 		if p, err := s.St.Post(strings.TrimPrefix(path, "/p/")); err == nil {
 			return authorLabel(*p) + ": " + excerpt(named(*p), 48)

@@ -539,7 +539,7 @@ type webData struct {
 	Compose        *webCompose // the wallet strip: the home page's first page, every thread, Notifications and Bookmarks
 	// the Navigation window (PLAN.md, The signed-in reader's desk): the
 	// page carries it (set by webRender), the row it is ("home",
-	// "notifications", "bookmarks", "profile", or "" for none) and the
+	// "notifications", "bookmarks", "profile", "archives", or "" for none) and the
 	// profile id it is for, whose row is selected only for that reader
 	Nav           bool
 	NavOn, NavFor string
@@ -565,7 +565,8 @@ type webData struct {
 	StatsOn   bool
 	Online    int
 	StatsPage *stats.Page
-	Badge     *webBadge // the badge page's snippets and the GIF's facts
+	Badge     *webBadge    // the badge page's snippets and the GIF's facts
+	Archives  *webArchives // the Archives page's calendars (archives.go)
 }
 
 // webURL is the Hub app's URL matcher; it lives in the card package now,
@@ -1467,7 +1468,7 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	}
 	d.Push = s.Push != nil
 	switch d.Page {
-	case "home", "notifications", "bookmarks", "profile":
+	case "home", "notifications", "bookmarks", "profile", "archives":
 		d.Nav, d.NavOn = true, d.Page
 	case "thread":
 		d.Nav = true

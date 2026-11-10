@@ -3262,6 +3262,62 @@ func (s *Store) Counts() (profiles, posts int, err error) {
 	return profiles, posts, err
 }
 
+// DayPosts is one day and how many posts were sent on it.
+type DayPosts struct {
+	Day   string // 2006-01-02, in the zone asked for
+	Posts int
+}
+
+// postDaySkew is how far ahead of the hub's clock a post's own time may
+// run and still be believed: past it, the day the hub received the post
+// is the post's day.
+const postDaySkew = 10 * time.Minute
+
+// PostDays is the days that have posts, oldest first, each with how many
+// posts were sent on it — replies count, deleted posts do not — and the
+// day the hub received its first post, "" on an empty hub. For the
+// Archives page (PLAN.md, Archives). A post's day is its own time (ts,
+// what every page shows as when it was sent) in loc. That time is the
+// author's claim and nothing checks it, so one that runs ahead of the
+// hub's clock is not believed, and a day before the hub's first is left
+// for the page to weigh: a post pulled from a peer may be older than this
+// hub, and so may a lie. It reads every post's times, so its caller
+// keeps the answer for a while.
+func (s *Store) PostDays(loc *time.Location) (days []DayPosts, first string, err error) {
+	rows, err := s.db.Query(`SELECT ts, received FROM posts`)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	n := map[string]int{}
+	var began int64
+	for rows.Next() {
+		var ts, received int64
+		if err := rows.Scan(&ts, &received); err != nil {
+			return nil, "", err
+		}
+		if began == 0 || received < began {
+			began = received
+		}
+		if ts > received+postDaySkew.Milliseconds() {
+			ts = received
+		}
+		n[time.UnixMilli(ts).In(loc).Format("2006-01-02")]++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	if len(n) == 0 {
+		return nil, "", nil
+	}
+	days = make([]DayPosts, 0, len(n))
+	for d, c := range n {
+		days = append(days, DayPosts{Day: d, Posts: c})
+	}
+	slices.SortFunc(days, func(a, b DayPosts) int { return strings.Compare(a.Day, b.Day) })
+	return days, time.UnixMilli(began).In(loc).Format("2006-01-02"), nil
+}
+
 // PushSub is one browser's Web Push subscription (PLAN.md
 // "Notifications"): where to POST and the keys the payload is
 // encrypted to. Profile is the id the browser was signed in as when it

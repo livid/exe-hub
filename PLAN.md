@@ -576,8 +576,8 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - `GET /v1/stats?range=&…` — the pages' analytics as JSON: the same
   report `/stats` draws, every list included (see Stats). 404 on a hub
   with stats off.
-- `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=`, `GET /stats` —
-  the public pages (see below).
+- `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=`, `GET /stats`,
+  `GET /archives` — the public pages (see below).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -1838,10 +1838,12 @@ Livid, 2026-10-09: "after logged in, Join window becomes a navigation
 bookmark op for post), Profile".
 
 - **The Navigation window.** Signed in (`<html class="wallet">`), the
-  join window gives its place to a window titled Navigation: four rows,
+  join window gives its place to a window titled Navigation: five rows,
   each a 24×24 glyph and its word — Home (`/`), Notifications
   (`/u/{id}/notifications`), Bookmarks (`/u/{id}/bookmarks`), Profile
-  (`/u/{id}`), `?lang=` carried. The glyphs are 1-bit pixel art in the
+  (`/u/{id}`) and, since 2026-11-09, Archives (`/archives`, see
+  Archives; a box with its lid, and like Home the hub's own page, whose
+  address needs no id), `?lang=` carried. The glyphs are 1-bit pixel art in the
   old black-and-white icon idiom (a black outline round a white face,
   no colour), inline crispEdges SVG like the pages' other glyphs. The
   page's own row is selected — the `@` list's chosen row, #333399 with
@@ -1855,7 +1857,7 @@ bookmark op for post), Profile".
   desk with the Navigation window at its side, so the column stays where
   the feed's is: the home page (in the join window's place), a thread
   (its side, where a signed-out reader's Summary window stands),
-  Notifications, Bookmarks and a profile page. From 1060px it is the side, sticky as the join window
+  Notifications, Bookmarks, a profile page and Archives. From 1060px it is the side, sticky as the join window
   is, 200px wide (Livid, 2026-10-09: the join window's 360 was "a bit
   too wide"), and the desk is centred on it, the margins even either
   side. A first try kept the side 360px with the window at its right,
@@ -1873,8 +1875,10 @@ bookmark op for post), Profile".
   on the strip, the summary sliding into the feed (Livid chose it,
   2026-10-09). Signed out, the Summary window stands at the side as it
   did. Narrower, on the home page, Notifications, Bookmarks
-  and a profile, it is a strip at the top of the column — the four as
-  tiles across, each glyph over its word — where the join window stood
+  and a profile, it is a strip at the top of the column — the five as
+  tiles across, each glyph over its word, each tile as wide as its word
+  and an even share of what is left (five even tiles cut Notifications
+  short at 390px in an iPhone's Verdana) — where the join window stood
   and where a signed-in reader on a phone had nothing (the feed still
   comes up under the Post window, one short strip lower); a thread on a
   phone shows none, as its side shows nothing there yet. Signed out,
@@ -1945,6 +1949,73 @@ bookmark op for post), Profile".
   the Wallet Standard mock (the join window and the Navigation window
   trading places, the links, the selected row, a bookmark made and
   taken back, at device pixel ratios 1, 1.5 and 2 and on a phone).
+
+## Archives — every past day, coloured by its posts (built 2026-11-09)
+
+Livid, 2026-11-09: "`/archives` — new nav item in sidebar; show each
+past day as grid; use color intensity to indicate how many posts were
+sent that day; use memcache for this page".
+
+- **The page.** `GET /archives` (`/archives/` leads there) is one
+  window titled Archives: the hub's days as calendars, a month a block,
+  the newest month first and as many across as the window holds — three
+  in the 640px window, two on a phone. A block is the month's name
+  ("November 2026", "2026 年 11 月") with its count of posts at the
+  right, a row of weekday letters, Sunday first, and a cell for every
+  day: a 22px square (20px on a phone) holding the day of the month,
+  2px from the next. Feed and the language menu head it, as on the
+  badge page; the status line says how many posts on how many days, and
+  the zone.
+- **The colour is the count.** A day with no post stands on #eee; a day
+  with posts on one of the four lavenders of the Platinum highlight —
+  #ccccff, #9999ff, #6666cc and the selection's own #333399 — its
+  number white on the two dark ones. Which of the four is the quarter
+  the day's count falls in among the days that have posts (the counts
+  at the 25th, 50th and 75th place of a hundred are where the steps
+  are), not a share of the busiest day: one loud day would leave every
+  other day the palest. A cell's title says the date and the count
+  ("2026-11-08 · 42 posts"); the key under the calendars shows the five
+  grounds between Less and More. Today wears a 1px black line.
+- **What counts.** Every post standing on the hub, a reply like a root,
+  a pulled post like one sent here; a deleted post leaves its day. A
+  post's day is the day of its own time — `ts`, what every page shows
+  as when it was sent — and days begin in `stats.timezone`, the zone the
+  stats count theirs in (by default the hub's own), so a day is the same
+  day on both pages.
+- **A post's time is its author's claim**, and nothing checks it, so the
+  page does not let one stretch it. A time more than ten minutes ahead
+  of the hub's clock is not believed: the post counts on the day the hub
+  received it. And only the months from the hub's first — the month it
+  received its first post — to this one stand whole, the quiet ones too;
+  an older month stands only when it has posts, its other days greyed. A
+  post pulled from a peer may well be older than this hub; a post that
+  claims 1970 draws one month, not fifty years of empty ones. Greyed too,
+  with no count: the days of this month still to come, and the days
+  before the hub's first.
+- **Kept in memory.** The counts are the same for every reader and cost
+  a walk over every post's times (30 ms at 3,400 posts), so they are
+  drawn once and kept for five minutes — `internal/memcache`, a cache in
+  the process: a value under a key until its time is up, readers who ask
+  while it is drawn sharing the one drawing, an error never kept. No
+  memcached server stands beside the hub; a restart starts the cache
+  empty, and each hub keeps its own. So today's cell may run five
+  minutes behind the feed. The key names the zone and the day, and the
+  first reader after midnight draws the new day's cell. What is kept is
+  the numbers; the page's words are set per request, in the reader's
+  language, and a kept page is served in about a millisecond.
+- **Not built.** A cell leads nowhere yet: a page of one day's posts is
+  the next step when it is wanted. The page is not kept for offline
+  reading (sw.js), like `/stats` and `/badge/`; it is counted as a page
+  view ("Archives" in the stats' lists) and open to crawlers.
+- Check: `go test ./internal/memcache ./internal/store ./internal/api`
+  (TestCache, TestFetch, TestFetchOnce; TestPostDays: the zone, a
+  reply, a delete, a time ahead of the clock; TestBuildArchives: which
+  months stand, the quarters, the greyed days; TestWebArchives: the
+  page in three languages, the row, the counts kept and drawn again)
+  and `~/tools/playwright/exe-hub-nav-test.js` against a scratch hub
+  (the row and its selection, 22px cells on whole pixels at device
+  pixel ratios 1, 1.5 and 2, and on a phone the five tiles with no word
+  cut and two months across).
 
 ## Reactions — an emoji on a post (built 2026-10-28)
 

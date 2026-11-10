@@ -34,6 +34,7 @@ import (
 	"exehub/internal/identity"
 	"exehub/internal/ipfs"
 	"exehub/internal/media"
+	"exehub/internal/memcache"
 	"exehub/internal/push"
 	"exehub/internal/store"
 	stats "github.com/livid/exe-stats"
@@ -59,7 +60,8 @@ type Server struct {
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
 	ping      pingCache
-	drafts    drafts // pictures uploaded unsigned, waiting for their post (draft.go)
+	drafts    drafts         // pictures uploaded unsigned, waiting for their post (draft.go)
+	mem       memcache.Cache // what a page keeps in memory between readers (archives.go)
 }
 
 // pingCache is the heartbeat's data: the counts the feed's strip shows —
@@ -188,6 +190,12 @@ func (s *Server) Handler() http.Handler {
 		http.Redirect(w, r, to.RequestURI(), http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("GET /badge.gif", handleBadgeGIF)
+	mux.HandleFunc("GET /archives", s.counted("archives", s.handleArchivesPage))
+	mux.HandleFunc("GET /archives/{$}", func(w http.ResponseWriter, r *http.Request) {
+		to := *r.URL
+		to.Path = "/archives"
+		http.Redirect(w, r, to.RequestURI(), http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("GET /stats", s.handleStatsPage)
 	mux.HandleFunc("GET /v1/stats", s.handleStats)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)

@@ -145,8 +145,9 @@ a.mention { text-decoration: none; }
    outline round a white face, like the old black-and-white icons; on
    the selected row the two turn white and the highlight. A row whose
    address waits for the id (a first sign-in, until the gate names it)
-   is greyed. Narrower than 1060px it is a strip: the four across, each
-   glyph over its word. */
+   is greyed. Narrower than 1060px it is a strip: the five across, each
+   glyph over its word. Archives, the last row, is the hub's own page
+   like Home: its address needs no id. */
 .nav { display: none; }
 .wallet .nav { display: block; }
 .places { display: flex; flex-direction: column; padding: 3px 0; }
@@ -163,8 +164,52 @@ a.mention { text-decoration: none; }
 .place.on .w { fill: #333399; }
 @media (max-width: 1059px) {
   .places { flex-direction: row; padding: 0; }
-  .place { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 2px; padding: 5px 2px 4px; font-size: 11px; line-height: 14px; }
+  /* each tile as wide as its word and an even share of what is left: five
+     even tiles cut Notifications short on a phone (an iPhone sets the
+     strip in Verdana, a wide face) */
+  .place { flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 2px; padding: 5px 2px 4px; font-size: 11px; line-height: 14px; }
   .place span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+/* the Archives page (PLAN.md, Archives): every past day of the hub, a
+   cell in its month's calendar, the months newest first and as many
+   across as the window holds. A cell is a 22px square holding the day of
+   the month, 2px from the next; its colour says how many posts were sent
+   that day — none on the frame's grey, then the four lavenders of the
+   Platinum highlight up to the selection's #333399, the number turning
+   white where the ground is dark. A day that is not one of the hub's —
+   still to come, or before its first — is a grey number on no ground.
+   Today wears a black line. Under the calendars, the key: the five
+   grounds from fewer to more. */
+/* each calendar keeps its own height (align-items): stretched to a
+   taller neighbour's, a five-week month's rows would grow past the cell */
+.arch { display: grid; grid-template-columns: repeat(auto-fill, 170px); justify-content: center; align-items: start; gap: 14px 20px; padding: 12px 12px 14px; }
+.cal { border-collapse: separate; border-spacing: 2px; table-layout: fixed; width: 170px; margin: 0; }
+.cal caption { padding: 0 2px 2px; line-height: 16px; }
+.cal .cap { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cal .cap b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal .cap span { flex: none; font-size: 11px; color: #666; }
+.cal th { padding: 0; width: 22px; height: 14px; font-size: 10px; font-weight: normal; line-height: 14px; color: #666; text-align: center; }
+.cal td { box-sizing: border-box; padding: 0; width: 22px; height: 22px; font-size: 10px; line-height: 22px; text-align: center; color: #262626; }
+.cal .off { color: #aaa; }
+.cal .l0, .archkey .l0 { background: #eee; }
+.cal .l0 { color: #666; }
+.cal .l1, .archkey .l1 { background: #ccccff; }
+.cal .l2, .archkey .l2 { background: #9999ff; }
+.cal .l3, .archkey .l3 { background: #6666cc; }
+.cal .l4, .archkey .l4 { background: #333399; }
+.cal .l3, .cal .l4 { color: #fff; }
+.cal .now { border: 1px solid #262626; line-height: 20px; }
+.archkey { display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 0 14px 12px; font-size: 11px; color: #666; }
+.archkey i { box-sizing: border-box; display: block; width: 10px; height: 10px; }
+.archkey span:first-child { margin-right: 4px; }
+.archkey span:last-child { margin-left: 4px; }
+/* a phone holds two months across at 20px a cell */
+@media (max-width: 480px) {
+  .arch { grid-template-columns: repeat(auto-fill, 156px); gap: 12px 8px; padding: 12px 6px 14px; }
+  .cal { width: 156px; }
+  .cal th { width: 20px; }
+  .cal td { width: 20px; height: 20px; line-height: 20px; }
+  .cal .now { line-height: 18px; }
 }
 /* narrower than that, the Summary is a press away (Livid's phone
    design, 2026-09-24): Summarize, a push button between Feed and the
@@ -1318,6 +1363,29 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T (print "no" .Page)}}</div>{{end}}
     {{if or .Prev .Next}}<div class="pager">{{template "pager" .}}</div>{{end}}
+    <div class="statusbar"><span>{{.Message}}</span></div>
+  </div>
+</div>
+</div>
+</div>
+{{else if eq .Page "archives"}}
+<div class="desk">
+{{template "nav" .}}
+<div class="main">
+<div class="window">
+  <div class="titlebar"><a class="tbox" href="/{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{T "archives"}}</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="pager top"><a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{template "lang" .}}</div>
+    <div class="arch">
+      {{range .Archives.Months}}<table class="cal">
+        <caption><span class="cap"><b>{{$.MonthName .Year .Month}}</b><span>{{.Posts}}</span></span></caption>
+        <thead><tr>{{range $.Weekdays}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+        <tbody>{{range .Weeks}}
+          <tr>{{range .}}{{if not .Day}}<td></td>{{else if .Off}}<td class="off">{{.Day}}</td>{{else}}<td class="l{{.Level}}{{if .Today}} now{{end}}" title="{{if .Posts}}{{T "archives.day" "date" .Date "n" .Posts}}{{else}}{{T "archives.day.none" "date" .Date}}{{end}}">{{.Day}}</td>{{end}}{{end}}</tr>{{end}}
+        </tbody>
+      </table>{{end}}
+    </div>
+    <div class="archkey"><span>{{T "archives.less"}}</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>{{T "archives.more"}}</span></div>
     <div class="statusbar"><span>{{.Message}}</span></div>
   </div>
 </div>
@@ -4857,7 +4925,8 @@ document.addEventListener("change", e => {
 {{define "rxs"}}{{if .Reactions}}<div class="rxs">{{range .Reactions}}<button type="button" class="btn rx" data-e="{{.Emoji}}" data-name="{{rxname .Emoji}}" data-ids="{{words .By}}" aria-label="{{T "rx.label" "name" (rxname .Emoji) "n" (len .By)}}" title="{{T "rx.tip" "n" (len .By)}}"><span class="em">{{.Emoji}}</span><span class="n">{{len .By}}</span></button>{{end}}</div>{{end}}{{end}}
 
 {{/* The Navigation window (PLAN.md, The signed-in reader's desk): a
-     signed-in reader's Home, Notifications, Bookmarks and Profile. The
+     signed-in reader's Home, Notifications, Bookmarks, Profile and
+     Archives. The
      addresses need the reader's id, which only the browser knows: the
      script right after the window writes them from the wallet remembered
      here, before the first paint, and selects the page's own row; the
@@ -4872,6 +4941,7 @@ document.addEventListener("change", e => {
     <a class="place" data-to="notifications">{{template "g-bell"}}<span>{{T "nav.notifications"}}</span></a>
     <a class="place" data-to="bookmarks">{{template "g-ribbon"}}<span>{{T "nav.bookmarks"}}</span></a>
     <a class="place" data-to="profile">{{template "g-person"}}<span>{{T "nav.profile"}}</span></a>
+    <a class="place" data-to="archives" href="/archives{{.Q}}">{{template "g-box"}}<span>{{T "nav.archives"}}</span></a>
   </nav></div>
 </div>
 <script>
@@ -4880,12 +4950,12 @@ window.hubNav = id => {
   if (!nav) return;
   const ok = /^[0-9a-f]{16}$/.test(id || "");
   for (const a of nav.querySelectorAll(".place")) {
-    const to = a.dataset.to;
-    if (to !== "home") {
+    const to = a.dataset.to, hubs = to === "home" || to === "archives"; // the hub's own pages: their addresses need no id
+    if (!hubs) {
       if (ok) a.href = "/u/" + id + (to === "profile" ? "" : "/" + to) + nav.dataset.q;
       else a.removeAttribute("href");
     }
-    const on = to === nav.dataset.page && (to === "home" || (ok && nav.dataset.for === id));
+    const on = to === nav.dataset.page && (hubs || (ok && nav.dataset.for === id));
     a.classList.toggle("on", on);
     if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
@@ -4899,6 +4969,8 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
 {{define "g-bell"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M11 3h2v1h-2zM9 4h6v1h-6zM8 5h8v1h-8zM8 6h8v1h-8zM7 7h10v1h-10zM7 8h10v1h-10zM7 9h10v1h-10zM7 10h10v1h-10zM7 11h10v1h-10zM6 12h12v1h-12zM6 13h12v1h-12zM5 14h14v1h-14zM4 15h16v1h-16zM3 16h18v1h-18zM11 18h2v1h-2zM11 19h2v1h-2z"/><path class="k" d="M11 1h2v1h-2zM10 2h4v1h-4zM9 3h2v1h-2zM13 3h2v1h-2zM8 4h1v1h-1zM15 4h1v1h-1zM7 5h1v1h-1zM16 5h1v1h-1zM7 6h1v1h-1zM16 6h1v1h-1zM6 7h1v1h-1zM17 7h1v1h-1zM6 8h1v1h-1zM17 8h1v1h-1zM6 9h1v1h-1zM17 9h1v1h-1zM6 10h1v1h-1zM17 10h1v1h-1zM6 11h1v1h-1zM17 11h1v1h-1zM5 12h1v1h-1zM18 12h1v1h-1zM5 13h1v1h-1zM18 13h1v1h-1zM4 14h1v1h-1zM19 14h1v1h-1zM3 15h1v1h-1zM20 15h1v1h-1zM2 16h1v1h-1zM21 16h1v1h-1zM2 17h20v1h-20zM10 18h1v1h-1zM13 18h1v1h-1zM10 19h1v1h-1zM13 19h1v1h-1zM11 20h2v1h-2z"/></svg>{{end}}
 {{define "g-ribbon"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M7 3h10v14h-10zM7 17h4v1h-4zM13 17h4v1h-4zM7 18h3v1h-3zM14 18h3v1h-3zM7 19h2v1h-2zM15 19h2v1h-2zM7 20h1v1h-1zM16 20h1v1h-1z"/><path class="k" d="M6 2h12v1h-12zM6 3h1v20h-1zM17 3h1v20h-1zM11 17h2v1h-2zM10 18h1v1h-1zM13 18h1v1h-1zM9 19h1v1h-1zM14 19h1v1h-1zM8 20h1v1h-1zM15 20h1v1h-1zM7 21h1v1h-1zM16 21h1v1h-1z"/></svg>{{end}}
 {{define "g-person"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M9 3h6v1h-6zM8 4h8v4h-8zM9 8h6v1h-6zM8 12h8v1h-8zM6 13h12v1h-12zM5 14h14v1h-14zM4 15h16v2h-16zM3 17h18v3h-18z"/><path class="k" d="M9 2h6v1h-6zM8 3h1v1h-1zM15 3h1v1h-1zM7 4h1v4h-1zM16 4h1v4h-1zM8 8h1v1h-1zM15 8h1v1h-1zM9 9h6v1h-6zM8 11h8v1h-8zM6 12h2v1h-2zM16 12h2v1h-2zM5 13h1v1h-1zM18 13h1v1h-1zM4 14h1v1h-1zM19 14h1v1h-1zM3 15h1v2h-1zM20 15h1v2h-1zM2 17h1v3h-1zM21 17h1v3h-1zM2 20h20v1h-20z"/></svg>{{end}}
+
+{{define "g-box"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M3 4h18v3h-18zM4 8h16v13h-16z"/><path class="k" d="M2 3h20v1h-20zM2 4h1v3h-1zM21 4h1v3h-1zM2 7h20v1h-20zM3 8h1v13h-1zM20 8h1v13h-1zM3 21h18v1h-18zM9 11h6v1h-6zM9 12h1v1h-1zM14 12h1v1h-1zM9 13h6v1h-6z"/></svg>{{end}}
 
 {{define "del"}}<button type="button" class="btn del" title="{{T "delete.title"}}">{{T "delete"}}</button>{{end}}
 
