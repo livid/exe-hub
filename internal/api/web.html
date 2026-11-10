@@ -351,6 +351,22 @@ a.mention { text-decoration: none; }
   .tk-read { flex-basis: 100%; text-align: left; }
   .tk-mk .opt { display: none; }
 }
+/* the Pictures page (PLAN.md, Pictures): every picture the hub holds,
+   the newest first, a month a block of tiles under the month's name.
+   A tile is a square on a 1px grey line, four across in the window and
+   three on a phone, the picture filling it (object-fit: cover) so the
+   wall is even; a drawing stands whole in its tile, pixel for pixel on
+   white, as the pad drew it. The tile is the way to its post. */
+.wallcap { padding: 10px 12px 6px; font-size: 12px; font-weight: bold; line-height: 16px; }
+.wall { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
+.tile { display: block; box-sizing: border-box; aspect-ratio: 1 / 1; border: 1px solid #999; background: #fff; overflow: hidden; }
+.tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tile img.draw { object-fit: contain; image-rendering: pixelated; }
+.wallnone { padding: 14px 12px; color: #666; }
+@media (max-width: 480px) {
+  .wall { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 8px 10px; }
+  .wallcap { padding: 8px 8px 6px; }
+}
 /* narrower than that, the Summary is a press away (Livid's phone
    design, 2026-09-24): Summarize, a push button between Feed and the
    language menu on the thread's top strip, there only when the thread
@@ -1526,6 +1542,23 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
       </table>{{end}}
     </div>
     <div class="archkey"><span>{{T "archives.less"}}</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>{{T "archives.more"}}</span></div>
+    <div class="statusbar"><span>{{.Message}}</span></div>
+  </div>
+</div>
+</div>
+</div>
+{{else if eq .Page "pictures"}}
+<div class="desk">
+{{template "nav" .}}
+<div class="main">
+<div class="window">
+  <div class="titlebar"><a class="tbox" href="{{if .Wall.Of}}/u/{{.Wall.Of.ID}}{{else}}/{{end}}{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{if .Wall.Of}}{{T "pictures.of" "name" .Wall.Name}}{{else}}{{T "pictures"}}{{end}}</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="pager top">{{if .Wall.Of}}<a class="btn prev back" href="/u/{{.Wall.Of.ID}}{{.Q}}">{{template "arrow"}}<span>{{.Wall.Name}}</span></a>{{else}}<a class="btn prev back" href="/{{.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{end}}{{template "lang" .}}</div>
+    {{range .Wall.Months}}<div class="wallcap">{{$.MonthName .Year .Month}}</div>
+    <div class="wall">{{range .Tiles}}<a class="tile" href="/p/{{.Post}}{{$.Q}}" title="{{T "pictures.tile" "name" .Name "date" .Date}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}" loading="lazy"{{if .Drawing}} class="draw"{{end}}></a>{{end}}</div>
+    {{else}}<div class="wallnone">{{T "pictures.none"}}</div>{{end}}
+    {{if .Wall.Next}}<div class="pager"><span class="stats"></span><a class="btn next fwd" href="{{if .Wall.Of}}/u/{{.Wall.Of.ID}}{{end}}/pictures?{{if .Lang}}lang={{.Lang}}&amp;{{end}}before={{.Wall.Next}}"><span>{{T "pictures.older"}}</span>{{template "arrow-r"}}</a></div>{{end}}
     <div class="statusbar"><span>{{.Message}}</span></div>
   </div>
 </div>
@@ -5474,6 +5507,7 @@ document.addEventListener("change", e => {
     <a class="place" data-to="bookmarks">{{template "g-ribbon"}}<span>{{T "nav.bookmarks"}}</span></a>
     <a class="place" data-to="profile">{{template "g-person"}}<span>{{T "nav.profile"}}</span></a>
     <a class="place" data-to="archives" href="/archives{{.Q}}">{{template "g-box"}}<span>{{T "nav.archives"}}</span></a>
+    <a class="place" data-to="pictures" href="/pictures{{.Q}}">{{template "g-frame"}}<span>{{T "nav.pictures"}}</span></a>
   </nav></div>
 </div>
 <script>
@@ -5503,6 +5537,8 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
 {{define "g-person"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M9 3h6v1h-6zM8 4h8v4h-8zM9 8h6v1h-6zM8 12h8v1h-8zM6 13h12v1h-12zM5 14h14v1h-14zM4 15h16v2h-16zM3 17h18v3h-18z"/><path class="k" d="M9 2h6v1h-6zM8 3h1v1h-1zM15 3h1v1h-1zM7 4h1v4h-1zM16 4h1v4h-1zM8 8h1v1h-1zM15 8h1v1h-1zM9 9h6v1h-6zM8 11h8v1h-8zM6 12h2v1h-2zM16 12h2v1h-2zM5 13h1v1h-1zM18 13h1v1h-1zM4 14h1v1h-1zM19 14h1v1h-1zM3 15h1v2h-1zM20 15h1v2h-1zM2 17h1v3h-1zM21 17h1v3h-1zM2 20h20v1h-20z"/></svg>{{end}}
 
 {{define "g-box"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M3 4h18v3h-18zM4 8h16v13h-16z"/><path class="k" d="M2 3h20v1h-20zM2 4h1v3h-1zM21 4h1v3h-1zM2 7h20v1h-20zM3 8h1v13h-1zM20 8h1v13h-1zM3 21h18v1h-18zM9 11h6v1h-6zM9 12h1v1h-1zM14 12h1v1h-1zM9 13h6v1h-6z"/></svg>{{end}}
+
+{{define "g-frame"}}<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="w" d="M3 4h18v16h-18z"/><path class="k" d="M2 3h20v1h-20zM2 4h1v16h-1zM21 4h1v16h-1zM2 20h20v1h-20zM15 6h3v1h-3zM14 7h1v3h-1zM18 7h1v3h-1zM15 10h3v1h-3zM8 11h1v1h-1zM7 12h1v1h-1zM9 12h1v1h-1zM6 13h1v1h-1zM10 13h1v1h-1zM5 14h1v1h-1zM11 14h1v1h-1zM14 14h1v1h-1zM4 15h1v1h-1zM12 15h1v1h-1zM13 15h1v1h-1zM15 15h1v1h-1zM16 16h1v1h-1zM17 17h1v1h-1zM18 18h1v1h-1zM3 16h1v1h-1zM4 17h1v1h-1zM5 17h1v1h-1zM6 17h1v1h-1zM7 17h1v1h-1zM8 17h1v1h-1zM9 17h1v1h-1zM10 17h1v1h-1zM11 17h1v1h-1zM12 17h1v1h-1zM13 17h1v1h-1zM14 17h1v1h-1zM15 17h1v1h-1zM16 17h1v1h-1z"/></svg>{{end}}
 
 {{define "del"}}<button type="button" class="btn del" title="{{T "delete.title"}}">{{T "delete"}}</button>{{end}}
 

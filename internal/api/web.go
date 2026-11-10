@@ -539,7 +539,7 @@ type webData struct {
 	Compose        *webCompose // the wallet strip: the home page's first page, every thread, Notifications and Bookmarks
 	// the Navigation window (PLAN.md, The signed-in reader's desk): the
 	// page carries it (set by webRender), the row it is ("home",
-	// "notifications", "bookmarks", "profile", "archives", or "" for none) and the
+	// "notifications", "bookmarks", "profile", "archives", "pictures", or "" for none) and the
 	// profile id it is for, whose row is selected only for that reader
 	Nav           bool
 	NavOn, NavFor string
@@ -568,6 +568,7 @@ type webData struct {
 	Badge     *webBadge    // the badge page's snippets and the GIF's facts
 	Archives  *webArchives // the Archives page's calendars (archives.go)
 	Token     *webToken    // the token page (token.go)
+	Wall      *webWall     // the Pictures page's tiles (pictures.go)
 	// one day of the Archives: the day as its address has it (2006-01-02)
 	// and as the window's title says it
 	Day, DayName string
@@ -1472,7 +1473,7 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	}
 	d.Push = s.Push != nil
 	switch d.Page {
-	case "home", "notifications", "bookmarks", "profile", "archives":
+	case "home", "notifications", "bookmarks", "profile", "archives", "pictures":
 		d.Nav, d.NavOn = true, d.Page
 	case "day": // a day of the Archives stands under their row
 		d.Nav, d.NavOn = true, "archives"

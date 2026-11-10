@@ -2226,6 +2226,59 @@ for markets, history, holders, metadata and social.
   checks at ratios 1, 1.5 and 2 and on a phone).
 - **Not built:** the largest holders, the reader's own holding on the
   page, a JSON form (`/v1/token`) for the Hub app, candles as candles.
+## Pictures — every picture the hub holds (built 2026-11-10)
+
+Claude's idea of 2026-11-10, Livid the same day: "I love this idea. Do
+it." The hub's pictures had no page of their own: a picture appeared
+only under its post, and the feed is words first.
+
+- **The page.** `GET /pictures` is one window titled Pictures: every
+  picture a post carries as its own, the newest post first, a month a
+  block under the month's name (the Archives' `MonthName`, in the page's
+  language), each picture a square tile on a 1px grey line, four across
+  in the 640px window and three on a phone. A picture fills its tile
+  (`object-fit: cover`) so the wall is even; a drawing (the pads,
+  `isDrawing`) stands whole in its tile, pixel for pixel on white. A
+  tile's title is the author's name and the post's day; the tile is the
+  way to its post, `/p/{id}`. Feed and the language menu head it as on
+  the Archives; the status line says how many pictures the whole wall
+  holds. The Navigation window has a Pictures row after Archives, with a
+  framed-picture glyph (`g-frame`), selected on the page: the hub's own
+  page like Home and Archives, its address needs no id.
+- **What is a picture.** The author's own pictures only: an attached
+  embed whose MIME type is `image/*` (a drawing's PNG among them), and a
+  linked IPFS picture the hub keeps a copy of (`pictures`, status `ok`,
+  Linked pictures). Never a card's picture, a YouTube poster or a
+  video's poster: those are the hub's derivation, not the author's
+  content. A file that is not a picture is not on the wall.
+- **The order is the post's.** The wall sorts by the post's time as the
+  Archives count it (`postTimeSQL`: a time ahead of the hub's clock is
+  not believed), never by when the hub fetched a linked picture — a
+  linked picture lands hours after its post, and `pictures.ts` says
+  when (Codex's catch, 2026-11-10). Within a post, the attached
+  pictures first in their order, then the linked ones in theirs.
+- **Pages end at a post.** A page holds about 48 pictures
+  (`store.Wall`, `wallPage`): the query reads eight rows past the limit
+  (a post holds at most four attached and four linked) and the page
+  ends at the last picture of the post that crossed the limit, so one
+  post's pictures never split over two pages. Older, the page's one
+  pager button, carries the last post shown as the cursor
+  (`?before=<post id>`, keyset like a day of the Archives); an unknown
+  cursor has no page, and a paged wall is not canonical. The wall is
+  read per request — one indexed query, and a new picture is on the
+  wall as soon as its post is in the feed — where the Archives keep
+  their counts in memory.
+- **One profile's wall.** `GET /u/{id}/pictures` is the same wall for
+  one profile's posts, titled "Pictures by {name}", its back button the
+  profile; a profile the hub does not know has no wall.
+- **Words.** `nav.pictures`, `pictures`, `pictures.desc`, `pictures.of`,
+  `pictures.of.desc`, `pictures.tile`, `pictures.none`, `pictures.older`,
+  `pictures.n` (`.one`), `err.pictures`, in the four catalogs.
+- **Tested** by `go test ./internal/api` (TestWebPictures: the wall in
+  three languages, a drawing's tile, a file kept off it, a profile's
+  wall, the row; TestWebPicturesPaged: a page ends at a post's last
+  picture, Older's cursor, the count is the whole wall's) and looked at
+  in headless Chromium at device pixel ratios 1, 1.5 and 2.
 
 ## Reactions — an emoji on a post (built 2026-10-28)
 
