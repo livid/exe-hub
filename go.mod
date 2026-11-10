@@ -26,9 +26,3 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
-
-// Until exe-stats v0.4.0 is on GitHub (tagged in /www/exe-stats on
-// 2026-11-10, not yet pushed) the hub builds from the checkout beside
-// it. Once the tag is pushed: drop this line and run
-// `go get github.com/livid/exe-stats@v0.4.0`.
-replace github.com/livid/exe-stats => /www/exe-stats
