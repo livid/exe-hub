@@ -79,8 +79,8 @@ func (s *Server) activity(id string, now time.Time, l *webLocale) (*webActivity,
 // it); a day after today, or before the hub's first, is off; the levels
 // are the quarters among the profile's days with posts, so a light
 // poster gets the whole range too. A month's name stands over the
-// column that holds its first day, except in the last two columns,
-// where the frame would cut it.
+// column that holds its first day, except in the last column, where
+// the frame would cut it: a name is about two columns wide.
 func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLocale) *webActivity {
 	loc := now.Location()
 	today := now.Format("2006-01-02")
@@ -117,7 +117,7 @@ func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLoc
 			date := d.Format("2006-01-02")
 			c := n[date]
 			wk.Days[i] = webActDay{Date: date, Posts: c, Level: level(c), Off: date > today || date < first, Today: date == today}
-			if d.Day() == 1 && w < actWeeks-2 && int(d.Month()) <= len(months) {
+			if d.Day() == 1 && w < actWeeks-1 && int(d.Month()) <= len(months) {
 				wk.Label = months[d.Month()-1]
 			}
 			if date >= start.Format("2006-01-02") && date <= today {

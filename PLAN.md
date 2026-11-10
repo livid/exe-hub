@@ -2399,8 +2399,8 @@ grids?", then "do it, use memcache".
   "no posts". A square's title is the Archives' ("2026-11-09 · 12
   posts", "… · no posts"); no link yet, the hub has no page for one
   person's day. The month that begins in a column stands over it in
-  the grid's small grey type, except in the last two columns, where
-  the frame would cut it; M, W and F at the left, every other weekday
+  the grid's small grey type, except in the last column, where the
+  frame would cut it (a name is about two columns wide); M, W and F at the left, every other weekday
   letter of the Archives' row. Under the grid, "290 posts in the last
   year" at the left and the Archives' Less–More key at the right; a
   1px #ddd line under the block, then the posts. 52 columns and the

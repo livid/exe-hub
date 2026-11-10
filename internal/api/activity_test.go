@@ -70,11 +70,11 @@ func TestBuildActivity(t *testing.T) {
 			labels = append(labels, w.Label)
 		}
 	}
-	if want := "Dec Jan Feb Mar Apr May Jun Jul Aug Sep Oct"; strings.Join(labels, " ") != want { // Nov 1 is in the 51st column: cut
+	if want := "Dec Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov"; strings.Join(labels, " ") != want { // Nov 1 is in the 51st column, with room
 		t.Errorf("months %v, want %s", labels, want)
 	}
-	if a.Weeks[51].Label != "" || a.Weeks[50].Label != "" {
-		t.Error("a name in the last two columns")
+	if a.Weeks[51].Label != "" || a.Weeks[50].Label != "Nov" {
+		t.Errorf("the last columns are named %q %q", a.Weeks[50].Label, a.Weeks[51].Label)
 	}
 	if a.Weeks[2].Label != "Dec" {
 		t.Errorf("December's name is over column %q", a.Weeks[2].Label)
