@@ -2316,8 +2316,54 @@ for markets, history, holders, metadata and social.
     signs nothing, Jupiter and the hub's status answered by the test,
     366 checks, the count of quotes and a refusal waited out among
     them; `LIVE=1` adds one real price from Jupiter.
+- **The Profile dialog's holding** (2026-11-10; Livid: "when a logged in
+  user click Profile, our current token info there is too bare bone,
+  make it better and more useful"). The dialog's Holding row was two
+  lines of words — "0 tokens of 9raU…pump" and a sentence. It is three
+  rows now, all set before the dialog opens, so it opens at its size:
+  - **Holding**, for each of the gate's tokens the hub read: the
+    token's picture in a 32px box (the hub's own copy, `/token/{mint}/
+    icon`; grey when there is none), the holding in bold with its
+    symbol and what it is worth ("12,345.5 V2EX ≈ $24.10"), under it
+    the price of one and the day's change ("$0.00195224 each · +0.77%
+    in 24h", the change green with a plus or red with a minus), and
+    **About $V2EX**, the way to the token's page. Without a price the
+    worth and the price line are left out; a token nobody has said the
+    decimals of keeps the old bare line.
+  - **Posting**: when the address may post, a green tick and "Enough
+    to post. The hub asks for 10,000 V2EX." When it holds too little, a
+    progress bar — a sunken grey track with a black line round it, 12px
+    high, filled in the highlight's lavender as far as the holding
+    reaches toward what the gate asks (`role="progressbar"`) — then
+    what is missing ("7,500 V2EX more to post. The hub asks for 10,000
+    V2EX.") and **Buy $V2EX…** on a line of its own: the guide's
+    button, which closes the dialog and opens the Buy window for this
+    address. An admin's key, an invited one, a banned one and a hub
+    that cannot check say so in a sentence, as before. No row on a hub
+    with an open gate.
+  - **Address**: the wallet's own, cut short, whole under the pointer,
+    with **Copy** — the address to send tokens to from elsewhere. The
+    button holds Copy and Copied one over the other and shows one, so
+    saying Copied moves nothing; where the browser has no clipboard
+    (plain http) the address is shown whole and selected.
+  - **Read now.** Opening Profile has the hub read the balance again
+    (`/v1/gate?fresh=1`, the guide's own call): what the dialog says
+    the address holds is what it holds, not the gate's kept verdict of
+    up to ten minutes ago. A hub with no checks to spare (429) answers
+    from what it keeps.
+  - `/v1/gate`'s `mints` carry `price` (US dollars) and `change` (the
+    day's, in percent) beside `symbol`, when Jupiter has said them:
+    `token.Source.Glance`, which never waits and asks again behind the
+    caller when its answer has grown old.
+  - Tests: `TestGateGuide` (the price and change in the answer); in a
+    browser `HUB=… node ~/tools/playwright/exe-hub-profile-holding-
+    test.js` — a mock wallet, the gate's answer the test's, 98 checks:
+    nothing held, part, enough, a large holding, a phone, no price;
+    three languages; the dialog's size unchanged after it opens and
+    after Copy; Buy from the dialog.
 - **Words** in English, Chinese (both scripts' tables) and Japanese,
-  keys `token.*`, `buy.*`, `guide.*`, `err.notoken`, `err.nomint`; figures are set the same
+  keys `token.*`, `buy.*`, `guide.*`, `held.*`, `gate.more`,
+  `profile.posting`, `profile.address`, `err.notoken`, `err.nomint`; figures are set the same
   in all three ($ and a comma every three digits). Stats count it as
   kind `token`, labelled "Token: 9raU…pump".
 - **Tests.** `internal/token`: the three places faked, precedence, the

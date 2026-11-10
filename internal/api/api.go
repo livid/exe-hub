@@ -451,7 +451,8 @@ func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
 					wm.Held = humanUnits(n, dec)
 				}
 			}
-			wm.Symbol = s.tokens().Symbol(m.Mint)
+			g := s.tokens().Glance(m.Mint)
+			wm.Symbol, wm.Price, wm.Change = g.Symbol, g.Price, g.Change
 			out.Mints = append(out.Mints, wm)
 		}
 	}

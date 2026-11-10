@@ -759,6 +759,47 @@ html[data-saved] .saved { display: flex; }
 .compose .ival .sub { display: block; font-size: 11px; color: #555; }
 /* the dialog's message line holds two lines of room before anything is
    said, so a note or an error (a declined signature wraps) moves nothing */
+/* what the address holds, and what that means here (PLAN.md, The token
+   page — The Profile dialog's holding). Holding: the token's picture in
+   a 32px box, the holding in bold with what it is worth, the token's
+   price and the day's change under it — the change's sign says which
+   way, its colour says it again — and the way to the token's page.
+   Posting: a tick and a sentence when the address may post; when it
+   holds too little, a progress bar — a sunken grey track with a black
+   line round it, filled in the highlight's lavender as far as the
+   holding reaches toward what the gate asks — what is still missing,
+   and Buy on a line of its own. Address: the wallet's own, cut short,
+   whole under the pointer, with Copy. The rows' labels sit on their
+   first lines. */
+.compose .held-irow, .compose .gate-irow { align-items: flex-start; }
+.compose .held-irow .ilab, .compose .gate-irow .ilab { line-height: 16px; }
+.compose .p-held, .compose .p-gate { line-height: 16px; }
+.compose .p-held .tk { display: flex; align-items: flex-start; gap: 8px; }
+.compose .p-held .tk + .tk { margin-top: 8px; }
+.compose .p-held .tk-ic { flex: none; box-sizing: border-box; width: 32px; height: 32px; border: 1px solid #262626; background: #ccc; }
+.compose .p-held .tk-ic img { display: block; width: 30px; height: 30px; }
+.compose .p-held .tk-b { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+.compose .p-held .worth { font-size: 11px; color: #555; }
+.compose .p-held .chg { white-space: nowrap; }
+.compose .p-held .up { color: #1f7a3a; }
+.compose .p-held .down { color: #b01c1c; }
+.compose .p-held a { font-size: 11px; font-weight: bold; text-decoration: none; }
+.compose .p-held a:hover { text-decoration: underline; }
+.compose .p-gate .ok { display: flex; align-items: flex-start; gap: 6px; }
+.compose .p-gate .ok svg { flex: none; margin-top: 5px; shape-rendering: crispEdges; }
+.compose .p-gate .ok svg path { fill: #1f7a3a; }
+.compose .gbar { box-sizing: border-box; height: 12px; margin: 2px 0 4px; border: 1px solid #262626; background: #aaa; box-shadow: inset 1px 1px 0 #888; }
+.compose .gbar i { display: block; box-sizing: border-box; height: 100%; min-width: 0; background: #9999ff; box-shadow: inset 1px 1px 0 #ccccff, inset -1px -1px 0 #6666cc; }
+.compose .gbar i.some { border-right: 1px solid #262626; }
+.compose .p-gate .p-buy { display: block; margin-top: 8px; }
+.compose .addr-irow { align-items: center; min-height: 20px; }
+.compose .p-addr { display: flex; align-items: center; gap: 12px; }
+/* Copy holds both its words, one over the other, and shows one: the
+   button is as wide as the wider from the start, and saying Copied
+   moves nothing */
+.compose .p-addr .p-copy { display: inline-grid; justify-items: center; min-width: 58px; }
+.compose .p-copy span { grid-area: 1 / 1; }
+.compose .p-copy:not(.done) span:last-child, .compose .p-copy.done span:first-child { visibility: hidden; }
 .compose .p-note { font-size: 11px; line-height: 16px; min-height: 32px; margin-top: 6px; color: #555; }
 .compose .p-note.err { color: #cc3333; }
 .compose .btns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; }
@@ -3695,6 +3736,7 @@ document.addEventListener("change", e => {
   const note = q(".note"), signin = q(".signin"), picker = q(".picker"), pickOff = q(".pick-off");
   const text = q(".text"), send = q(".send"), status = q(".status"), profileBtn = q(".profile-btn");
   const veil = q(".veil"), pName = q(".p-name"), nameField = q(".name-field"), pHeld = q(".p-held"), pNote = q(".p-note");
+  const pGate = q(".p-gate"), pGateRow = q(".gate-irow"), pAddress = q(".p-address"), pCopy = q(".p-copy");
   const pEdit = q(".p-edit"), pOk = q(".p-ok"), pCancel = q(".p-cancel"), pSave = q(".p-save");
   const pAva = q(".p-ava img"), pChoose = q(".p-choose"), pFile = q(".p-file");
   const drawBtn = q(".draw-btn");
@@ -4836,20 +4878,87 @@ document.addEventListener("change", e => {
   let editing = false;
   const pSay = (t, err) => { pNote.textContent = t; pNote.classList.toggle("err", !!err); };
   const span = (cls, t) => Object.assign(document.createElement("span"), { className: cls, textContent: t });
+  // What the address holds (PLAN.md, The token page — The Profile
+  // dialog's holding). For each of the gate's tokens the hub read: its
+  // picture, the holding with its symbol and what it is worth, the
+  // price of one and the day's change, and the way to its page. A token
+  // nobody has said the decimals of is the bare line it always was.
+  const money = v => "$" + (v >= 1000 ? Math.round(v).toLocaleString("en-US")
+    : v >= 1 ? v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : v.toFixed(Math.min(12, Math.max(2, 1 - Math.floor(Math.log10(v))))));
+  const each = p => "$" + (p >= 1 ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : p.toFixed(Math.min(12, Math.max(0, 5 - Math.floor(Math.log10(p))))));
+  const node = (tag, cls, t) => Object.assign(document.createElement(tag), { className: cls || "" }, t === undefined ? {} : { textContent: t });
+  // a token as the dialog names an amount of it: its symbol, else "tokens"
+  const amount = (n, m) => m.symbol && !m.raw ? n + " " + m.symbol : T(m.raw ? "units.raw" : "units.tokens", { n });
   function holding(v) {
     if (v.mode !== "token") return [span("line", T("nogate"))];
-    const known = (v.mints || []).filter(m => m.held);
-    const lines = known.length
-      ? known.map(m => span("line", T("of.mint", { units: T(m.raw ? "units.raw" : "units.tokens", { n: m.held }), mint: short(m.mint) })))
-      : [span("line", T("unknown"))];
-    const needs = (v.mints || []).map(m => T(m.raw ? "units.raw" : "units.tokens", { n: m.amount })).join(T("or"));
-    const why = v.banned ? T("banned")
-      : v.gate === "admin" ? T("admin")
-      : v.gate === "invited" ? T("invited")
-      : v.gate === "pass" ? T("enough", { need: needs })
-      : v.gate === "below" ? T("less", { need: needs })
-      : "";
-    return why ? [...lines, span("sub", why)] : lines;
+    const known = (v.mints || []).filter(m => m.held !== undefined);
+    if (!known.length) return [span("line", T("unknown"))];
+    return known.map(m => {
+      if (m.raw || typeof m.decimals !== "number") return span("line", T("of.mint", { units: T(m.raw ? "units.raw" : "units.tokens", { n: m.held }), mint: short(m.mint) }));
+      const box = node("span", "tk"), ic = node("span", "tk-ic"), b = node("span", "tk-b"), img = node("img");
+      // the hub's own copy of the token's picture; none, and the box stays grey
+      img.alt = "";
+      img.addEventListener("error", () => img.remove());
+      img.src = "/token/" + encodeURIComponent(m.mint) + "/icon";
+      ic.append(img);
+      const first = node("span", "line"), n = count(m.held);
+      first.append(node("b", "", amount(m.held, m)));
+      if (m.price > 0 && n > 0) first.append(" ", node("span", "worth", "≈ " + money(n * m.price)));
+      b.append(first);
+      if (m.price > 0) {
+        const second = node("span", "sub", T("held.each", { price: each(m.price) }));
+        if (typeof m.change === "number") {
+          const c = Math.abs(m.change).toFixed(2), sign = c === "0.00" ? "" : m.change < 0 ? "−" : "+";
+          second.append(" · ", node("span", "chg" + (sign === "+" ? " up" : sign === "−" ? " down" : ""), T("held.day", { change: sign + c + "%" })));
+        }
+        b.append(second);
+      }
+      const about = node("a", "", T("held.about", { symbol: m.symbol ? "$" + m.symbol : short(m.mint) }));
+      const lang = new URLSearchParams(location.search).get("lang"); // the page's language rides the link
+      about.href = "/token/" + encodeURIComponent(m.mint) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
+      b.append(node("span", "line").appendChild(about).parentNode);
+      box.append(ic, b);
+      return box;
+    });
+  }
+  // What that means here: whether the address may post. Short of what
+  // the gate asks, it is a bar that shows how far the holding reaches,
+  // what is still missing, and Buy — the guide's own button, in the
+  // dialog: it closes the dialog and opens the Buy window.
+  function posting(v) {
+    if (v.mode !== "token") return null;
+    const needs = (v.mints || []).map(m => amount(m.amount, m)).join(T("or"));
+    const l = lack();
+    if (v.banned) return [span("line", T("banned"))];
+    if (v.gate === "admin" || v.gate === "invited") return [span("line", T(v.gate))];
+    if (v.gate === "pass") {
+      const ok = node("span", "ok");
+      ok.innerHTML = '<svg viewBox="0 0 9 7" width="9" height="7" aria-hidden="true"><path d="M8 0h1v1h-1zM7 1h2v1h-2zM6 2h2v1h-2zM0 3h1v1h-1zM5 3h2v1h-2zM0 4h2v1h-2zM4 4h2v1h-2zM1 5h4v1h-4zM2 6h2v1h-2z"/></svg>';
+      ok.append(span("", T("enough", { need: needs })));
+      return [ok];
+    }
+    if (v.gate === "below" && l) {
+      const need = count(l.m.amount), have = l.m.held === undefined ? 0 : count(l.m.held);
+      const share = need > 0 ? Math.max(0, Math.min(1, have / need)) : 0;
+      const bar = node("span", "gbar"), fill = node("i", share > 0 && share < 1 ? "some" : "");
+      bar.style.display = "block";
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", String(need)); bar.setAttribute("aria-valuenow", String(have));
+      fill.style.width = (share * 100).toFixed(2) + "%";
+      bar.append(fill);
+      const more = Math.max(0, need - have).toLocaleString("en-US", { maximumFractionDigits: 6 });
+      const out = [bar, span("line", T("gate.more", { more: amount(more, l.m), need: amount(l.m.amount, l.m) }))];
+      const buy = node("button", "btn p-buy", l.buy);
+      buy.type = "button";
+      buy.addEventListener("click", () => { closeProfile(); guideBuy.click(); });
+      out.push(buy);
+      return out;
+    }
+    if (v.gate === "below") return [span("line", T("less", { need: needs }))];
+    if (v.gate === "unavailable") return [span("line", T("unavailable"))];
+    return null;
   }
   let pending = ""; // a picture uploaded while editing, not yet saved
   const showAva = cid => {
@@ -4873,6 +4982,12 @@ document.addEventListener("change", e => {
     pName.textContent = me.profile && me.profile.name ? me.profile.name : T("noname");
     showAva(me.profile && me.profile.avatar);
     pHeld.replaceChildren(...holding(v));
+    const g = posting(v);
+    pGateRow.hidden = !g;
+    pGate.replaceChildren(...(g || []));
+    pAddress.textContent = short(me.address);
+    pAddress.title = me.address;
+    pCopy.classList.remove("done");
     // profile.set meets the gate like a post
     pEdit.disabled = v.banned || v.gate === "below" || v.gate === "unavailable";
   }
@@ -4884,8 +4999,14 @@ document.addEventListener("change", e => {
     if (!me || busy) return;
     profileBtn.disabled = true;
     try {
-      // fresh numbers before it shows, so the dialog opens at its final size
-      if (!adopt(await load())) return;
+      // fresh numbers before it shows, so the dialog opens at its final
+      // size — the balance read again by the hub, not its kept verdict,
+      // which may be ten minutes old: a reader who opens Profile to see
+      // what the address holds is shown what it holds now. A hub with
+      // no checks to spare answers from what it keeps.
+      let st;
+      try { st = await load(true); } catch (e) { st = await load(); }
+      if (!adopt(st)) return;
     } catch (e) {
       tell(e.message);
       return;
@@ -4898,6 +5019,22 @@ document.addEventListener("change", e => {
     pOk.focus();
   });
   pOk.addEventListener("click", () => { closeProfile(); profileBtn.focus(); });
+  // Copy: the wallet's whole address, to send it tokens from elsewhere.
+  // The button says Copied for a moment; its width does not change.
+  let copied = 0;
+  pCopy.addEventListener("click", async () => {
+    if (!me) return;
+    try { await navigator.clipboard.writeText(me.address); }
+    catch (e) {
+      // no clipboard here (plain http): select the address, shown whole, for the reader to copy
+      pAddress.textContent = me.address;
+      getSelection().selectAllChildren(pAddress);
+      return;
+    }
+    pCopy.classList.add("done");
+    clearTimeout(copied);
+    copied = setTimeout(() => pCopy.classList.remove("done"), 1500);
+  });
   pEdit.addEventListener("click", () => {
     editMode(true);
     nameField.value = me.profile && me.profile.name || "";
@@ -5687,7 +5824,9 @@ document.addEventListener("change", e => {
       <h2>{{T "profile.title"}}</h2>
       <div class="irow pic-irow"><span class="ilab">{{T "pic"}}</span><span class="ival pic"><span class="p-ava"><img alt="" hidden></span><button type="button" class="btn p-choose" hidden>{{T "choose"}}</button><input type="file" class="p-file" accept="image/png,image/jpeg,image/gif" hidden></span></div>
       <div class="irow name-irow"><span class="ilab">{{T "name"}}</span><span class="ival p-name"></span><input type="text" class="name-field" aria-label="{{T "display.name"}}" autocomplete="off" hidden></div>
-      <div class="irow"><span class="ilab">{{T "holding"}}</span><span class="ival p-held"></span></div>
+      <div class="irow held-irow"><span class="ilab">{{T "holding"}}</span><span class="ival p-held"></span></div>
+      <div class="irow gate-irow"><span class="ilab">{{T "profile.posting"}}</span><span class="ival p-gate"></span></div>
+      <div class="irow addr-irow"><span class="ilab">{{T "profile.address"}}</span><span class="ival p-addr"><span class="mono p-address"></span><button type="button" class="btn p-copy"><span>{{T "copy"}}</span><span>{{T "copied"}}</span></button></span></div>
       <div class="p-note"></div>
       <div class="btns"><button type="button" class="btn left p-edit">{{T "edit"}}</button><button type="button" class="btn p-cancel" hidden>{{T "cancel"}}</button><button type="button" class="btn default p-ok">{{T "ok"}}</button><button type="button" class="btn default p-save" hidden>{{T "save"}}</button></div>
     </div>

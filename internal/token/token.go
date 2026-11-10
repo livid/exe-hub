@@ -361,29 +361,47 @@ func (s *Source) Info(mint string) *Info {
 	return in
 }
 
-// Symbol is the token's symbol as far as anyone has answered yet, ""
-// when nobody has. It never waits: it reads the kept answers, and when
-// there are none it starts the asking behind the caller, so the next
-// one finds them. For a page that must not wait on Jupiter (the Post
-// window's guide, through /v1/gate).
-func (s *Source) Symbol(mint string) string {
+// Glance is what a page that must not wait says of a token: its symbol,
+// its price in US dollars and the day's change, each as far as anyone has
+// answered yet — "", 0 and nil when nobody has.
+type Glance struct {
+	Symbol string
+	Price  float64
+	Change *float64
+}
+
+// Glance reads the kept answers and never waits; when there are none it
+// starts the asking behind the caller, so the next one finds them, and
+// an answer grown old is asked for again the same way. For the Post
+// window's guide and the Profile dialog's holding, through /v1/gate.
+func (s *Source) Glance(mint string) Glance {
+	var g Glance
+	stale := false
 	s.mu.Lock()
-	var sym string
 	if sl := s.slots["asset:"+mint]; sl != nil && sl.ok {
 		if a, _ := sl.val.(*dasAsset); a != nil {
-			sym = a.Symbol
+			g.Symbol = a.Symbol
 		}
 	}
-	if sl := s.slots["jupiter:"+mint]; sym == "" && sl != nil && sl.ok {
+	if sl := s.slots["jupiter:"+mint]; sl != nil && sl.ok {
 		if j, _ := sl.val.(*jupToken); j != nil {
-			sym = j.Symbol
+			if g.Symbol == "" {
+				g.Symbol = j.Symbol
+			}
+			g.Price = j.USDPrice
+			if j.Stats24h != nil {
+				g.Change = j.Stats24h.PriceChange
+			}
 		}
+		stale = s.clock().Sub(sl.at) >= marketFresh
+	} else {
+		stale = true
 	}
 	s.mu.Unlock()
-	if sym == "" {
+	if stale {
 		go s.Info(mint)
 	}
-	return sym
+	return g
 }
 
 // Candles is the pool's price over r, the oldest first, and when it was

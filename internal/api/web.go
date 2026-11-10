@@ -481,6 +481,10 @@ type webMint struct {
 	// RPC has (Raw is false then)
 	Symbol   string `json:"symbol,omitempty"`
 	Decimals *int   `json:"decimals,omitempty"`
+	// and for the Profile dialog's holding: the token's price in US
+	// dollars and the day's change in percent, when Jupiter has said them
+	Price  float64  `json:"price,omitempty"`
+	Change *float64 `json:"change,omitempty"`
 }
 
 // wSOL is wrapped SOL's mint: what Jupiter's swap page sells when the

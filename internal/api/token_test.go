@@ -414,6 +414,8 @@ func TestGateGuide(t *testing.T) {
 			Amount, Held, Symbol, Mint string
 			Raw                        bool
 			Decimals                   *int
+			Price                      float64
+			Change                     *float64
 		}
 	}) {
 		t.Helper()
@@ -438,6 +440,10 @@ func TestGateGuide(t *testing.T) {
 	}
 	if v.Mints[0].Symbol != "V2EX" {
 		t.Errorf("symbol = %q", v.Mints[0].Symbol)
+	}
+	// with it, for the Profile dialog's holding, the price and the day's change
+	if m := v.Mints[0]; m.Price != 0.00194617 || m.Change == nil || *m.Change != -1.0744 {
+		t.Errorf("price %v, change %v, want Jupiter's 0.00194617 and -1.0744", m.Price, m.Change)
 	}
 	// the key buys: the kept verdict still says below, a fresh check does not
 	tw.held = "10010000000"
