@@ -90,7 +90,7 @@ func TestWebPictures(t *testing.T) {
 		"<title>Pictures by " + author2 + " · hub.example</title>",
 		`<span class="title"><a href="/">hub.example</a></span>`, // the profile's own window
 		`<h1>` + author2 + `</h1>`,
-		`<div class="tabbar ptabs" role="tablist"><a class="tab" href="/u/` + author2 + `">Posts</a><a class="tab active" href="/u/` + author2 + `/pictures" aria-current="page">Pictures</a></div>`,
+		`<div class="ptabs" role="tablist"><a class="btn ptab" href="/u/` + author2 + `">Posts</a><a class="btn ptab on" href="/u/` + author2 + `/pictures" aria-current="page">Pictures</a></div>`,
 		`<img src="/v1/embed/` + dog + `"`,
 		`<div class="statusbar"><span>1 picture</span></div>`,
 	} {
@@ -103,7 +103,7 @@ func TestWebPictures(t *testing.T) {
 	}
 	// the profile page has the tabs too, Posts on, and the zh query rides on both
 	if _, body := get(t, h, "/u/"+author2+"?lang=zh"); !strings.Contains(body,
-		`<div class="tabbar ptabs" role="tablist"><a class="tab active" href="/u/`+author2+`?lang=zh" aria-current="page">帖子</a><a class="tab" href="/u/`+author2+`/pictures?lang=zh">图片</a></div>`) {
+		`<div class="ptabs" role="tablist"><a class="btn ptab on" href="/u/`+author2+`?lang=zh" aria-current="page">帖子</a><a class="btn ptab" href="/u/`+author2+`/pictures?lang=zh">图片</a></div>`) {
 		t.Error("the profile page has no Posts | Pictures tabs")
 	}
 	if code, body := get(t, h, "/u/0123456789abcdef/pictures"); code != http.StatusOK || !strings.Contains(body, `<div class="wallnone">No pictures yet.</div>`) {
