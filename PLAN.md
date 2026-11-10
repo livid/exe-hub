@@ -2381,6 +2381,51 @@ only under its post, and the feed is words first.
   picture, Older's cursor, the count is the whole wall's) and looked at
   in headless Chromium at device pixel ratios 1, 1.5 and 2.
 
+## Activity — a year of a profile's days (built 2026-11-10)
+
+Livid, 2026-11-10: "at the top of posts tab, show github activity like
+grids?", then "do it, use memcache".
+
+- **The grid.** At the top of a profile's Posts pane, under the Piano
+  keys: a year of that profile's days as GitHub draws a year of
+  commits. A column is a week, Sunday at the top, 52 columns ending
+  with the week that holds today, the newest at the right; a square is
+  a day, 9px on a 2px gap, in the Archives' five grounds — #eee for no
+  post, then the four lavenders by the quarter the day's count falls
+  in among that profile's days with posts (`archLevels`), so a light
+  poster gets the whole range too. Today wears the black ring. A day
+  after today, or before the hub's first day, is off: no ground, no
+  title, so the empty months of a young hub read as "not yet", not as
+  "no posts". A square's title is the Archives' ("2026-11-09 · 12
+  posts", "… · no posts"); no link yet, the hub has no page for one
+  person's day. The month that begins in a column stands over it in
+  the grid's small grey type, except in the last two columns, where
+  the frame would cut it; M, W and F at the left, every other weekday
+  letter of the Archives' row. Under the grid, "290 posts in the last
+  year" at the left and the Archives' Less–More key at the right; a
+  1px #ddd line under the block, then the posts. 52 columns and the
+  letters make 586px, inside the pane's 606. A phone holds the last 26
+  weeks: the older columns and their names are hidden. The Pictures
+  tab has no grid.
+- **The days are the Archives'.** `store.AuthorDays(author, loc)` is
+  `PostDays` for one profile: a post's day is its own time in the
+  hub's day zone, a time more than ten minutes ahead of the hub's clock
+  not believed, a post dated after today counted as today's; replies
+  count, deleted posts do not. It also gives the day the hub received
+  its first post, where the ground begins.
+- **Kept in memory** (`internal/memcache`, as the Archives keep their
+  counts): the profile's day counts under `activity:{id}:{zone}:{day}`
+  for `archivesFresh`, five minutes, so a profile page costs no walk
+  over the profile's posts on every visit, and the key names the day
+  so the first reader after midnight lays the new square. The grid is
+  laid out per request from the kept counts, in the reader's language
+  (`activity.months`, the short names; `archives.weekdays`).
+- **Tested** by `go test ./internal/api` (TestBuildActivity: the
+  columns, the off days, the levels, the month names, the total;
+  TestWebActivity: the page's grid in two languages, the kept counts
+  and the redrawing, no grid on Pictures) and looked at in headless
+  Chromium at device pixel ratios 1, 1.5 and 2 and on a phone.
+
 ## Reactions — an emoji on a post (built 2026-10-28)
 
 Livid, 2026-10-28: "implement emoji reaction", from Claude Design's

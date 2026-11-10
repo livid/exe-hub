@@ -3315,6 +3315,45 @@ func (s *Store) PostDays(loc *time.Location) (days []DayPosts, first string, err
 	return days, time.UnixMilli(began).In(loc).Format("2006-01-02"), nil
 }
 
+// AuthorDays is PostDays for one profile's posts (PLAN.md, Activity):
+// the days author posted on, oldest first, each with its count, and the
+// day the hub received its first post of anyone's, "" on an empty hub —
+// the grid's days before it draw no ground. It reads the profile's rows
+// by the author index and one aggregate over posts, so its caller keeps
+// the answer for a while all the same.
+func (s *Store) AuthorDays(author string, loc *time.Location) (days []DayPosts, first string, err error) {
+	var began sql.NullInt64
+	if err := s.db.QueryRow(`SELECT MIN(received) FROM posts`).Scan(&began); err != nil {
+		return nil, "", err
+	}
+	if !began.Valid {
+		return nil, "", nil
+	}
+	first = time.UnixMilli(began.Int64).In(loc).Format("2006-01-02")
+	rows, err := s.db.Query(`SELECT ts, received FROM posts WHERE author = ?`, author)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	n := map[string]int{}
+	for rows.Next() {
+		var ts, received int64
+		if err := rows.Scan(&ts, &received); err != nil {
+			return nil, "", err
+		}
+		n[time.UnixMilli(postTime(ts, received)).In(loc).Format("2006-01-02")]++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	days = make([]DayPosts, 0, len(n))
+	for d, c := range n {
+		days = append(days, DayPosts{Day: d, Posts: c})
+	}
+	slices.SortFunc(days, func(a, b DayPosts) int { return strings.Compare(a.Day, b.Day) })
+	return days, first, nil
+}
+
 // postTime is when a post was sent as the Archives believe it: its own
 // time, or the time the hub received it when its own runs more than
 // postDaySkew ahead of that. postTimeSQL says the same of a row of p.

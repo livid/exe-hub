@@ -578,8 +578,9 @@ type webData struct {
 	Token     *webToken    // the token page (token.go)
 	// the Buy window is on the page (PLAN.md, The token page — Buy): the
 	// token page, and wherever the Post window is on a token-gated hub
-	BuyWin bool
-	Wall   *webWall // the Pictures page's tiles (pictures.go)
+	BuyWin   bool
+	Wall     *webWall     // the Pictures page's tiles (pictures.go)
+	Activity *webActivity // the profile's year of days (activity.go)
 	// one day of the Archives: the day as its address has it (2006-01-02)
 	// and as the window's title says it
 	Day, DayName string
@@ -2077,6 +2078,10 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusNotFound, "err.noprofile")
 		return
 	default:
+		s.webError(w, r, http.StatusInternalServerError, "err.profile")
+		return
+	}
+	if d.Activity, err = s.activity(d.Profile.ID, time.Now(), rd.L); err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "err.profile")
 		return
 	}
