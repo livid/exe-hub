@@ -203,6 +203,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /archives/{day}", s.counted("archives", s.handleArchiveDayPage))
 	mux.HandleFunc("GET /pictures", s.counted("pictures", s.handlePicturesPage))
 	mux.HandleFunc("GET /u/{id}/pictures", s.counted("pictures", s.handleProfilePicturesPage))
+	mux.HandleFunc("GET /u/{id}/pictures/{day}", s.counted("pictures", s.handleProfilePicturesDayPage))
+	mux.HandleFunc("GET /u/{id}/{day}", s.counted("profile", s.handleProfileDayPage))
 	mux.HandleFunc("GET /archives/{$}", func(w http.ResponseWriter, r *http.Request) {
 		to := *r.URL
 		to.Path = "/archives"

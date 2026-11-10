@@ -35,11 +35,18 @@ WHERE (` + postTimeSQL + `, p.id) < (?, ?)`
 // more says whether older pictures remain, and the last picture's Post
 // is then the next page's cursor. An unknown cursor is ErrNotFound.
 func (s *Store) Wall(author, before string, limit int) (pics []WallPicture, more bool, err error) {
+	return s.WallBetween(author, 0, 1<<62, before, limit)
+}
+
+// WallBetween is Wall for the posts sent from from up to to (ms, as
+// the Archives count a post's time): a day of a profile's grid
+// (PLAN.md, Activity — a square is a link).
+func (s *Store) WallBetween(author string, from, to int64, before string, limit int) (pics []WallPicture, more bool, err error) {
 	at, bid, err := s.dayCursor(before, true)
 	if err != nil {
 		return nil, false, err
 	}
-	q, args := wallQuery, []any{at, bid}
+	q, args := wallQuery+` AND `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ?`, []any{at, bid, from, to}
 	if author != "" {
 		q += ` AND p.author = ?`
 		args = append(args, author)
@@ -72,13 +79,18 @@ func (s *Store) Wall(author, before string, limit int) (pics []WallPicture, more
 }
 
 // WallCount is how many pictures the wall holds, one profile's with
-// author.
+// author; WallCountBetween those of the posts sent from from up to to.
 func (s *Store) WallCount(author string) (int, error) {
+	return s.WallCountBetween(author, 0, 1<<62)
+}
+
+func (s *Store) WallCountBetween(author string, from, to int64) (int, error) {
 	q := `SELECT COUNT(*) FROM (SELECT post FROM embeds WHERE mime LIKE 'image/%'
-	UNION ALL SELECT post FROM pictures WHERE status = 'ok' AND cid <> '') x JOIN posts p ON p.id = x.post`
-	var args []any
+	UNION ALL SELECT post FROM pictures WHERE status = 'ok' AND cid <> '') x JOIN posts p ON p.id = x.post
+	WHERE ` + postTimeSQL + ` >= ? AND ` + postTimeSQL + ` < ?`
+	args := []any{from, to}
 	if author != "" {
-		q += ` WHERE p.author = ?`
+		q += ` AND p.author = ?`
 		args = append(args, author)
 	}
 	var n int

@@ -29,6 +29,7 @@ type webWall struct {
 	Next   string
 	Of     *store.Profile
 	Name   string // Of's name as the page says it
+	Path   string // the wall's own address, which Older pages: /pictures, /u/{id}/pictures, /u/{id}/pictures/{day}
 }
 
 type webWallMonth struct {
@@ -44,13 +45,14 @@ type webWallTile struct {
 	Drawing                            bool
 }
 
-// wall is a page of the wall, its pictures laid in months by dayZone.
-func (s *Server) wall(author, before string) (*webWall, error) {
-	pics, more, err := s.St.Wall(author, before, wallPage)
+// wall is a page of the wall, its pictures laid in months by dayZone;
+// from and to narrow it to the posts of a span (a day of the grid).
+func (s *Server) wall(author, before string, from, to int64) (*webWall, error) {
+	pics, more, err := s.St.WallBetween(author, from, to, before, wallPage)
 	if err != nil {
 		return nil, err
 	}
-	count, err := s.St.WallCount(author)
+	count, err := s.St.WallCountBetween(author, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,32 @@ func (s *Server) wall(author, before string) (*webWall, error) {
 
 // handlePicturesPage: GET /pictures, the hub's wall.
 func (s *Server) handlePicturesPage(w http.ResponseWriter, r *http.Request) {
-	s.wallPage(w, r, nil)
+	s.wallPage(w, r, nil, "")
+}
+
+// handleProfilePicturesDayPage: GET /u/{id}/pictures/{day}, the
+// profile's pictures of one day — what a square of its Pictures grid
+// counts (PLAN.md, Activity — a square is a link) — in the profile's
+// window, the square marked. A day with no picture has no page.
+func (s *Server) handleProfilePicturesDayPage(w http.ResponseWriter, r *http.Request) {
+	id, day := r.PathValue("id"), r.PathValue("day")
+	if !profileIDRe.MatchString(id) {
+		s.webError(w, r, http.StatusNotFound, "err.noprofile")
+		return
+	}
+	if _, _, _, ok := s.dayWindow(day); !ok {
+		s.webError(w, r, http.StatusNotFound, "err.noday")
+		return
+	}
+	p, err := s.St.Profile(id)
+	if errors.Is(err, store.ErrNotFound) {
+		p, err = &store.Profile{ID: id}, nil
+	}
+	if err != nil {
+		s.webError(w, r, http.StatusInternalServerError, "err.pictures")
+		return
+	}
+	s.wallPage(w, r, p, day)
 }
 
 // handleProfilePicturesPage: GET /u/{id}/pictures, one profile's wall.
@@ -98,19 +125,24 @@ func (s *Server) handleProfilePicturesPage(w http.ResponseWriter, r *http.Reques
 		s.webError(w, r, http.StatusInternalServerError, "err.pictures")
 		return
 	}
-	s.wallPage(w, r, p)
+	s.wallPage(w, r, p, "")
 }
 
 // wallPage renders a page of the wall, the hub's (of nil) or a profile's.
 // ?before= names the last post of the page before, as the page's Older
 // button carries it; an unknown one has no page.
-func (s *Server) wallPage(w http.ResponseWriter, r *http.Request, of *store.Profile) {
+func (s *Server) wallPage(w http.ResponseWriter, r *http.Request, of *store.Profile, day string) {
 	author := ""
 	if of != nil {
 		author = of.ID
 	}
+	var from, to int64 = 0, 1 << 62
+	var t time.Time
+	if day != "" {
+		from, to, t, _ = s.dayWindow(day) // the caller checked the day
+	}
 	before := r.URL.Query().Get("before")
-	wl, err := s.wall(author, before)
+	wl, err := s.wall(author, before, from, to)
 	if errors.Is(err, store.ErrNotFound) {
 		s.webError(w, r, http.StatusNotFound, "err.nopage")
 		return
@@ -119,7 +151,18 @@ func (s *Server) wallPage(w http.ResponseWriter, r *http.Request, of *store.Prof
 		s.webError(w, r, http.StatusInternalServerError, "err.pictures")
 		return
 	}
+	if day != "" && wl.Count == 0 {
+		s.webError(w, r, http.StatusNotFound, "err.noday")
+		return
+	}
 	rd := webReadingOf(r)
+	wl.Path = "/pictures"
+	if of != nil {
+		wl.Path = "/u/" + of.ID + "/pictures"
+		if day != "" {
+			wl.Path += "/" + day
+		}
+	}
 	title, desc := rd.L.T("pictures"), rd.L.T("pictures.desc", "host", r.Host)
 	d := &webData{
 		Page: "pictures", Canonical: before == "", Lang: rd.Lang, Q: rd.Q, Wall: wl,
@@ -132,11 +175,16 @@ func (s *Server) wallPage(w http.ResponseWriter, r *http.Request, of *store.Prof
 			s.webError(w, r, http.StatusInternalServerError, "err.pictures")
 			return
 		}
-		if d.Activity, err = s.activity(of.ID, time.Now(), rd.L, "pictures"); err != nil {
+		if d.Activity, err = s.activity(of.ID, time.Now(), rd.L, "pictures", "/u/"+of.ID+"/pictures", rd.Q, day); err != nil {
 			s.webError(w, r, http.StatusInternalServerError, "err.pictures")
 			return
 		}
 		d.NavFor = of.ID
+		if day != "" {
+			d.Day, d.DayName, d.DayCount = day, dayName(rd.L, t), wl.Count
+			title = d.DayName + " · " + title
+			desc = rd.L.T("activity.pictures.day.desc", "name", wl.Name, "date", d.DayName, "n", wl.Count)
+		}
 	}
 	d.Title, d.Desc = title+" · "+r.Host, desc
 	s.webRender(w, r, http.StatusOK, d)

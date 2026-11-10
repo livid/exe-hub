@@ -3438,6 +3438,43 @@ func (s *Store) DayCount(from, to int64) (int, error) {
 	return n, err
 }
 
+// AuthorDayFeed, AuthorDayFeedNewer and AuthorDayCount are DayFeed,
+// DayFeedNewer and DayCount for one profile's posts (PLAN.md, Activity
+// — a square is a link): what a square of its grid counts.
+func (s *Store) AuthorDayFeed(author string, from, to int64, before string, limit int) ([]FeedPost, error) {
+	at, bid, err := s.dayCursor(before, true)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(feedQuery+`WHERE p.author = ? AND `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ? AND (`+postTimeSQL+`, p.id) < (?, ?) ORDER BY `+postTimeSQL+` DESC, p.id DESC LIMIT ?`,
+		author, from, to, at, bid, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+func (s *Store) AuthorDayFeedNewer(author string, from, to int64, after string, limit int) ([]FeedPost, error) {
+	at, aid, err := s.dayCursor(after, false)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(feedQuery+`WHERE p.author = ? AND `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ? AND (`+postTimeSQL+`, p.id) > (?, ?) ORDER BY `+postTimeSQL+`, p.id LIMIT ?`,
+		author, from, to, at, aid, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+func (s *Store) AuthorDayCount(author string, from, to int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM posts p WHERE p.author = ? AND `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ?`, author, from, to).Scan(&n)
+	return n, err
+}
+
 // PushSub is one browser's Web Push subscription (PLAN.md
 // "Notifications"): where to POST and the keys the payload is
 // encrypted to. Profile is the id the browser was signed in as when it

@@ -2413,8 +2413,7 @@ grids?", then "do it, use memcache".
   after today, or before the hub's first day, is off: no ground, no
   title, so the empty months of a young hub read as "not yet", not as
   "no posts". A square's title is the Archives' ("2026-11-09 · 12
-  posts", "… · no posts"); no link yet, the hub has no page for one
-  person's day. The month that begins in a column stands over it in
+  posts", "… · no posts"). The month that begins in a column stands over it in
   the grid's small grey type, except in the last column, where the
   frame would cut it (a name is about two columns wide); M, W and F at the left, every other weekday
   letter of the Archives' row. Under the grid, "290 posts in the last
@@ -2426,6 +2425,25 @@ grids?", then "do it, use memcache".
   day of the post that carries each — "{date} · 12 pictures", "… · no
   pictures", "290 pictures in the last year" — its levels among that
   profile's days with pictures.
+- **A square is a link** (Livid, 2026-11-10: "i want to be able to
+  click on those grids"). A square with a count is `<a>` to that day's
+  page, `/u/{id}/{day}` from the Posts grid and
+  `/u/{id}/pictures/{day}` from the Pictures grid, the page's `?lang=`
+  riding; a square with none is not. The day's page is the profile's
+  window with the tab's key down and the grid at the top, the day's
+  square marked — a black ring with a white ring inside it over its
+  own colour, `aria-current="page"` — and under the grid a line in the
+  page's type: the day's name in bold, the count ("12 posts", "4
+  pictures"), and All posts or All pictures, the way back; then the
+  posts of that day newest first, paged like a day of the Archives
+  (`store.AuthorDayFeed`, `AuthorDayFeedNewer`, `AuthorDayCount`:
+  `DayFeed` and `DayCount` for one author), or the day's pictures as
+  the wall draws them, with no month caption (`WallBetween`,
+  `WallCountBetween`: the wall over a span). The day is the grid's
+  (`dayWindow`: it begins in dayZone, today runs on, a day to come or
+  what is not a date is no day), and a day with none of the profile's
+  posts or pictures has no page, 404 "No such day". The square is the
+  way between days: the grid stays at the top of the day's page.
 - **The days are the Archives'.** `store.AuthorDays(author, loc)` is
   `PostDays` for one profile: a post's day is its own time in the
   hub's day zone, a time more than ten minutes ahead of the hub's clock
@@ -2446,7 +2464,9 @@ grids?", then "do it, use memcache".
 - **Tested** by `go test ./internal/api` (TestBuildActivity: the
   columns, the off days, the levels, the month names, the total;
   TestWebActivity: the page's grid in two languages, the kept counts
-  and the redrawing, no grid on Pictures) and looked at in headless
+  and the redrawing, the Pictures tab's own; TestWebProfileDay: a
+  square's page for posts and for pictures, the marked square, the
+  day line, the days that have no page) and looked at in headless
   Chromium at device pixel ratios 1, 1.5 and 2 and on a phone.
 
 ## Reactions — an emoji on a post (built 2026-10-28)

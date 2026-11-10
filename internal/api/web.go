@@ -581,9 +581,11 @@ type webData struct {
 	BuyWin   bool
 	Wall     *webWall     // the Pictures page's tiles (pictures.go)
 	Activity *webActivity // the profile's year of days (activity.go)
-	// one day of the Archives: the day as its address has it (2006-01-02)
-	// and as the window's title says it
+	// one day of the Archives, or of a profile's grid (activity.go): the
+	// day as its address has it (2006-01-02), as the window's title says
+	// it, and how many of the profile's posts or pictures it holds
 	Day, DayName string
+	DayCount     int
 }
 
 // webURL is the Hub app's URL matcher; it lives in the card package now,
@@ -2081,7 +2083,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "err.profile")
 		return
 	}
-	if d.Activity, err = s.activity(d.Profile.ID, time.Now(), rd.L, "posts"); err != nil {
+	if d.Activity, err = s.activity(d.Profile.ID, time.Now(), rd.L, "posts", "/u/"+d.Profile.ID, rd.Q, ""); err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "err.profile")
 		return
 	}

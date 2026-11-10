@@ -421,19 +421,29 @@ a.mention { text-decoration: none; }
 .act-wd i { display: block; font-style: normal; font-size: 9px; line-height: 9px; }
 .act-grid { display: flex; gap: 2px; }
 .wk { display: grid; grid-template-rows: repeat(7, 9px); row-gap: 2px; flex: none; }
-.wk i, .act-leg i { display: block; width: 9px; height: 9px; }
+.wk i, .wk a, .act-leg i { display: block; width: 9px; height: 9px; }
+/* a square with a count is the link to that day's posts or pictures
+   (PLAN.md, Activity — a square is a link); the day the page shows
+   wears a black ring with a white ring inside it, over its own colour */
+.wk a { text-decoration: none; }
+.wk .sel { box-shadow: inset 0 0 0 1px #262626, inset 0 0 0 2px #fff; }
+.dayhead { padding: 0 12px 10px; font-size: 12px; line-height: 16px; }
+.dayhead a { font-weight: bold; text-decoration: none; }
+.dayhead a:hover { text-decoration: underline; }
 .wk .l0, .act-leg .l0 { background: #eee; }
 .wk .l1, .act-leg .l1 { background: #ccccff; }
 .wk .l2, .act-leg .l2 { background: #9999ff; }
 .wk .l3, .act-leg .l3 { background: #6666cc; }
 .wk .l4, .act-leg .l4 { background: #333399; }
 .wk .now { box-shadow: inset 0 0 0 1px #262626; }
+.wk .now.sel { box-shadow: inset 0 0 0 1px #262626, inset 0 0 0 2px #fff; }
 .act-key { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; line-height: 14px; }
 .act-leg { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
 .act-leg i:first-of-type { margin-left: 4px; }
 .act-leg i:last-of-type { margin-right: 4px; }
 @media (max-width: 480px) {
   .acts { padding: 0 8px 10px; }
+  .dayhead { padding: 0 8px 10px; }
   .act-months span:nth-child(-n+26), .wk:nth-child(-n+26) { display: none; }
 }
 @media (max-width: 480px) {
@@ -1581,6 +1591,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   {{template "ptabs" (.Tabs "posts")}}
   <div class="frame keyed">
     {{with .Activity}}{{template "actgrid" .}}{{end}}
+    {{if .Day}}<div class="dayhead"><b>{{.DayName}}</b> · {{T "archives.posts" "n" .DayCount}} · <a href="/u/{{.Profile.ID}}{{.Q}}">{{T "activity.all.posts"}}</a></div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T "noposts"}}</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
   </div>
@@ -5605,9 +5616,9 @@ document.addEventListener("change", e => {
 {{define "fpager"}}{{if .PrevHref}}<a class="btn prev back" href="{{.PrevHref}}" target="_self">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{T "replies.range" "a" .From "b" .To "n" .Count}}</span>{{if .NextHref}}<a class="btn next fwd" href="{{.NextHref}}" target="_self"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 {{define "tpager"}}{{if .PrevHref}}<a class="btn prev back" href="{{.PrevHref}}">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{T "replies.range" "a" .From "b" .To "n" .Count}}</span>{{if .NextHref}}<a class="btn next fwd" href="{{.NextHref}}"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 
-{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "day"}}/archives/{{.Day}}?{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}/u/{{.NavFor}}/{{.Page}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
+{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "day"}}/archives/{{.Day}}?{{else if eq .Page "profile"}}/u/{{.Profile.ID}}{{if .Day}}/{{.Day}}{{end}}?{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}/u/{{.NavFor}}/{{.Page}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "day"}}{{T "archives.posts" "n" .Count}}{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "day"}}{{T "archives.posts" "n" .Count}}{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}{{else if eq .Page "profile"}}{{if .Day}}{{.DayCount}}{{else if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}{{template "lang" .}}</form>
 {{end}}
@@ -5807,21 +5818,21 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
 {{/* the activity grid (PLAN.md, Activity): a year of a profile's days,
      the Posts tab's of posts and the Pictures tab's of pictures. Dot is
      the webActivity. */}}
-{{define "actgrid"}}<div class="acts" role="img" aria-label="{{.Label}}">
+{{define "actgrid"}}<div class="acts" aria-label="{{.Label}}">
       <div class="act-months">{{range .Weeks}}<span>{{.Label}}</span>{{end}}</div>
       <div class="act-body">
         <div class="act-wd">{{range .Rows}}<i>{{.}}</i>{{end}}</div>
-        <div class="act-grid">{{range .Weeks}}<div class="wk">{{range .Days}}<i class="{{if .Off}}off{{else}}l{{.Level}}{{end}}{{if .Today}} now{{end}}"{{if .Title}} title="{{.Title}}"{{end}}></i>{{end}}</div>{{end}}</div>
+        <div class="act-grid">{{range .Weeks}}<div class="wk">{{range .Days}}{{if .Href}}<a class="l{{.Level}}{{if .Today}} now{{end}}{{if .Sel}} sel{{end}}" href="{{.Href}}" title="{{.Title}}"{{if .Sel}} aria-current="page"{{end}}></a>{{else}}<i class="{{if .Off}}off{{else}}l{{.Level}}{{end}}{{if .Today}} now{{end}}"{{if .Title}} title="{{.Title}}"{{end}}></i>{{end}}{{end}}</div>{{end}}</div>
       </div>
       <div class="act-key"><span>{{.Caption}}</span><span class="act-leg">{{T "archives.less"}}<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>{{T "archives.more"}}</span></div>
     </div>{{end}}
 
 {{/* the wall's body (PLAN.md, Pictures): the months of tiles, Older,
      the status line */}}
-{{define "wallbody"}}{{range .Wall.Months}}<div class="wallcap">{{$.MonthName .Year .Month}}</div>
+{{define "wallbody"}}{{if .Day}}<div class="dayhead"><b>{{.DayName}}</b> · {{T "pictures.n" "n" .DayCount}} · <a href="/u/{{.Wall.Of.ID}}/pictures{{.Q}}">{{T "activity.all.pictures"}}</a></div>{{end}}{{range .Wall.Months}}{{if not $.Day}}<div class="wallcap">{{$.MonthName .Year .Month}}</div>{{end}}
     <div class="wall">{{range .Tiles}}<a class="tile" href="/p/{{.Post}}{{$.Q}}" title="{{T "pictures.tile" "name" .Name "date" .Date}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}" loading="lazy"{{if .Drawing}} class="draw"{{end}}></a>{{end}}</div>
     {{else}}<div class="wallnone">{{T "pictures.none"}}</div>{{end}}
-    {{if .Wall.Next}}<div class="pager"><span class="stats"></span><a class="btn next fwd" href="{{if .Wall.Of}}/u/{{.Wall.Of.ID}}{{end}}/pictures?{{if .Lang}}lang={{.Lang}}&amp;{{end}}before={{.Wall.Next}}"><span>{{T "pictures.older"}}</span>{{template "arrow-r"}}</a></div>{{end}}
+    {{if .Wall.Next}}<div class="pager"><span class="stats"></span><a class="btn next fwd" href="{{.Wall.Path}}?{{if .Lang}}lang={{.Lang}}&amp;{{end}}before={{.Wall.Next}}"><span>{{T "pictures.older"}}</span>{{template "arrow-r"}}</a></div>{{end}}
     <div class="statusbar"><span>{{.Message}}</span></div>{{end}}
 
 {{define "del"}}<button type="button" class="btn del" title="{{T "delete.title"}}">{{T "delete"}}</button>{{end}}
