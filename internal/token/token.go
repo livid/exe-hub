@@ -79,6 +79,7 @@ type Info struct {
 	Immutable          *bool // the metadata cannot change
 	Markets            []Market
 	Pool               string    // the pool the chart is drawn from: the deepest
+	PoolPrice          float64   // this token in US dollars in that pool now: where the chart's line ends
 	At                 time.Time // when the market's numbers were read; zero when there are none
 }
 
@@ -111,7 +112,6 @@ type Range struct {
 	frame     string
 	aggregate int
 	limit     int
-	fresh     time.Duration
 }
 
 // Ranges are the chart's spans, the shortest first. GeckoTerminal leaves
@@ -120,11 +120,11 @@ type Range struct {
 // candles than fill it, and the chart keeps those inside its span and
 // the last one before it, which is the price the span opened at.
 var Ranges = []Range{
-	{"1h", time.Hour, "minute", 1, 120, time.Minute},
-	{"24h", 24 * time.Hour, "minute", 15, 200, 2 * time.Minute},
-	{"7d", 7 * 24 * time.Hour, "hour", 1, 300, 10 * time.Minute},
-	{"1m", 30 * 24 * time.Hour, "hour", 4, 300, 30 * time.Minute},
-	{"1y", 365 * 24 * time.Hour, "day", 1, 400, time.Hour},
+	{"1h", time.Hour, "minute", 1, 120},
+	{"24h", 24 * time.Hour, "minute", 15, 200},
+	{"7d", 7 * 24 * time.Hour, "hour", 1, 300},
+	{"1m", 30 * 24 * time.Hour, "hour", 4, 300},
+	{"1y", 365 * 24 * time.Hour, "day", 1, 400},
 }
 
 // Step is how long one of the range's candles is.
@@ -137,6 +137,20 @@ func (r Range) Step() time.Duration {
 		unit = 24 * time.Hour
 	}
 	return time.Duration(r.aggregate) * unit
+}
+
+// Frame names the size of the range's candles, "minute/15": what a
+// pool's kept candles are filed under.
+func (r Range) Frame() string { return r.frame + "/" + strconv.Itoa(r.aggregate) }
+
+// keepFor is how far back the range's candles are kept: three times
+// what the range shows, and a day's candles for good — a year of them
+// is 365 rows, and they are the token's history.
+func (r Range) keepFor() time.Duration {
+	if r.frame == "day" {
+		return 0
+	}
+	return 3 * r.Span
 }
 
 // DefaultRange is the span a page shows when its address names none.
@@ -158,10 +172,14 @@ type Source struct {
 	Jupiter, Gecko string        // base addresses; a test's own servers
 	RPC            func() string // the gate's RPC as the config has it now; "" for none
 	Log            func(format string, v ...any)
+	// Store keeps closed candles between runs; nil keeps them in memory
+	// alone, for as long as the hub runs
+	Store CandleStore
 
 	client *http.Client
 	mu     sync.Mutex
 	slots  map[string]*slot
+	charts map[string]string // mint → the pool its chart is drawn from (chartPool)
 	now    func() time.Time
 }
 
@@ -194,6 +212,15 @@ type slot struct {
 // does the reader wait for the one being asked for — every reader for
 // the same one. A place that failed is left alone for retryAfter.
 func (s *Source) keep(key string, fresh time.Duration, ask func(context.Context) (any, error)) (any, time.Time) {
+	return s.keepIf(key, func(_ any, at, now time.Time) bool { return now.Sub(at) < fresh },
+		func(ctx context.Context, _ any) (any, error) { return ask(ctx) })
+}
+
+// keepIf is keep with the caller's own test of whether an answer still
+// stands (fresh is given the answer, when it was read, and now), and
+// with the answer before handed to the asking: for an answer that is
+// added to, not replaced (the candles).
+func (s *Source) keepIf(key string, fresh func(val any, at, now time.Time) bool, ask func(ctx context.Context, prev any) (any, error)) (any, time.Time) {
 	s.mu.Lock()
 	sl := s.slots[key]
 	if sl == nil {
@@ -201,17 +228,21 @@ func (s *Source) keep(key string, fresh time.Duration, ask func(context.Context)
 		s.slots[key] = sl
 	}
 	now := s.clock()
-	if sl.ok && now.Sub(sl.at) < fresh {
+	if sl.ok && fresh(sl.val, sl.at, now) {
 		defer s.mu.Unlock()
 		return sl.val, sl.at
 	}
 	if sl.busy == nil && (sl.tried.IsZero() || now.Sub(sl.tried) >= retryAfter) {
 		done := make(chan struct{})
 		sl.busy, sl.tried = done, now
+		var prev any
+		if sl.ok {
+			prev = sl.val
+		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			defer cancel()
-			v, err := ask(ctx)
+			v, err := ask(ctx, prev)
 			s.mu.Lock()
 			if err == nil {
 				sl.val, sl.ok, sl.at = v, true, s.clock()
@@ -340,7 +371,8 @@ func (s *Source) Info(mint string) *Info {
 		if in.Liquidity == 0 {
 			in.Liquidity = deep.Liquidity
 		}
-		in.Pool = deep.Address
+		in.Pool, in.PoolPrice = deep.Address, deep.Price
+		s.chartPool(mint, deep.Address)
 		if in.Price == 0 {
 			in.Price = deep.Price
 		}
@@ -351,6 +383,12 @@ func (s *Source) Info(mint string) *Info {
 		if poolsAt.After(in.At) {
 			in.At = poolsAt
 		}
+	}
+	if in.Pool == "" {
+		// GeckoTerminal has not said the pools (a hub just started, a 429):
+		// the chart is drawn from the pool it was drawn from before, as far
+		// as its kept candles go, and ends at Jupiter's price
+		in.Pool, in.PoolPrice = s.chartPool(mint, ""), in.Price
 	}
 	if in.FDV == 0 && in.Price > 0 {
 		in.FDV = in.Price * in.Supply
@@ -404,17 +442,313 @@ func (s *Source) Glance(mint string) Glance {
 	return g
 }
 
-// Candles is the pool's price over r, the oldest first, and when it was
-// read; nil when GeckoTerminal has not answered.
+// CandleStore keeps a pool's closed candles between runs (the hub's
+// database: store.LoadCandles, store.SaveCandles). since and until say
+// what the kept candles cover: every candle that closed from since up
+// to until is there — a span with no candle had no trade — and since 0
+// is the pool's whole history.
+type CandleStore interface {
+	LoadCandles(pool, frame string) (cs []Candle, since, until int64, err error)
+	// SaveCandles adds candles (a candle kept already is written over),
+	// drops those that began before dropBefore, and sets what is covered.
+	// reset drops every kept candle of the pool and frame first.
+	SaveCandles(pool, frame string, add []Candle, since, until, dropBefore int64, reset bool) error
+	// ChartPool and SetChartPool keep which pool a mint's chart is drawn
+	// from: with it a hub started while GeckoTerminal answers nothing
+	// still knows whose kept candles to draw. "" when none was kept.
+	ChartPool(mint string) (string, error)
+	SetChartPool(mint, pool string) error
+}
+
+// series is a pool's closed candles of one size, the oldest first, and
+// what they cover.
+type series struct {
+	cs           []Candle
+	since, until int64
+	// backAt is when older candles were last asked for and not had (a
+	// page that failed): they are asked for again after backAfter
+	backAt time.Time
+}
+
+// backAfter is how long a reading that could not reach a range's start
+// is left before the older candles are asked for again.
+const backAfter = 10 * time.Minute
+
+// reaches says whether the candles kept go back to t: since 0 is the
+// pool's whole history, which reaches anywhere.
+func (sr *series) reaches(t int64) bool { return sr.since == 0 || sr.since <= t }
+
+// settle is how long after its end a candle is given before it is
+// called closed: GeckoTerminal may still be adding the last trades of a
+// span a moment after it ended.
+const settle = 2 * time.Minute
+
+// Candles is the pool's closed candles of the range's size, the oldest
+// first, and when they were last brought up to date; nil and no time
+// when there are none to show.
+//
+// A closed candle does not change, so it is asked for once and kept —
+// in memory, and in the store, which a restart and an hour of
+// GeckoTerminal answering 429 both leave standing. GeckoTerminal is
+// asked again only when a new candle can have closed (once a day for
+// the year's daily candles, where it was once an hour for all four
+// hundred), and then only for the candles since the last one kept. The
+// span still open is not among them: the chart ends its line at the
+// pool's price now, which the pools' answer has (Info.PoolPrice).
 func (s *Source) Candles(mint, pool string, r Range) ([]Candle, time.Time) {
 	if pool == "" {
 		return nil, time.Time{}
 	}
-	v, at := s.keep("candles:"+pool+":"+r.Name, r.fresh, func(ctx context.Context) (any, error) {
-		return s.candles(ctx, mint, pool, r)
-	})
-	c, _ := v.([]Candle)
-	return c, at
+	step := int64(r.Step() / time.Second)
+	v, at := s.keepIf("candles:"+pool+":"+r.Frame(),
+		func(val any, _, now time.Time) bool {
+			sr, _ := val.(*series)
+			return sr != nil && sr.until >= closedBefore(now, step) &&
+				(sr.reaches(now.Unix()-int64(r.Span/time.Second)-step) || now.Sub(sr.backAt) < backAfter)
+		},
+		func(ctx context.Context, prev any) (any, error) { return s.refresh(ctx, mint, pool, r, prev) })
+	sr, _ := v.(*series)
+	if sr == nil {
+		return nil, time.Time{}
+	}
+	return sr.cs, at
+}
+
+// chartPool remembers the pool a mint's chart is drawn from, in memory
+// and in the store, and says it back: called with a pool it keeps it
+// (the store is written only when it changes), with "" it answers the
+// one kept.
+func (s *Source) chartPool(mint, pool string) string {
+	s.mu.Lock()
+	if s.charts == nil {
+		s.charts = map[string]string{}
+	}
+	was, known := s.charts[mint]
+	if pool != "" {
+		s.charts[mint] = pool
+	}
+	s.mu.Unlock()
+	switch {
+	case pool != "":
+		if pool != was && s.Store != nil {
+			if err := s.Store.SetChartPool(mint, pool); err != nil {
+				s.logf("token: keeping the chart's pool for %s: %v", mint, err)
+			}
+		}
+		return pool
+	case known:
+		return was
+	case s.Store == nil:
+		return ""
+	}
+	kept, err := s.Store.ChartPool(mint)
+	if err != nil {
+		s.logf("token: the chart's pool kept for %s: %v", mint, err)
+		return ""
+	}
+	s.mu.Lock()
+	if _, now := s.charts[mint]; !now {
+		s.charts[mint] = kept
+	}
+	s.mu.Unlock()
+	return kept
+}
+
+// closedBefore is the start of the first span that is not closed yet at
+// now: every candle that began before it has ended and settled.
+func closedBefore(now time.Time, step int64) int64 {
+	return (now.Unix() - int64(settle/time.Second)) / step * step
+}
+
+// refresh brings a pool's candles up to date: what is kept (in memory,
+// else in the store), the candles that closed since, and — while what is
+// kept does not reach the range's start — the older ones. When
+// GeckoTerminal does not answer, what is kept is the answer all the
+// same, and it is asked again in retryAfter.
+func (s *Source) refresh(ctx context.Context, mint, pool string, r Range, prev any) (any, error) {
+	now := s.clock()
+	step := int64(r.Step() / time.Second)
+	frame := r.Frame()
+	sr, _ := prev.(*series)
+	if sr == nil && s.Store != nil {
+		cs, since, until, err := s.Store.LoadCandles(pool, frame)
+		if err != nil {
+			s.logf("token: candles kept for %s %s: %v", pool, frame, err)
+		} else if until > 0 {
+			sr = &series{cs: cs, since: since, until: until}
+		}
+	}
+	edge := closedBefore(now, step)
+	want := now.Unix() - int64(r.Span/time.Second) - step // where the range begins, and a candle before
+	current := sr != nil && sr.until >= edge              // no candle has closed since the last kept
+	reaches := sr != nil && sr.reaches(want)
+	if current && (reaches || now.Sub(sr.backAt) < backAfter) {
+		return sr, nil // nothing to ask
+	}
+
+	// The newest candles, unless what is kept is current: all the range
+	// takes the first time; else the spans since the last kept, and two
+	// to be sure of the join.
+	var rows []Candle // what is read, the oldest first
+	whole := false    // nothing older than what is read exists, or can be had
+	oldest := int64(0)
+	if current {
+		oldest = sr.since // only older candles are wanted
+	} else {
+		limit := r.limit
+		if reaches {
+			if n := int((edge-sr.until)/step) + 2; n < limit {
+				limit = n
+			}
+		}
+		var err error
+		if rows, err = s.candles(ctx, mint, pool, r, limit, 0); err != nil {
+			if sr != nil {
+				s.logf("token: candles:%s:%s: %v", pool, frame, err)
+				return sr, nil
+			}
+			return nil, err
+		}
+		if len(rows) == 0 {
+			whole = true
+		} else {
+			oldest = rows[0].T
+		}
+	}
+	// GeckoTerminal answers with about six months of candles at the most,
+	// however many are asked for (183 daily ones for a year's 400, seen
+	// 2026-11-10). So an answer that stops short of what is wanted — the
+	// last candle kept, when that reaches the range's start; else the
+	// range's start — is not the pool's whole history: the candles before
+	// it are asked for, a page at a time, until they reach back far enough.
+	// A page that comes back empty is the pool's beginning. A page that is
+	// refused outright is where GeckoTerminal's free history ends (401 for
+	// daily candles more than a year old): both make what is read all
+	// there is to have. Three pages at the most; a page that fails
+	// otherwise leaves what was read, and the older ones are asked for
+	// again after backAfter.
+	back, failed := want, false
+	if reaches {
+		back = sr.until
+	}
+	for page := 0; page < 3 && !whole && oldest > back; page++ {
+		older, err := s.candles(ctx, mint, pool, r, r.limit, oldest)
+		var se *statusError
+		if errors.As(err, &se) && se.code >= 400 && se.code < 500 && se.code != http.StatusTooManyRequests {
+			whole = true
+			break
+		}
+		if err != nil {
+			s.logf("token: candles:%s:%s: older than %d: %v", pool, frame, oldest, err)
+			failed = true
+			break
+		}
+		if len(older) == 0 || older[0].T >= oldest {
+			whole = true
+			break
+		}
+		rows, oldest = append(older, rows...), older[0].T
+	}
+	var closed []Candle
+	for _, c := range rows {
+		if c.T < edge {
+			closed = append(closed, c)
+		}
+	}
+	next := &series{until: edge}
+	// what is read joins what is kept when it reaches it (older pages
+	// begin where the kept ones do; the newest reach back to the last
+	// kept, or are all there is). A hub that was away for longer than the
+	// pages reach is the other case, and then what is kept is let go: a
+	// hole would be drawn as a flat line.
+	joins := sr != nil && (current || whole || (len(rows) > 0 && rows[0].T <= sr.until))
+	reset := sr != nil && !joins
+	switch {
+	case joins:
+		next.cs, next.since = merge(sr.cs, closed), sr.since
+		if len(rows) > 0 && next.since != 0 && rows[0].T < next.since {
+			next.since = rows[0].T
+		}
+		if current {
+			next.until = sr.until
+		}
+	default:
+		next.cs = closed
+		if len(rows) > 0 {
+			next.since = rows[0].T
+		}
+	}
+	if whole {
+		next.since = 0 // nothing older to have: the pool's whole history
+	}
+	if failed {
+		next.backAt = now
+	}
+	// what the range will never show again is dropped — all but the last
+	// candle before that point, which stays: on a token that trades
+	// seldom it is the price the range opens at
+	var drop int64
+	if keep := r.keepFor(); keep > 0 {
+		cut := now.Unix() - int64(keep/time.Second)
+		k := 0
+		for k < len(next.cs) && next.cs[k].T < cut {
+			k++
+		}
+		if k > 1 {
+			next.cs = next.cs[k-1:]
+			drop = next.cs[0].T
+			if next.since < drop {
+				next.since = drop
+			}
+		}
+	}
+	if s.Store != nil {
+		// what is new to the store: every candle read, when what was kept is
+		// let go; else those that closed since the last kept (and the one
+		// before, for the join) and those older than the first kept; none
+		// that were just dropped
+		var add []Candle
+		for _, c := range closed {
+			if c.T >= drop && (!joins || c.T >= sr.until-step || (sr.since != 0 && c.T < sr.since) || len(sr.cs) == 0) {
+				add = append(add, c)
+			}
+		}
+		if err := s.Store.SaveCandles(pool, frame, add, next.since, next.until, drop, reset); err != nil {
+			s.logf("token: keeping candles for %s %s: %v", pool, frame, err)
+		}
+	}
+	return next, nil
+}
+
+// merge is old and add together, the oldest first: a candle in both is
+// add's. Both are in order; add may lie before old, after it or over it.
+func merge(old, add []Candle) []Candle {
+	if len(add) == 0 {
+		return old
+	}
+	out := make([]Candle, 0, len(old)+len(add))
+	i, j := 0, 0
+	for i < len(old) || j < len(add) {
+		switch {
+		case j == len(add) || (i < len(old) && old[i].T < add[j].T):
+			out = append(out, old[i])
+			i++
+		case i == len(old) || add[j].T < old[i].T:
+			out = append(out, add[j])
+			j++
+		default:
+			out = append(out, add[j])
+			i++
+			j++
+		}
+	}
+	return out
+}
+
+func (s *Source) logf(format string, v ...any) {
+	if s.Log != nil {
+		s.Log(format, v...)
+	}
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -580,7 +914,10 @@ func (s *Source) pools(ctx context.Context, mint string) ([]Market, error) {
 	return ms, nil
 }
 
-func (s *Source) candles(ctx context.Context, mint, pool string, r Range) ([]Candle, error) {
+// candles asks GeckoTerminal for a pool's last limit candles of the
+// range's size — those before the time before, when it is not 0 — the
+// oldest first.
+func (s *Source) candles(ctx context.Context, mint, pool string, r Range, limit int, before int64) ([]Candle, error) {
 	var out struct {
 		Data struct {
 			Attributes struct {
@@ -589,7 +926,10 @@ func (s *Source) candles(ctx context.Context, mint, pool string, r Range) ([]Can
 		} `json:"data"`
 	}
 	u := fmt.Sprintf("%s/networks/solana/pools/%s/ohlcv/%s?aggregate=%d&limit=%d&currency=usd&token=%s",
-		s.Gecko, url.PathEscape(pool), r.frame, r.aggregate, r.limit, url.QueryEscape(mint))
+		s.Gecko, url.PathEscape(pool), r.frame, r.aggregate, limit, url.QueryEscape(mint))
+	if before > 0 {
+		u += "&before_timestamp=" + strconv.FormatInt(before, 10)
+	}
 	if err := s.getJSON(ctx, u, &out); err != nil {
 		return nil, err
 	}
@@ -618,10 +958,19 @@ func (s *Source) getJSON(ctx context.Context, u string, out any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: %s", req.URL.Host, resp.Status)
+		return &statusError{host: req.URL.Host, code: resp.StatusCode, status: resp.Status}
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out)
 }
+
+// statusError is a place answering with a status that is not 200.
+type statusError struct {
+	host   string
+	code   int
+	status string
+}
+
+func (e *statusError) Error() string { return e.host + ": " + e.status }
 
 // ---- the RPC ----
 

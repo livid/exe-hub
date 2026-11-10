@@ -2152,25 +2152,66 @@ for markets, history, holders, metadata and social.
   A link from a listing goes on the page only as an http(s) address.
 - **Kept, and kept when a place is down.** Each answer is kept on its
   own: Jupiter and the pools a minute, the mint ten minutes, the asset
-  an hour, candles from a minute (1H) to an hour (1Y). A reader with an
-  old answer gets it at once while the place is asked again behind
-  them; only with no answer at all does a reader wait, every reader for
-  the same asking. A place that failed is left alone for 20 seconds,
-  and its last answer stands until it answers again — GeckoTerminal
+  an hour; candles are another matter (next). A reader with an old
+  answer gets it at once while the place is asked again behind them;
+  only with no answer at all does a reader wait, every reader for the
+  same asking. A place that failed is left alone for 20 seconds, and
+  its last answer stands until it answers again — GeckoTerminal
   answers 429 after a handful of calls in a minute. With nothing
   answering the page still stands: the mint, a dash for the price, "The
   chart is not available right now.", the gate's amount in raw base
   units, and "The market's numbers are not available right now." on
   the status line. The page itself is `public, max-age=30`.
-  - GeckoTerminal sends no candle for a span in which nothing traded,
-    so each range asks for more candles than fill it. The chart keeps
-    those inside the range, opens the line at the last close before it
-    and runs it flat from the last trade to now: a quiet hour is a flat
-    hour, not a gap. A range with no price at all says "No trades in
-    this span."
   - An RPC error never quotes the RPC's address, which holds its key
     (`Source.rpc`; Go's client errors quote the address they failed
     on).
+- **Candles kept** (2026-11-10; Livid: "do we have longer cache for
+  past price?" — "yes we should store what will not change"). A closed
+  candle is a fact that does not change, so it is read once and kept:
+  in memory, and in the hub's database (`token_candles`, by pool,
+  candle size and time; `token_candle_marks`, what a pool's kept
+  candles cover; `token_chart_pools`, which pool a mint's chart is
+  drawn from — `internal/store/candles.go`, made at first use, left
+  alone by Rebuild: they are no messages and derive from none).
+  - GeckoTerminal is asked for candles only when a new one can have
+    closed — a candle's end and two minutes for the last trades to be
+    counted — and then for the candles since the last one kept, three
+    as a rule: the one that closed and two for the join. Per range that
+    is once a minute (1H), a quarter of an hour (24H), an hour (7D),
+    four hours (1M) and a day (1Y), where each range's whole run of
+    candles was read again every 1, 2, 10, 30 and 60 minutes.
+  - **The span still open has no candle.** The line ends at now on the
+    chart pool's own price, which the pools' answer has
+    (`Info.PoolPrice`, the same pool and the same source as the
+    candles, read for the Markets table each minute anyway); Jupiter's
+    price when the pools have not answered.
+  - **A restart, and GeckoTerminal answering nothing, both leave the
+    chart standing**: the candles come from the database (the year's in
+    2 ms where the first reading took 0.6 s), the pool to draw them
+    for from `token_chart_pools`.
+  - GeckoTerminal sends no candle for a span in which nothing traded,
+    so each range asks for more candles than fill it. The chart keeps
+    those inside the range, opens the line at the last close before it
+    and runs it from the last trade to the price now: a quiet hour is a
+    flat hour, not a gap. A range with no candle at all says "No trades
+    in this span."
+  - **GeckoTerminal answers with about six months of candles** whatever
+    is asked — 183 daily ones for a year's 400 — which the first cut
+    took for the pool's whole history and drew half a year. So an
+    answer that stops short of the range's start is followed by the
+    page before it (`before_timestamp`), three pages at the most. An
+    empty page is the pool's beginning; a page refused outright (401,
+    for daily candles more than a year old) is where the free history
+    ends: either way what was read is all there is to have, and it is
+    not asked for again. A page that fails otherwise (429) leaves what
+    was read, and the older candles alone are asked for again after ten
+    minutes.
+  - Kept for three times what its range shows, a day's candles for
+    good: from now on the hub's own history grows past the year
+    GeckoTerminal gives. The last candle before the cut stays — on a
+    token that trades seldom it is the price the range opens at. A hub
+    away for longer than the pages reach lets what it kept go, since a
+    hole would be drawn as a flat line.
 - **The picture** is `GET /token/{mint}/icon`: fetched by the hub, cut
   to the avatar's 128px square, kept an hour in memory and a day by the
   browser. To read the page, the reader's browser asks nobody but the
@@ -2423,7 +2464,9 @@ for markets, history, holders, metadata and social.
   kind `token`, labelled "Token: 9raU…pump".
 - **Tests.** `internal/token`: the three places faked, precedence, the
   last answer standing, an RPC without DAS, no RPC, no key in a logged
-  error; `TOKEN_LIVE=1 go test -run Live -v ./internal/token` asks the
+  error; candles kept across an hour, a restart and a GeckoTerminal
+  that is down, paged back, refused, failing, pruned and let go;
+  `internal/store`: the candle tables; `TOKEN_LIVE=1 go test -run Live -v ./internal/token` asks the
   real ones. `internal/api/token_test.go`: the redirect, the page in
   three languages, a mint the gate does not name, nothing answering,
   the picture, the chart's geometry, the figures. In a browser:

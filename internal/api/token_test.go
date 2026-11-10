@@ -48,6 +48,9 @@ type tokenWorld struct {
 	txN  int    // how often it was asked
 	held string // the raw balance every owner holds
 	balN int    // how often a balance was read
+	// how often candles were asked for, and noCandles to refuse them
+	candleN   int
+	noCandles bool
 }
 
 func newTokenWorld(t *testing.T) *tokenWorld {
@@ -75,9 +78,15 @@ func newTokenWorld(t *testing.T) *tokenWorld {
 		 "included":[{"id":"pumpswap","type":"dex","attributes":{"name":"PumpSwap"}}]}`)
 	})
 	mux.HandleFunc("GET /networks/solana/pools/{pool}/ohlcv/{frame}", func(w http.ResponseWriter, r *http.Request) {
-		// a candle before any range's start, and two inside the last hour
+		// a candle before any range's start, and two that closed in the last
+		// hours, well clear of the span still open
+		tw.candleN++
+		if tw.noCandles {
+			http.Error(w, "down", http.StatusTooManyRequests)
+			return
+		}
 		fmt.Fprintf(w, `{"data":{"attributes":{"ohlcv_list":[[%d,0,0,0,0.0021,5],[%d,0,0,0,0.0019,5],[%d,0,0,0,0.0020,5]]}}}`,
-			now-600, now-1800, now-400*86400)
+			now-3600, now-7200, now-400*86400)
 	})
 	mux.HandleFunc("POST /rpc", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -216,8 +225,10 @@ func TestTokenPage(t *testing.T) {
 		`<dt>Creator</dt><dd><span class="mono" title="4JBz4tAKgAmxjDPHHi9HRLj14RsCQJyuCkCFKnpz7B9s">4JBz…7B9s</span></dd>`,
 		`<a class="btn" href="/token/` + tokenMint + `" aria-current="true">24H</a>`,
 		`<a class="btn" href="/token/` + tokenMint + `?range=7d">7D</a>`,
-		`<div class="tk-chart up" id="tk-chart"`, `data-kind="time"`, `<polyline class="l" points="0.0,`,
-		`<b>&#43;5.00%</b> · High $0.002100 · Low $0.001900`, // html/template writes + as &#43;
+		// the line opens at the last close before the range (0.0020), runs through the two
+		// candles that closed in it and ends at the pool's price now, 0.001948: down 2.6%
+		`<div class="tk-chart down" id="tk-chart"`, `data-kind="time"`, `<polyline class="l" points="0.0,`,
+		`<b>−2.60%</b> · High $0.002100 · Low $0.001900`,
 		`<a href="https://www.geckoterminal.com/solana/pools/BusyPool" target="_blank" rel="noopener nofollow">V2EX / SOL</a><span>PumpSwap · `,
 		`<td class="opt">0.00002279</td><td>$199,519</td><td>$631.71</td><td class="opt">62</td>`,
 		`<td class="opt">—</td><td>$0</td><td>$0</td><td class="opt">0</td>`,
@@ -343,6 +354,37 @@ func TestTokenIcon(t *testing.T) {
 	}
 	if code, _ := get(t, h, "/token/NotTheGatesMint/icon"); code != http.StatusNotFound {
 		t.Errorf("a picture for a mint the gate does not name: %d", code)
+	}
+}
+
+// The chart's candles are kept in the hub's database: a hub started again
+// draws the chart from them and asks GeckoTerminal for nothing while no
+// new candle can have closed.
+func TestTokenCandlesKept(t *testing.T) {
+	tw := newTokenWorld(t)
+	s := tokenPageServer(t, tw)
+	if code, body := get(t, s.Handler(), "/token/"+tokenMint+"?range=1y"); code != http.StatusOK || !strings.Contains(body, `id="tk-chart"`) {
+		t.Fatalf("the year's chart: %d", code)
+	}
+	if tw.candleN != 1 {
+		t.Fatalf("candles asked for %d times, want 1", tw.candleN)
+	}
+	// (the two of the last hours are kept too when they began before today)
+	cs, since, until, err := s.St.LoadCandles("BusyPool", "day/1")
+	if err != nil || len(cs) < 1 || until == 0 || since > time.Now().Unix()-366*86400 {
+		t.Fatalf("kept: %d candles since %d until %d (%v), want closed days back past the year's start", len(cs), since, until, err)
+	}
+	// the same database under a hub started again, GeckoTerminal's candles gone
+	again := tokenPageServer(t, tw)
+	again.St = s.St
+	tw.candleN = 0
+	tw.noCandles = true
+	code, body := get(t, again.Handler(), "/token/"+tokenMint+"?range=1y")
+	if code != http.StatusOK || !strings.Contains(body, `id="tk-chart"`) || strings.Contains(body, `class="tk-chart none"`) {
+		t.Errorf("after a restart, with GeckoTerminal's candles gone: %d, chart %v", code, strings.Contains(body, `id="tk-chart"`))
+	}
+	if tw.candleN != 0 {
+		t.Errorf("a day's candles kept today were asked for again, %d times", tw.candleN)
 	}
 }
 
@@ -473,7 +515,7 @@ func TestChartOf(t *testing.T) {
 	hour := token.RangeOf("1h") // one-minute candles
 	// a candle that ended before the hour began opens the line; one in
 	// it moves it; the line runs flat to now
-	c := chartOf([]token.Candle{{T: 1_000_000 - 7200, Close: 2}, {T: 1_000_000 - 1860, Close: 3}}, hour, now)
+	c := chartOf([]token.Candle{{T: 1_000_000 - 7200, Close: 2}, {T: 1_000_000 - 1860, Close: 3}}, hour, now, 0)
 	if c == nil {
 		t.Fatal("no chart")
 	}
@@ -497,19 +539,28 @@ func TestChartOf(t *testing.T) {
 	}
 
 	// no candle before the range: the line begins where trading did
-	c = chartOf([]token.Candle{{T: 1_000_000 - 1860, Close: 3}}, hour, now)
+	c = chartOf([]token.Candle{{T: 1_000_000 - 1860, Close: 3}}, hour, now, 0)
 	if c == nil || c.Data != "998200,3;1000000,3" || c.Change != "0.00%" || !c.Up {
 		t.Errorf("chart without an opening price = %+v", c)
 	}
 	// a price that fell
-	if c = chartOf([]token.Candle{{T: 1_000_000 - 7200, Close: 4}, {T: 1_000_000 - 1860, Close: 3}}, hour, now); c == nil || c.Up || c.Change != "−25.00%" {
+	if c = chartOf([]token.Candle{{T: 1_000_000 - 7200, Close: 4}, {T: 1_000_000 - 1860, Close: 3}}, hour, now, 0); c == nil || c.Up || c.Change != "−25.00%" {
 		t.Errorf("a falling chart = %+v", c)
 	}
 	// nothing at all
-	if c = chartOf(nil, hour, now); c != nil {
+	if c = chartOf(nil, hour, now, 0); c != nil {
 		t.Errorf("a chart of no candles = %+v", c)
 	}
-	if k := chartOf([]token.Candle{{T: 1, Close: 1}}, token.RangeOf("1y"), now).Kind; k != "month" {
+	// the pool's price now is where the line ends: no candle is drawn for the span still open
+	c = chartOf([]token.Candle{{T: 1_000_000 - 7200, Close: 2}, {T: 1_000_000 - 1860, Close: 3}}, hour, now, 2.5)
+	if c == nil || c.Data != "996400,2;998200,3;1000000,2.5" || c.Change != "+25.00%" || c.High != "$3.000" {
+		t.Errorf("a chart that ends at the price now = %+v", c)
+	}
+	// a price now and no candle is no chart: one point draws no line
+	if c = chartOf(nil, hour, now, 2.5); c != nil {
+		t.Errorf("a chart of a price and no candle = %+v", c)
+	}
+	if k := chartOf([]token.Candle{{T: 1, Close: 1}}, token.RangeOf("1y"), now, 0).Kind; k != "month" {
 		t.Errorf("a year's chart sets its times by the %s", k)
 	}
 }

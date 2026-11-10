@@ -129,6 +129,11 @@ func (s *Server) tokens() *token.Source {
 				return ""
 			})
 		}
+		// closed candles are kept in the hub's database (PLAN.md, The token
+		// page — Candles kept): a source given no store of its own gets it
+		if s.Token.Store == nil && s.St != nil {
+			s.Token.Store = s.St
+		}
 	})
 	return s.Token
 }
@@ -191,7 +196,7 @@ func (s *Server) handleTokenPage(w http.ResponseWriter, r *http.Request) {
 	if at.IsZero() {
 		t.ChartOff = true
 	} else {
-		t.Chart = chartOf(candles, rng, at)
+		t.Chart = chartOf(candles, rng, time.Now(), in.PoolPrice)
 	}
 	name := tokenName(in)
 	desc := rd.L.T("token.desc", "name", name, "host", r.Host)
@@ -344,12 +349,14 @@ func (s *Server) webTokenOf(in *token.Info, req *config.MintReq, rd webReading, 
 // Short is the mint cut to its ends, for a line that lists several.
 func (m webMint) Short() string { return shortMint(m.Mint) }
 
-// chartOf lays the candles out over the range that ends at now. The
-// line opens at the price the range opened at — the last candle before
-// it, when there is one — and runs to now at the last price, so a token
-// that last traded an hour ago draws a flat hour and not a gap. nil
-// when the range holds no price at all.
-func chartOf(candles []token.Candle, rng token.Range, now time.Time) *webChart {
+// chartOf lays the closed candles out over the range that ends at now.
+// The line opens at the price the range opened at — the last candle
+// before it, when there is one — and ends at now on last, the pool's
+// price now: the span still open has no candle (internal/token keeps
+// only closed ones), and a token that last traded an hour ago draws a
+// flat hour and not a gap. With no price now (last is 0) the line runs
+// flat from the last close. nil when the range holds no candle at all.
+func chartOf(candles []token.Candle, rng token.Range, now time.Time, last float64) *webChart {
 	to := now.Unix()
 	from := to - int64(rng.Span/time.Second)
 	step := int64(rng.Step() / time.Second)
@@ -377,8 +384,13 @@ func chartOf(candles []token.Candle, rng token.Range, now time.Time) *webChart {
 	if len(pts) == 0 {
 		return nil
 	}
-	if last := pts[len(pts)-1]; last.t < to {
-		pts = append(pts, pt{to, last.p})
+	switch end := pts[len(pts)-1]; {
+	case last > 0 && end.t < to:
+		pts = append(pts, pt{to, last})
+	case last > 0:
+		pts[len(pts)-1].p = last
+	case end.t < to:
+		pts = append(pts, pt{to, end.p})
 	}
 	lo, hi := pts[0].p, pts[0].p
 	for _, p := range pts {
