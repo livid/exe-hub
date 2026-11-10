@@ -279,10 +279,25 @@ a.mention { text-decoration: none; }
 .tk-dlg .ival { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tk-dlg .ival .sub { font-size: 11px; color: #555; }
 .tk-dlg .tk-seg .btn { padding: 2px 9px; }
-.tk-dlg .tk-wal { display: flex; align-items: center; gap: 8px; }
-.tk-dlg .tk-wal .popup { flex: 0 1 auto; min-width: 0; }
-.tk-dlg .tk-wal .popup[hidden] { display: none; }
-.tk-dlg #tk-wname { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* the wallet that pays (Livid, 2026-11-10: "when multiple wallets
+   detected, use segmented control to switch; show wallet icon"). One
+   wallet in the browser is named, its own icon before its name. Several
+   are push buttons joined in a row, like Pay with and Quantity over
+   them, each a wallet's icon and name, the chosen one pressed. Names
+   that do not fit the row give way to the icons alone — a name stays
+   for a wallet that has no icon, and every button says its wallet under
+   the pointer. Once a wallet has connected the row is that wallet
+   alone, with the address it gave. */
+.tk-dlg .tk-wal { display: flex; align-items: center; gap: 8px; overflow: visible; }
+.tk-dlg .tk-wal img { flex: none; display: block; width: 14px; height: 14px; }
+.tk-dlg .tk-wal .tk-seg { min-width: 0; max-width: 100%; }
+.tk-dlg .tk-wal .tk-seg[hidden] { display: none; }
+.tk-dlg .tk-wal .tk-seg .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 0 1 auto; min-width: 0; }
+.tk-dlg .tk-wal .tk-seg .btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-dlg .tk-wal .tk-seg.icons .btn { padding: 2px 8px; }
+.tk-dlg .tk-wal .tk-seg.icons .btn:not(.noicon) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.tk-dlg #tk-wname { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.tk-dlg #tk-wname span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-dlg .p-note { font-size: 11px; line-height: 16px; min-height: 48px; margin-top: 6px; color: #555; overflow-wrap: anywhere; }
 .tk-dlg .p-note.err { color: #cc3333; }
 .tk-dlg .p-note a { font-weight: bold; }
@@ -2224,7 +2239,7 @@ function hubAnswers() {
   };
   const $ = id => document.getElementById(id);
   const payBox = $("tk-pay"), qtyBox = $("tk-qty"), cost = $("tk-cost"), get = $("tk-get"), note = $("tk-note"), title = $("tk-buy-h");
-  const wsel = $("tk-wsel"), wpick = wsel.querySelector("select"), wname = $("tk-wname"), cancel = $("tk-cancel"), go = $("tk-go");
+  const wsel = $("tk-wsel"), wname = $("tk-wname"), cancel = $("tk-cancel"), go = $("tk-go");
   const QTYS = [...qtyBox.children].map(b => +b.dataset.qty);
   const short = a => a.length > 10 ? a.slice(0, 4) + "…" + a.slice(-4) : a;
   // raw base units as a number set for reading: 10,086.9
@@ -2256,18 +2271,64 @@ function hubAnswers() {
     return () => {};
   } };
   const remembered = () => { try { return (JSON.parse(localStorage.getItem("exe-hub-wallet") || "null") || {}).name || ""; } catch (e) { return ""; } };
+  // a wallet's own icon, as the Wallet Standard hands it over: a picture
+  // in a data: address, and nothing else is shown
+  const icon = w => {
+    if (!w || typeof w.icon !== "string" || !/^data:image\/(svg\+xml|png|webp|gif|jpeg)[;,]/i.test(w.icon)) return null;
+    const i = Object.assign(document.createElement("img"), { alt: "" });
+    i.addEventListener("error", () => i.remove());
+    i.src = w.icon;
+    return i;
+  };
+  const named = t => Object.assign(document.createElement("span"), { textContent: t });
+  // The Wallet row. With one wallet: its icon and name. With several and
+  // none connected yet: a segmented control, the chosen wallet pressed —
+  // the one asked for (the guide names the wallet that signed in), else
+  // the one chosen before, else the one remembered from sign-in, else
+  // the first. Connected: that wallet alone, and the address it gave.
+  // (Wallets announce themselves one at a time, so the choice is worked
+  // out again at each drawing: only a wallet asked for or pressed is
+  // kept, in picked.)
+  let chosen = "", picked = "";
   function drawWallets(prefer) {
-    const was = prefer || wpick.value || remembered();
-    wpick.replaceChildren(...wallets.map(w => Object.assign(document.createElement("option"), { value: w.name, textContent: w.name })));
-    if (wallets.some(w => w.name === was)) wpick.value = was;
-    wsel.hidden = wallets.length < 2;
-    if (!account) wname.textContent = wallets.length === 1 ? wallets[0].name : wallets.length ? "" : "—";
+    if (prefer) picked = prefer;
+    const here = n => wallets.some(w => w.name === n);
+    chosen = here(picked) ? picked : here(remembered()) ? remembered() : wallets.length ? wallets[0].name : "";
+    const w = wallet(), many = wallets.length > 1 && !account;
+    wsel.hidden = !many;
+    wsel.replaceChildren(...(many ? wallets : []).map(x => {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "btn", title: x.name });
+      const i = icon(x);
+      if (i) b.append(i); else b.classList.add("noicon");
+      b.append(named(x.name));
+      b.dataset.wallet = x.name;
+      b.setAttribute("aria-pressed", x.name === chosen);
+      return b;
+    }));
+    wname.hidden = many;
+    if (many) wname.replaceChildren();
+    else if (!w) wname.replaceChildren("—");
+    else wname.replaceChildren(...[icon(w), named(w.name + (account ? " · " + short(account.address) : ""))].filter(Boolean));
+    fit();
     if (!veil.hidden && phase === "idle") settle();
   }
-  const wallet = () => wallets.find(w => w.name === wpick.value) || wallets[0];
+  // names that do not fit the row give way to the icons; measured, so
+  // only while the window is on the screen
+  function fit() {
+    wsel.classList.remove("icons");
+    if (veil.hidden || wsel.hidden) return;
+    if ([...wsel.querySelectorAll("span")].some(t => t.scrollWidth > t.clientWidth + 1)) wsel.classList.add("icons");
+  }
+  const wallet = () => wallets.find(w => w.name === chosen) || wallets[0];
   addEventListener("wallet-standard:register-wallet", e => { try { e.detail(registry); } catch (err) {} });
   dispatchEvent(new CustomEvent("wallet-standard:app-ready", { detail: registry }));
-  wpick.addEventListener("change", () => { account = null; drawWallets(); });
+  wsel.addEventListener("click", e => {
+    const b = e.target.closest("[data-wallet]");
+    if (!b || b.disabled || b.dataset.wallet === chosen) return;
+    picked = b.dataset.wallet;
+    account = null;
+    drawWallets();
+  });
 
   // ---- the note under the rows ----
   const say = (text, err, link) => {
@@ -2349,7 +2410,7 @@ function hubAnswers() {
     const busy = phase === "busy", over = phase === "sent" || phase === "done";
     for (const b of payBox.children) { b.setAttribute("aria-pressed", b.dataset.pay === pay); b.disabled = busy || over; }
     for (const b of qtyBox.children) { b.setAttribute("aria-pressed", +b.dataset.qty === qty); b.disabled = busy || over; }
-    wpick.disabled = busy || over;
+    for (const b of wsel.children) b.disabled = busy || over;
     cancel.hidden = over;
     cancel.disabled = busy;
     go.textContent = over ? T("buy.done") : T("buy");
@@ -2401,7 +2462,7 @@ function hubAnswers() {
       if (!a && mine.address && (sol[0] || (accounts || [])[0])) throw stop(T("buy.other", { got: short((sol[0] || accounts[0]).address), want: short(mine.address) }));
       if (!a) throw stop(T("noconnect", { err: T("noaccount") }));
       account = a;
-      wname.textContent = (wallets.length > 1 ? "" : w.name + " · ") + short(a.address);
+      drawWallets(); // the row is this wallet now, with the address it gave
       say(T("buy.building"));
       // the price shown, when it is under half a minute old — the window
       // asks again every twenty seconds — else a new one. The swap's
@@ -2424,6 +2485,8 @@ function hubAnswers() {
       watch(sig, mine);
     } catch (e) {
       phase = "idle";
+      account = null; // nothing was sent: the wallets are there to choose from again
+      drawWallets();
       settle();
       say(e && e.whole ? e.message : T("buy.error", { err: e && e.message || String(e) }), true);
       timer = setTimeout(ask, 20000);
@@ -2458,6 +2521,7 @@ function hubAnswers() {
   const show = () => {
     title.textContent = T("buy.title", { symbol: o.ticker });
     veil.hidden = false;
+    fit();
     settle();
     ask();
     (go.disabled ? cancel : go).focus();
@@ -5855,7 +5919,7 @@ document.addEventListener("change", e => {
     <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span></span></div>
     <div class="irow"><span class="ilab">{{T "buy.cost"}}</span><span class="ival" id="tk-cost">—</span></div>
     <div class="irow"><span class="ilab">{{T "buy.get"}}</span><span class="ival" id="tk-get">—</span></div>
-    <div class="irow"><span class="ilab">{{T "buy.wallet"}}</span><span class="ival tk-wal"><span class="popup lang" id="tk-wsel" hidden><select aria-label="{{T "buy.wallet"}}"></select><span class="well"><i><b></b></i></span></span><span id="tk-wname">—</span></span></div>
+    <div class="irow"><span class="ilab">{{T "buy.wallet"}}</span><span class="ival tk-wal"><span class="tk-seg" id="tk-wsel" role="group" aria-label="{{T "buy.wallet"}}" hidden></span><span id="tk-wname">—</span></span></div>
     <div class="p-note" id="tk-note" role="status">{{T "buy.note"}}</div>
     <div class="btns"><button type="button" class="btn" id="tk-cancel">{{T "cancel"}}</button><button type="button" class="btn default" id="tk-go" disabled>{{T "buy"}}</button></div>
   </div>

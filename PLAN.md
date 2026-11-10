@@ -2193,8 +2193,19 @@ for markets, history, holders, metadata and social.
   or 50,000, each three push buttons joined in a row with the chosen
   one pressed (SOL and 10,000 at first); **You pay** ("0.2301 SOL ·
   $19.79"); **You get** ("about 10,119 V2EX, at least 10,018");
-  **Wallet** (its name, a pop-up menu when the browser has several, the
-  address once it has connected); a note of three lines; Cancel and
+  **Wallet** (the wallet's own icon and its name; when the browser has
+  several, a segmented control like the two over it — each wallet's
+  icon and name on a push button, the chosen one pressed (Livid,
+  2026-11-10: "when multiple wallets detected, use segmented control to
+  switch; show wallet icon"; it was a pop-up menu). The one pressed at
+  first is the wallet the guide names, else the one pressed before,
+  else the one this browser signed in with, else the first. Names that
+  do not fit the row give way to the icons alone, a name staying for a
+  wallet with no icon, and each button says its wallet under the
+  pointer. Once a wallet has connected the row is that wallet alone
+  with the address it gave; a purchase that was not sent brings the
+  control back. An icon is shown only when it is a picture in a `data:`
+  address, as the Wallet Standard hands them over); a note of three lines; Cancel and
   Buy, the default.
   - The price and the transaction are Jupiter's swap API's
     (`lite-api.jup.ag/swap/v1/quote` and `/swap`: no key, no fee of the
