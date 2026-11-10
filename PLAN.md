@@ -2206,11 +2206,24 @@ for markets, history, holders, metadata and social.
     a pump.fun pool takes an exact amount in, not out (`ExactOut`
     answers "No routes found"), so the amount to pay is found: what the
     quantity sells for is a first measure, then quotes sized again, at
-    most four, until the least the swap can give after 1% slippage
-    (`otherAmountThreshold`) is the quantity or up to 0.3% over. Three
-    quotes in practice. The point of buying 10,000 is to hold 10,000.
+    most three, until the least the swap can give after 1% slippage
+    (`otherAmountThreshold`) is the quantity or up to 0.5% over. The
+    point of buying 10,000 is to hold 10,000.
   - The price is asked when the window opens, when a choice changes,
-    every 20 seconds while it stands open, and once more at Buy.
+    and every 20 seconds while it stands open.
+  - **Five requests in ten seconds** is what Jupiter's keyless API
+    gives one reader (measured 2026-11-10 from its `x-ratelimit-*`
+    headers; found when the first walk through the guide pressed Buy
+    four seconds after the window opened and was refused). So the
+    window counts its askings: the first price for a token and a
+    currency takes three (what the quantity sells for, then two
+    sizings); the rate that quote came to is remembered, and a later
+    price — another quantity, the 20-second one — takes one; Buy uses
+    the price on show when it is under 30 seconds old and asks only for
+    the transaction. Open and Buy at once is four requests. A request
+    refused all the same waits until the ten seconds end
+    (`x-ratelimit-reset`) and is asked again, twice at most, before the
+    note says "too many requests".
   - **Buy**: the wallet connects (Wallet Standard, a wallet with
     `solana:signAndSendTransaction`), Jupiter writes the transaction
     for that address, and the wallet shows it, signs it and sends it —
@@ -2298,7 +2311,8 @@ for markets, history, holders, metadata and social.
     `TestTokenTx`; in a browser `HUB=… node
     ~/tools/playwright/exe-hub-token-buy-test.js` — a mock wallet that
     signs nothing, Jupiter and the hub's status answered by the test,
-    339 checks; `LIVE=1` adds one real price from Jupiter.
+    366 checks, the count of quotes and a refusal waited out among
+    them; `LIVE=1` adds one real price from Jupiter.
 - **Words** in English, Chinese (both scripts' tables) and Japanese,
   keys `token.*`, `buy.*`, `guide.*`, `err.notoken`, `err.nomint`; figures are set the same
   in all three ($ and a comma every three digits). Stats count it as

@@ -2227,13 +2227,28 @@ function hubAnswers() {
   };
 
   // ---- Jupiter ----
+  // Jupiter's keyless API gives a reader five requests in any ten
+  // seconds (measured 2026-11-10: x-ratelimit-remaining counts down from
+  // four, x-ratelimit-reset is ten seconds after the first). The window
+  // is built to stay under that — three to price a choice the first
+  // time, one after, none more at Buy but the transaction itself — and
+  // when it is over all the same (a reader who presses every button in
+  // a row), a refused request waits for the ten seconds to end and asks
+  // again, twice at most, before it is an error to read.
   const jup = async (path, opts) => {
-    let r;
-    try { r = await fetch(JUP + path, Object.assign({ cache: "no-store" }, opts)); }
-    catch (e) { throw new Error(T("buy.offline")); }
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(r.status === 429 ? T("buy.busy") : j.error || j.message || "HTTP " + r.status);
-    return j;
+    for (let tries = 0; ; tries++) {
+      let r;
+      try { r = await fetch(JUP + path, Object.assign({ cache: "no-store" }, opts)); }
+      catch (e) { throw new Error(T("buy.offline")); }
+      if (r.status === 429 && tries < 2) {
+        const reset = Number(r.headers.get("x-ratelimit-reset")) * 1000 - Date.now();
+        await new Promise(res => setTimeout(res, Math.min(11000, Math.max(1500, (reset || 0) + 300))));
+        continue;
+      }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(r.status === 429 ? T("buy.busy") : j.error || j.message || "HTTP " + r.status);
+      return j;
+    }
   };
   const quoteOf = async (from, to, amount) => {
     const j = await jup("/quote?inputMint=" + from + "&outputMint=" + to + "&amount=" + amount + "&swapMode=ExactIn&slippageBps=" + SLIP);
@@ -2241,23 +2256,35 @@ function hubAnswers() {
     return j;
   };
   // a quote that pays in p and gives want raw units at the least, and
-  // no more than 0.3% over that
+  // no more than half a percent over that. The first time for a token
+  // and a currency, what the quantity sells for is the first measure;
+  // after that the rate the last quote came to is, and one asking is
+  // mostly enough.
+  const rates = {}; // mint and currency → what one raw unit, at the least, cost in the last quote
   async function sized(p, want) {
-    const back = await quoteOf(o.mint, p.mint, want);
-    let amount = BigInt(back.outAmount) * BigInt(10000 + SLIP + 80) / 10000n + 1n, q = null;
-    for (let i = 0; i < 4; i++) {
+    const key = o.mint + ":" + p.mint;
+    let amount, q = null;
+    if (rates[key]) amount = BigInt(Math.ceil(Number(want) * rates[key] * 1.0015));
+    else amount = BigInt((await quoteOf(o.mint, p.mint, want)).outAmount) * BigInt(10000 + SLIP + 80) / 10000n + 1n;
+    for (let i = 0; i < 3; i++) {
       q = await quoteOf(p.mint, o.mint, amount);
       const least = BigInt(q.otherAmountThreshold);
-      if (least >= want && least * 1000n <= want * 1003n) return q;
+      if (least > 0n) rates[key] = Number(q.inAmount) / Number(least);
+      if (least >= want && least * 1000n <= want * 1005n) return q;
       if (least <= 0n) break;
-      amount = amount * want * 1001n / (least * 1000n) + 1n;
+      amount = amount * want * 10015n / (least * 10000n) + 1n;
     }
     if (q && BigInt(q.otherAmountThreshold) >= want) return q;
     throw new Error(T("buy.nosize"));
   }
   const want = () => BigInt(qty) * 10n ** BigInt(o.dec);
+  // the quote shown, what it is a quote for and when it was given: Buy
+  // uses it as it stands while it is young (fresh, below)
+  let quoteFor = "", quoteAt = 0;
+  const choice = () => o.mint + ":" + pay + ":" + qty;
   const drawQuote = q => {
     quote = q;
+    quoteFor = q ? choice() : ""; quoteAt = q ? Date.now() : 0;
     if (!q) { cost.textContent = get.textContent = "—"; return; }
     const p = PAY[pay];
     cost.replaceChildren(units(q.inAmount, p.dec, p.show) + " " + pay);
@@ -2326,8 +2353,12 @@ function hubAnswers() {
       account = a;
       wname.textContent = (wallets.length > 1 ? "" : w.name + " · ") + short(a.address);
       say(T("buy.building"));
-      const q = await sized(p, want()); // the price now, not the one of twenty seconds ago
-      drawQuote(q);
+      // the price shown, when it is under half a minute old — the window
+      // asks again every twenty seconds — else a new one. The swap's
+      // least amount is the quote's, so an older price can only fail,
+      // never give less.
+      const q = quote && quoteFor === choice() && Date.now() - quoteAt < 30000 ? quote : await sized(p, want());
+      if (q !== quote) drawQuote(q);
       const built = await jup("/swap", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quoteResponse: q, userPublicKey: a.address, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true }) });
       if (built.simulationError) throw stop(T("buy.wouldfail", { pay: paid }));
