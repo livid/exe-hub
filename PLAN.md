@@ -577,7 +577,7 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   report `/stats` draws, every list included (see Stats). 404 on a hub
   with stats off.
 - `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=`, `GET /stats`,
-  `GET /archives` — the public pages (see below).
+  `GET /archives`, `GET /archives/{day}` — the public pages (see below).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -2003,19 +2003,43 @@ sent that day; use memcache for this page".
   first reader after midnight draws the new day's cell. What is kept is
   the numbers; the page's words are set per request, in the reader's
   language, and a kept page is served in about a millisecond.
-- **Not built.** A cell leads nowhere yet: a page of one day's posts is
-  the next step when it is wanted. The page is not kept for offline
-  reading (sw.js), like `/stats` and `/badge/`; it is counted as a page
-  view ("Archives" in the stats' lists) and open to crawlers.
+- **One day's posts** (built 2026-11-09; Livid: "can i click on a day
+  to view that day's posts?"). A cell with posts is a link, the whole
+  square in the cell's own colours, to `GET /archives/{day}`
+  (`/archives/2026-11-08`): one window titled with the day ("November
+  8, 2026", "2026 年 11 月 8 日") under the Archives' row of the
+  Navigation window. Archives — the way back to the calendars, as the
+  close box is — and the language menu head it; under them the day's
+  posts, the newest first, replies among them as in a search, thirty to
+  a page with the feed's Prev and Next (`?before=`, `?after=`, the day
+  kept in the links) around the day's count; the status line says the
+  count and the zone. The day is the calendar's own, so a cell's number
+  is its page's: it begins in `stats.timezone`, a time ahead of the
+  hub's clock is read as the time received, and a post dated after
+  today is today's. The posts are read from the store at each request,
+  not kept in memory — the page is drawn for its reader (language,
+  translations), and its count is exact where the cell's may run five
+  minutes behind. A day with no posts has no page and its cell no link:
+  404 "No posts were sent on that day.", as for a day still to come and
+  for anything that is not a date. The stats call it "Archives:
+  2026-11-08".
+- **Not built.** No step from one day to the next: the way between days
+  is the calendar. The pages are not kept for offline reading (sw.js),
+  like `/stats` and `/badge/`; they are counted as page views
+  ("Archives" in the stats' lists) and open to crawlers.
 - Check: `go test ./internal/memcache ./internal/store ./internal/api`
   (TestCache, TestFetch, TestFetchOnce; TestPostDays: the zone, a
-  reply, a delete, a time ahead of the clock; TestBuildArchives: which
-  months stand, the quarters, the greyed days; TestWebArchives: the
-  page in three languages, the row, the counts kept and drawn again)
+  reply, a delete, a time ahead of the clock; TestDayFeed: a day's
+  posts in order, the cursors, the zone, a time ahead of the clock;
+  TestBuildArchives: which months stand, the quarters, the greyed days;
+  TestWebArchives: the page in three languages, the row, the counts
+  kept and drawn again; TestWebArchiveDay: the cell's link, the day's
+  two pages, the days that have no page)
   and `~/tools/playwright/exe-hub-nav-test.js` against a scratch hub
   (the row and its selection, 22px cells on whole pixels at device
-  pixel ratios 1, 1.5 and 2, and on a phone the five tiles with no word
-  cut and two months across).
+  pixel ratios 1, 1.5 and 2, a pressed cell opening its day under the
+  Archives' row, and on a phone the five tiles with no word cut and two
+  months across).
 
 ## Reactions — an emoji on a post (built 2026-10-28)
 

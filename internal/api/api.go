@@ -191,6 +191,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /badge.gif", handleBadgeGIF)
 	mux.HandleFunc("GET /archives", s.counted("archives", s.handleArchivesPage))
+	mux.HandleFunc("GET /archives/{day}", s.counted("archives", s.handleArchiveDayPage))
 	mux.HandleFunc("GET /archives/{$}", func(w http.ResponseWriter, r *http.Request) {
 		to := *r.URL
 		to.Path = "/archives"

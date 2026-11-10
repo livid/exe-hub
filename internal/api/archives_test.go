@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/ed25519"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -115,7 +116,7 @@ func TestWebArchives(t *testing.T) {
 		`<a class="place" data-to="archives" href="/archives">`,
 		`<span class="cap"><b>August 2025</b><span>2</span></span>`,
 		`<th scope="col">S</th><th scope="col">M</th>`,
-		`<td class="l1" title="2025-08-29 · 2 posts">29</td>`,
+		`<td class="l1"><a href="/archives/2025-08-29" title="2025-08-29 · 2 posts">29</a></td>`,
 		`<td class="off">28</td>`,
 		`<td class="off">30</td>`, // the hub's first day is the day it received them: today
 		`<td class="l0 now" title="` + today + ` · no posts">`,
@@ -135,7 +136,7 @@ func TestWebArchives(t *testing.T) {
 	} {
 		_, body := get(t, h, "/archives"+c.q)
 		for _, want := range []string{"<title>" + c.title + "</title>", "<b>" + c.month + "</b>", `title="` + c.day + `"`,
-			"<span>" + c.status + "</span>", `href="/archives` + c.q + `"`, `href="/` + c.q + `"`} {
+			"<span>" + c.status + "</span>", `href="/archives` + c.q + `"`, `href="/` + c.q + `"`, `href="/archives/2025-08-29` + c.q + `"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("/archives%s lacks %q", c.q, want)
 			}
@@ -164,5 +165,95 @@ func TestWebArchives(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example/archives/?lang=ja", nil))
 	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "/archives?lang=ja" {
 		t.Errorf("/archives/ answered %d to %q", w.Code, w.Header().Get("Location"))
+	}
+}
+
+// TestWebArchiveDay: a day's cell leads to /archives/{day}, the day's
+// posts newest first under the Archives' row, paged like the feed with
+// the day in the cursor links; a day with no posts, a day still to come
+// and anything that is not a date have no page.
+func TestWebArchiveDay(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}, Stats: &config.Stats{Location: time.UTC}})
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	var ids []string // all sent on 2025-08-29 UTC, a millisecond apart
+	for i := 1; i <= webPage+2; i++ {
+		ids = append(ids, ingest(t, s, priv, pub, int64(i), "post.create", map[string]any{"text": fmt.Sprintf("post number %d.", i)}))
+	}
+	h := s.Handler()
+	posts := regexp.MustCompile(`<div class="post[ "]`)
+
+	_, cal := get(t, h, "/archives")
+	if want := `<a href="/archives/2025-08-29" title="2025-08-29 · 32 posts">29</a>`; !strings.Contains(cal, want) {
+		t.Fatalf("/archives lacks %q", want)
+	}
+	code, body := get(t, h, "/archives/2025-08-29")
+	if code != http.StatusOK {
+		t.Fatalf("/archives/2025-08-29 answered %d", code)
+	}
+	last := ids[2] // the first page ends at the 30th from the newest
+	for _, want := range []string{
+		"<title>August 29, 2025 · Archives · hub.example</title>",
+		`<link rel="canonical" href="http://hub.example/archives/2025-08-29">`,
+		`<span class="title">August 29, 2025</span>`,
+		`data-page="archives"`,
+		`<a class="tbox" href="/archives"`,
+		`<a class="btn prev back" href="/archives">`,
+		"post number 32.", "post number 3.",
+		`<span class="stats">32 posts</span>`,
+		`href="/archives/2025-08-29?before=` + last + `"`,
+		`<div class="statusbar"><span>32 posts · UTC</span></div>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/archives/2025-08-29 lacks %q", want)
+		}
+	}
+	if n := len(posts.FindAllString(body, -1)); n != webPage {
+		t.Errorf("%d posts on the first page, want %d", n, webPage)
+	}
+	if strings.Contains(body, "post number 2.") || strings.Contains(body, "after=") {
+		t.Error("the first page holds an older post, or a way to a newer page")
+	}
+	if strings.Index(body, "post number 32.") > strings.Index(body, "post number 31.") {
+		t.Error("the day does not read newest first")
+	}
+
+	// the second page, in another language: the last two, and the way back
+	code, body = get(t, h, "/archives/2025-08-29?lang=zh&before="+last)
+	if code != http.StatusOK || len(posts.FindAllString(body, -1)) != 2 {
+		t.Fatalf("the second page answered %d with %d posts", code, len(posts.FindAllString(body, -1)))
+	}
+	for _, want := range []string{
+		"<title>2025 年 8 月 29 日 · 归档 · hub.example</title>",
+		`href="/archives/2025-08-29?lang=zh&amp;after=` + ids[1] + `"`,
+		`href="/archives?lang=zh"`,
+		"32 条帖子 · UTC",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the second page lacks %q", want)
+		}
+	}
+	// Prev from the second page is the day's own address
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "http://hub.example/archives/2025-08-29?lang=zh&after="+ids[1], nil))
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/archives/2025-08-29?lang=zh" {
+		t.Errorf("Prev from the second page answered %d to %q", w.Code, w.Header().Get("Location"))
+	}
+
+	for _, path := range []string{
+		"/archives/2025-08-30",                  // a day with no posts
+		"/archives/2999-01-01",                  // a day still to come
+		"/archives/2025-8-29", "/archives/nope", // not a date
+		"/archives/2025-02-30",
+		"/archives/2025-08-29?before=nope", // not a post
+	} {
+		if code, _ := get(t, h, path); code != http.StatusNotFound {
+			t.Errorf("%s answered %d, want 404", path, code)
+		}
+	}
+	if _, body := get(t, h, "/archives/2025-08-30"); !strings.Contains(body, "No posts were sent on that day.") {
+		t.Error("a day with no posts does not say so")
+	}
+	if got := s.StatsPathLabel("/archives/2025-08-29"); got != "Archives: 2025-08-29" {
+		t.Errorf("the stats call the day %q", got)
 	}
 }

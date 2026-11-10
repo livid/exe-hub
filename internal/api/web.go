@@ -567,6 +567,9 @@ type webData struct {
 	StatsPage *stats.Page
 	Badge     *webBadge    // the badge page's snippets and the GIF's facts
 	Archives  *webArchives // the Archives page's calendars (archives.go)
+	// one day of the Archives: the day as its address has it (2006-01-02)
+	// and as the window's title says it
+	Day, DayName string
 }
 
 // webURL is the Hub app's URL matcher; it lives in the card package now,
@@ -1470,6 +1473,8 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 	switch d.Page {
 	case "home", "notifications", "bookmarks", "profile", "archives":
 		d.Nav, d.NavOn = true, d.Page
+	case "day": // a day of the Archives stands under their row
+		d.Nav, d.NavOn = true, "archives"
 	case "thread":
 		d.Nav = true
 	}

@@ -3299,10 +3299,7 @@ func (s *Store) PostDays(loc *time.Location) (days []DayPosts, first string, err
 		if began == 0 || received < began {
 			began = received
 		}
-		if ts > received+postDaySkew.Milliseconds() {
-			ts = received
-		}
-		n[time.UnixMilli(ts).In(loc).Format("2006-01-02")]++
+		n[time.UnixMilli(postTime(ts, received)).In(loc).Format("2006-01-02")]++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, "", err
@@ -3316,6 +3313,75 @@ func (s *Store) PostDays(loc *time.Location) (days []DayPosts, first string, err
 	}
 	slices.SortFunc(days, func(a, b DayPosts) int { return strings.Compare(a.Day, b.Day) })
 	return days, time.UnixMilli(began).In(loc).Format("2006-01-02"), nil
+}
+
+// postTime is when a post was sent as the Archives believe it: its own
+// time, or the time the hub received it when its own runs more than
+// postDaySkew ahead of that. postTimeSQL says the same of a row of p.
+func postTime(ts, received int64) int64 {
+	if ts > received+postDaySkew.Milliseconds() {
+		return received
+	}
+	return ts
+}
+
+var postTimeSQL = fmt.Sprintf(`(CASE WHEN p.ts > p.received + %d THEN p.received ELSE p.ts END)`, postDaySkew.Milliseconds())
+
+// dayCursor is cursor for a day's posts, which stand in the order they
+// were sent: the page boundary is the cursor post's postTime.
+func (s *Store) dayCursor(id string, top bool) (int64, string, error) {
+	if id == "" {
+		if top {
+			return 1 << 62, "\uffff", nil
+		}
+		return -1 << 62, "", nil
+	}
+	var at int64
+	err := s.db.QueryRow(`SELECT `+postTimeSQL+` FROM posts p WHERE p.id=?`, id).Scan(&at)
+	if err == sql.ErrNoRows {
+		return 0, "", ErrNotFound
+	}
+	return at, id, err
+}
+
+// DayFeed is the posts sent from from up to to (ms; a day of the
+// Archives, PLAN.md — One day's posts), replies among them, the newest
+// first and keyset-paginated like Feed, by the time PostDays counts a
+// post on. DayFeedNewer is its other direction, like FeedNewer;
+// DayCount the total, for the page's pager. They read every post's
+// times, as PostDays does.
+func (s *Store) DayFeed(from, to int64, before string, limit int) ([]FeedPost, error) {
+	at, bid, err := s.dayCursor(before, true)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(feedQuery+`WHERE `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ? AND (`+postTimeSQL+`, p.id) < (?, ?) ORDER BY `+postTimeSQL+` DESC, p.id DESC LIMIT ?`,
+		from, to, at, bid, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+func (s *Store) DayFeedNewer(from, to int64, after string, limit int) ([]FeedPost, error) {
+	at, aid, err := s.dayCursor(after, false)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(feedQuery+`WHERE `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ? AND (`+postTimeSQL+`, p.id) > (?, ?) ORDER BY `+postTimeSQL+`, p.id LIMIT ?`,
+		from, to, at, aid, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
+func (s *Store) DayCount(from, to int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM posts p WHERE `+postTimeSQL+` >= ? AND `+postTimeSQL+` < ?`, from, to).Scan(&n)
+	return n, err
 }
 
 // PushSub is one browser's Web Push subscription (PLAN.md

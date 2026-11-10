@@ -178,8 +178,8 @@ a.mention { text-decoration: none; }
    Platinum highlight up to the selection's #333399, the number turning
    white where the ground is dark. A day that is not one of the hub's —
    still to come, or before its first — is a grey number on no ground.
-   Today wears a black line. Under the calendars, the key: the five
-   grounds from fewer to more. */
+   Today wears a black line, and a day with posts is the link to them.
+   Under the calendars, the key: the five grounds from fewer to more. */
 /* each calendar keeps its own height (align-items): stretched to a
    taller neighbour's, a five-week month's rows would grow past the cell */
 .arch { display: grid; grid-template-columns: repeat(auto-fill, 170px); justify-content: center; align-items: start; gap: 14px 20px; padding: 12px 12px 14px; }
@@ -199,6 +199,9 @@ a.mention { text-decoration: none; }
 .cal .l4, .archkey .l4 { background: #333399; }
 .cal .l3, .cal .l4 { color: #fff; }
 .cal .now { border: 1px solid #262626; line-height: 20px; }
+/* a day with posts is the way to them (PLAN.md, Archives — One day's
+   posts): the link is the whole cell, in the cell's own colours */
+.cal td a { display: block; color: inherit; text-decoration: none; }
 .archkey { display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 0 14px 12px; font-size: 11px; color: #666; }
 .archkey i { box-sizing: border-box; display: block; width: 10px; height: 10px; }
 .archkey span:first-child { margin-right: 4px; }
@@ -1381,11 +1384,27 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
         <caption><span class="cap"><b>{{$.MonthName .Year .Month}}</b><span>{{.Posts}}</span></span></caption>
         <thead><tr>{{range $.Weekdays}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
         <tbody>{{range .Weeks}}
-          <tr>{{range .}}{{if not .Day}}<td></td>{{else if .Off}}<td class="off">{{.Day}}</td>{{else}}<td class="l{{.Level}}{{if .Today}} now{{end}}" title="{{if .Posts}}{{T "archives.day" "date" .Date "n" .Posts}}{{else}}{{T "archives.day.none" "date" .Date}}{{end}}">{{.Day}}</td>{{end}}{{end}}</tr>{{end}}
+          <tr>{{range .}}{{if not .Day}}<td></td>{{else if .Off}}<td class="off">{{.Day}}</td>{{else if .Posts}}<td class="l{{.Level}}{{if .Today}} now{{end}}"><a href="/archives/{{.Date}}{{$.Q}}" title="{{T "archives.day" "date" .Date "n" .Posts}}">{{.Day}}</a></td>{{else}}<td class="l0{{if .Today}} now{{end}}" title="{{T "archives.day.none" "date" .Date}}">{{.Day}}</td>{{end}}{{end}}</tr>{{end}}
         </tbody>
       </table>{{end}}
     </div>
     <div class="archkey"><span>{{T "archives.less"}}</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>{{T "archives.more"}}</span></div>
+    <div class="statusbar"><span>{{.Message}}</span></div>
+  </div>
+</div>
+</div>
+</div>
+{{else if eq .Page "day"}}
+<div class="desk">
+{{template "nav" .}}
+<div class="main">
+<div class="window">
+  <div class="titlebar"><a class="tbox" href="/archives{{.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{.DayName}}</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="pager top"><a class="btn prev back" href="/archives{{.Q}}">{{template "arrow"}}<span>{{T "archives"}}</span></a>{{template "lang" .}}</div>
+    {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
+    {{range .Posts}}{{template "post" .}}{{end}}
+    {{if or .Prev .Next}}<div class="pager">{{template "pager" .}}</div>{{end}}
     <div class="statusbar"><span>{{.Message}}</span></div>
   </div>
 </div>
@@ -4825,9 +4844,9 @@ document.addEventListener("change", e => {
 {{define "fpager"}}{{if .PrevHref}}<a class="btn prev back" href="{{.PrevHref}}" target="_self">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{T "replies.range" "a" .From "b" .To "n" .Count}}</span>{{if .NextHref}}<a class="btn next fwd" href="{{.NextHref}}" target="_self"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 {{define "tpager"}}{{if .PrevHref}}<a class="btn prev back" href="{{.PrevHref}}">{{template "arrow"}}<span>{{T "prev"}}</span></a>{{end}}<span class="stats">{{T "replies.range" "a" .From "b" .To "n" .Count}}</span>{{if .NextHref}}<a class="btn next fwd" href="{{.NextHref}}"><span>{{T "next"}}</span>{{template "arrow-r"}}</a>{{end}}{{end}}
 
-{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}/u/{{.NavFor}}/{{.Page}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
+{{define "cursors"}}{{if eq .Page "search"}}/search?q={{.Query}}&amp;{{else if eq .Page "day"}}/archives/{{.Day}}?{{else if eq .Page "profile"}}/u/{{.Profile.ID}}?{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}/u/{{.NavFor}}/{{.Page}}?{{else}}/?{{end}}{{if .Lang}}lang={{.Lang}}&amp;{{end}}{{end}}
 
-{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
+{{define "counts"}}{{if eq .Page "search"}}{{T "matches" "n" .Count}}{{else if eq .Page "day"}}{{T "archives.posts" "n" .Count}}{{else if or (eq .Page "notifications") (eq .Page "bookmarks")}}{{else if eq .Page "profile"}}{{if .Since}}{{.Count}}{{else}}{{len .Posts}}{{end}} {{T "posts"}}{{else}}<span class="m"><span data-n="members">{{.Members}}</span> {{T "members"}} · </span><span data-n="posts">{{.Count}}</span> {{T "posts"}}{{if .StatsOn}} · <a href="/stats" title="{{T "online.title"}}"><span data-n="online">{{.Online}}</span> {{T "online"}}</a>{{end}}{{end}}{{end}}
 
 {{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}{{template "lang" .}}</form>
 {{end}}

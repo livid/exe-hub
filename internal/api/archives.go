@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -198,6 +199,17 @@ func (d *webData) MonthName(year, month int) string {
 	return d.L.T("archives.month", "y", year, "m", name)
 }
 
+// dayName is a day in the page's language: "November 8, 2026",
+// "2026 年 11 月 8 日".
+func dayName(l *webLocale, t time.Time) string {
+	names := strings.Split(l.T("archives.months"), ",")
+	name := ""
+	if m := int(t.Month()); m <= len(names) {
+		name = names[m-1]
+	}
+	return l.T("archives.date", "y", t.Year(), "m", name, "d", t.Day())
+}
+
 // Weekdays heads a calendar's columns, Sunday first.
 func (d *webData) Weekdays() []string {
 	return strings.Split(d.L.T("archives.weekdays"), ",")
@@ -216,5 +228,59 @@ func (s *Server) handleArchivesPage(w http.ResponseWriter, r *http.Request) {
 		Canonical: true, Lang: rd.Lang, Q: rd.Q, Archives: a,
 		Message: rd.L.T("archives.status", "posts", rd.L.T("archives.posts", "n", a.Posts),
 			"days", rd.L.T("archives.days", "n", a.Days), "zone", a.Zone),
+	})
+}
+
+// handleArchiveDayPage: GET /archives/{day}, the posts sent on one day
+// (PLAN.md, Archives — One day's posts): what the day's cell counts,
+// replies among them, the newest first and paged like the feed. The day
+// is the calendar's own — it begins in dayZone, a time ahead of the
+// hub's clock is not believed, and a post dated after today is today's —
+// so a cell's number is the page's. A day with no posts has no page: so
+// has one still to come, and anything that is not a date.
+func (s *Server) handleArchiveDayPage(w http.ResponseWriter, r *http.Request) {
+	loc := s.dayZone()
+	day := r.PathValue("day")
+	today := time.Now().In(loc).Format("2006-01-02")
+	t, err := time.ParseInLocation("2006-01-02", day, loc)
+	if err != nil || t.Format("2006-01-02") != day || day > today {
+		s.webError(w, r, http.StatusNotFound, "err.noday")
+		return
+	}
+	from, to := t.UnixMilli(), time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, loc).UnixMilli()
+	if day == today {
+		to = 1 << 62
+	}
+	count, err := s.St.DayCount(from, to)
+	if err != nil {
+		s.webError(w, r, http.StatusInternalServerError, "err.archives")
+		return
+	}
+	if count == 0 {
+		s.webError(w, r, http.StatusNotFound, "err.noday")
+		return
+	}
+	pg, err := webPageOf(r.URL.Query(),
+		func(before string, n int) ([]store.FeedPost, error) { return s.St.DayFeed(from, to, before, n) },
+		func(after string, n int) ([]store.FeedPost, error) { return s.St.DayFeedNewer(from, to, after, n) })
+	if errors.Is(err, store.ErrNotFound) {
+		s.webError(w, r, http.StatusNotFound, "err.nopage")
+		return
+	}
+	if err != nil {
+		s.webError(w, r, http.StatusInternalServerError, "err.archives")
+		return
+	}
+	rd := webReadingOf(r)
+	if pg.Home {
+		http.Redirect(w, r, "/archives/"+day+rd.Q, http.StatusFound)
+		return
+	}
+	name := dayName(rd.L, t)
+	s.webRender(w, r, http.StatusOK, &webData{
+		Page: "day", Title: name + " · " + rd.L.T("archives") + " · " + r.Host, Desc: rd.L.T("archives.day", "date", day, "n", count),
+		Canonical: true, Lang: rd.Lang, Q: rd.Q, Day: day, DayName: name, Count: count,
+		Posts: webListed(s.webPosts(rd, pg.Posts)), Prev: pg.Prev, Next: pg.Next,
+		Message: rd.L.T("archives.posts", "n", count) + " · " + zoneName(time.Now().In(loc)),
 	})
 }
