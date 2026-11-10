@@ -1507,6 +1507,26 @@ hub that carries the post.
 - The home page is a desk of two windows: stacked, join first, on a
   narrow screen; from 1060px wide the join window sits at the left and
   stays put (sticky) while the feed scrolls beside it. CSS only.
+- **A modal holds the page still** (2026-11-10; Livid: "when a modal is
+  show (profile, quick buy...), background page should not be
+  scrollable"). While a veil is up — the Profile dialog's, the drawing
+  pad's, the token page's Buy window's, and the one behind the
+  reactions sheet and the list of who reacted — the page under it does
+  not scroll: the wheel, the keys and a finger move nothing there. It
+  is CSS alone, keyed on the veils themselves (`html:has(…) { overflow:
+  hidden }`), so each modal is held without a line of its script and
+  closing it by any road lets go; a modal made later with one of these
+  veils is held too. The scroll bar's place is kept at all times
+  (`scrollbar-gutter: stable`, not in the replies frame), so the page
+  does not step sideways when the bar goes — which moves a page too
+  short to scroll half a bar's width left on a system that draws its
+  bars beside the page (Windows), and nothing where bars lie over it.
+  While a veil is up the canvas takes the veil's shade, so the bar's
+  place is no pale strip beside the dimmed page. Menus (a reaction's
+  menu) and the picture window are not modals and hold nothing.
+  Test: `HUB=… node ~/tools/playwright/exe-hub-modal-scroll-test.js`
+  (96 checks at ratios 1 and 1.5 with scroll bars drawn, and on a
+  phone by touch).
 - **Window shape follows the exe desktop's document windows** (Newsfeed,
   the Hub app): posts directly on the white frame. Along the frame's
   bottom, on the desktop's platinum strip under a black rule, the feed
@@ -2272,16 +2292,21 @@ only under its post, and the feed is words first.
   their counts in memory.
 - **One profile's wall.** `GET /u/{id}/pictures` is the same wall for
   one profile's posts, titled "Pictures by {name}", in the profile's own
-  window: the head (`phead`, the profile page's block) and under it a
-  row of two tabs, Posts and Pictures, over the pane — the first tab
-  control on the public pages, the Platinum one as the exe desk draws
-  it (`.tabbar` of `.tab`s, trapezoids drawn as an SVG border-image),
-  the active tab on the pane's white and running 2px down over the
-  frame's bevel row and black line. The profile page wears the same
-  row with Posts on; so the way to anyone's pictures is their profile
-  (Livid, 2026-11-10: "when i view other user's profile, want a tab to
-  view their pictures"). An id that posted and never set a profile has
-  the window too, with its id for a name.
+  window: the head (`phead`, the profile page's block) and under it
+  two tabs, Posts and Pictures, as the Piano design of the Platinum
+  Tabs mockups (hub f0578e66; Livid chose it, 2026-11-10): joined push
+  buttons (`.btn`, the chrome's) astride the pane's top line, centred,
+  the open pane's key down (#888, white word, the pressed bevels). The
+  row stands 12px under the head's frame, the pane's black line runs
+  through the middle of the 20px keys, and the pane (`.frame.keyed`)
+  keeps 22px over its content for them, the design's measures. The
+  classes are the control's own (`.ptabs`, `.ptab`): a first version
+  styled `.tab`, which is also the Stats page's range buttons, and
+  broke them. The profile page wears the same row with Posts down; so
+  the way to anyone's pictures is their profile (Livid, 2026-11-10:
+  "when i view other user's profile, want a tab to view their
+  pictures"). An id that posted and never set a profile has the window
+  too, with its id for a name.
 - **Words.** `nav.pictures`, `pictures`, `pictures.desc`, `pictures.of`,
   `pictures.of.desc`, `pictures.tile`, `pictures.none`, `pictures.older`,
   `pictures.n` (`.one`), `err.pictures`, in the four catalogs.

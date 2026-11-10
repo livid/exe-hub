@@ -76,6 +76,31 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null");
    white frame, a statusbar strip. No assets; two small scripts at the
    end of the page. */
 a { color: #333399; }
+/* A modal holds the page still (Livid, 2026-11-10: "when a modal is
+   show (profile, quick buy...), background page should not be
+   scrollable"). While a veil is up — the Profile dialog's, the drawing
+   pad's, the Buy window's, the one behind the reactions sheet and the
+   list of who reacted — the page under it does not scroll: the wheel,
+   a finger and the keys move nothing there. CSS alone, by what is on
+   the page, so every modal there is and any made later with one of
+   these veils is held the same way, and closing it by any road lets
+   go. The scroll bar's place is kept at all times, so the page does
+   not step sideways when the bar goes and comes back (a system whose
+   bars lie over the page keeps none, and loses nothing). The replies
+   frame is a page inside another and has no modal: it keeps no place
+   for a bar it never shows.
+   A veil covers the page and not the bar's place beside it, which is
+   the canvas: left alone it would stand as a pale strip down the dimmed
+   page's right edge. So while a veil is up the canvas takes the shade
+   the veil gives the desk's grey — #ccc under 12% black is #b3b3b3,
+   under the reactions' 15% #adadad — and the body, which paints the
+   desk itself then, reaches the window's foot so no canvas shows under
+   a short page. */
+html:not(.framed) { scrollbar-gutter: stable; }
+html:has(.veil:not([hidden]), .dveil:not([hidden]), .tk-veil:not([hidden]), .rxveil) { overflow: hidden; }
+html:has(.veil:not([hidden]), .dveil:not([hidden]), .tk-veil:not([hidden])) { background: #b3b3b3; }
+html:has(.rxveil) { background: #adadad; }
+html:has(.veil:not([hidden]), .dveil:not([hidden]), .tk-veil:not([hidden]), .rxveil) body { box-sizing: border-box; min-height: 100vh; }
 /* a mention: a person's name as it is today, linked to their page; a
    name, so it is not underlined the way an address is */
 a.mention { text-decoration: none; }
@@ -363,25 +388,21 @@ a.mention { text-decoration: none; }
 .tile img.draw { object-fit: contain; image-rendering: pixelated; }
 .wallnone { padding: 14px 12px; color: #666; }
 /* the profile window's tabs (PLAN.md, Pictures — One profile's wall):
-   the Platinum tab control as the exe desk draws it (index.html,
-   "Platinum tab control"): trapezoid tabs, 22px, the sides flaring
-   10px, drawn as an SVG border-image; inactive on #ccc, the active one
-   on the pane's white, running 2px down over the frame's bevel row and
-   its black line so the pane opens into it. The tabs begin 4px in from
-   the frame's edge, as the desk's do. */
-.ptabs { margin: 0 4px -1px; padding: 0 4px; }
-.tabbar { display: flex; align-items: flex-start; position: relative; z-index: 2; }
-.tab {
-  display: block; height: 22px; color: #000; font-size: 11px; font-weight: bold; line-height: 14px;
-  text-align: center; padding: 0 2px; position: relative; white-space: nowrap; text-decoration: none;
-  border-style: solid; border-width: 8px 14px 0 14px;
-  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='22'><path d='M4.5 23 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L39.5 23' fill='%23ccc' stroke='%23000'/><path d='M6.2 23 L12 5.8 Q12.6 2.5 14 2.5 L29.5 2.5' fill='none' stroke='%23ddd'/><path d='M30 2.5 Q31.6 2.5 32.2 5.8 L37.8 23' fill='none' stroke='%23aaa'/></svg>") 8 14 0 14 fill stretch;
-}
-.tab + .tab { margin-left: -7px; }
-.tab.active {
-  height: 25px; margin-bottom: -3px; z-index: 3;
-  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='25'><path d='M3.8 25 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L40.2 25 Z' fill='%23fff'/><path d='M4.9 22 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L39.1 22' fill='none' stroke='%23000'/><path d='M6.6 22 L12 5.8 Q12.6 2.5 14 2.5 L29.5 2.5' fill='none' stroke='%23fff'/><path d='M30 2.5 Q31.6 2.5 32.2 5.8 L37.4 22' fill='none' stroke='%23bbb'/></svg>") 8 14 0 14 fill stretch;
-}
+   Piano, from the Platinum Tabs designs (hub f0578e66): joined push
+   buttons astride the pane's top line, centred, the open pane's key
+   staying down. Each key is the push button (.btn, chrome.css) with
+   its corners squared where it meets the next and one line between
+   two keys; the row stands 12px under the head's frame and the pane's
+   black line runs through the middle of the 20px keys, as the etched
+   line does in the design. The pane keeps 22px over its content for
+   them: the keys' lower half and a 12px gap, the design's measure. */
+.ptabs { display: flex; justify-content: center; position: relative; z-index: 2; margin: 8px 4px -10px; }
+.ptabs .ptab { min-width: 0; padding: 2px 10px; border-radius: 0; border-right-width: 0; }
+.ptabs .ptab:first-child { border-radius: 3px 0 0 3px; }
+.ptabs .ptab:last-child { border-radius: 0 3px 3px 0; border-right-width: 1px; }
+.ptabs .ptab.on { background: #888; color: #fff;
+  box-shadow: inset 1px 1px 0 #666, inset -1px -1px 0 #aaa, inset 2px 2px 0 #777, inset -2px -2px 0 #999; }
+.keyed { padding-top: 22px; }
 @media (max-width: 480px) {
   .wall { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 8px 10px; }
   .wallcap { padding: 8px 8px 6px; }
@@ -1512,7 +1533,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     {{template "phead" .}}
   </div>
   {{template "ptabs" (.Tabs "posts")}}
-  <div class="frame">
+  <div class="frame keyed">
     {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T "noposts"}}</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
@@ -1571,7 +1592,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     {{template "phead" .}}
   </div>
   {{template "ptabs" (.Tabs "pictures")}}
-  <div class="frame">
+  <div class="frame keyed">
     {{template "wallbody" .}}
   </div>
 {{else}}
@@ -5573,9 +5594,10 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
     </div>{{end}}
 
 {{/* the profile window's tabs (PLAN.md, Pictures — One profile's wall):
-     Posts and Pictures, the page's own tab active, over the pane under
-     them. Dot is .Tabs: the id, the query and which is on. */}}
-{{define "ptabs"}}<div class="tabbar ptabs" role="tablist"><a class="tab{{if eq .On "posts"}} active{{end}}" href="/u/{{.ID}}{{.Q}}"{{if eq .On "posts"}} aria-current="page"{{end}}>{{T "tab.posts"}}</a><a class="tab{{if eq .On "pictures"}} active{{end}}" href="/u/{{.ID}}/pictures{{.Q}}"{{if eq .On "pictures"}} aria-current="page"{{end}}>{{T "pictures"}}</a></div>{{end}}
+     Posts and Pictures as Piano keys astride the pane under them, the
+     page's own key down. Dot is .Tabs: the id, the query and which is
+     on. */}}
+{{define "ptabs"}}<div class="ptabs" role="tablist"><a class="btn ptab{{if eq .On "posts"}} on{{end}}" href="/u/{{.ID}}{{.Q}}"{{if eq .On "posts"}} aria-current="page"{{end}}>{{T "tab.posts"}}</a><a class="btn ptab{{if eq .On "pictures"}} on{{end}}" href="/u/{{.ID}}/pictures{{.Q}}"{{if eq .On "pictures"}} aria-current="page"{{end}}>{{T "pictures"}}</a></div>{{end}}
 
 {{/* the wall's body (PLAN.md, Pictures): the months of tiles, Older,
      the status line */}}
