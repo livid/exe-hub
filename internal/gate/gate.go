@@ -116,7 +116,17 @@ func (g *Gate) Held(pub ed25519.PublicKey) map[string]uint64 {
 }
 
 // Check returns nil if pub may write under the current gate config.
-func (g *Gate) Check(pub ed25519.PublicKey) error {
+func (g *Gate) Check(pub ed25519.PublicKey) error { return g.check(pub, false) }
+
+// Recheck is Check with the balance read again whatever verdict is kept:
+// for a key that has just bought what it lacked (PLAN.md, The token page
+// — The guide), which the kept "below" would otherwise hold off for the
+// rest of recheck. The new verdict is kept like any other; when the RPC
+// cannot be reached the kept one still stands. Each call is an RPC call:
+// the caller rations them.
+func (g *Gate) Recheck(pub ed25519.PublicKey) error { return g.check(pub, true) }
+
+func (g *Gate) check(pub ed25519.PublicKey, fresh bool) error {
 	c := g.cfg.Get()
 	if c.Gate.Mode != "token" {
 		return nil
@@ -127,7 +137,7 @@ func (g *Gate) Check(pub ed25519.PublicKey) error {
 	g.mu.Lock()
 	v, cached := g.cache[addr]
 	g.mu.Unlock()
-	if cached && time.Since(v.at) < t.RecheckDur {
+	if cached && !fresh && time.Since(v.at) < t.RecheckDur {
 		return v.errIfDenied()
 	}
 
@@ -177,13 +187,17 @@ func (v verdict) errIfDenied() error {
 
 // balance sums the address's token accounts for the mint, in raw base
 // units. The RPC's mint filter is program-agnostic — it covers both the
-// classic SPL Token and Token-2022 programs in one call.
+// classic SPL Token and Token-2022 programs in one call. The balance is
+// read as of the last block the cluster has confirmed, not the last it
+// has finalized (the RPC's default, some thirteen seconds behind): a
+// purchase the chain has confirmed counts at once, and a confirmed block
+// is not undone in practice.
 func (g *Gate) balance(t *config.TokenGate, mint, addr string) (uint64, error) {
 	req, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "getTokenAccountsByOwner",
 		"params": []any{addr,
 			map[string]string{"mint": mint},
-			map[string]string{"encoding": "jsonParsed"}},
+			map[string]string{"encoding": "jsonParsed", "commitment": "confirmed"}},
 	})
 	resp, err := g.client.Post(t.RPCURL, "application/json", bytes.NewReader(req))
 	if err != nil {

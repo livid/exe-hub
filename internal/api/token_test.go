@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -10,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +28,16 @@ import (
 
 const tokenMint = "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump"
 
+// No test of this package reaches Jupiter or GeckoTerminal: a hub that
+// was given no token source of its own gets one that asks a dead port.
+func init() {
+	newTokenSource = func(rpc func() string) *token.Source {
+		s := token.New(rpc)
+		s.Jupiter, s.Gecko, s.Log = "http://127.0.0.1:1", "http://127.0.0.1:1", nil
+		return s
+	}
+}
+
 // tokenWorld stands in for everything the token page asks: Jupiter,
 // GeckoTerminal, a Solana RPC and the address of the token's picture.
 // down turns all of it off.
@@ -33,6 +46,8 @@ type tokenWorld struct {
 	down bool
 	tx   string // what the RPC says of a signature
 	txN  int    // how often it was asked
+	held string // the raw balance every owner holds
+	balN int    // how often a balance was read
 }
 
 func newTokenWorld(t *testing.T) *tokenWorld {
@@ -75,6 +90,11 @@ func newTokenWorld(t *testing.T) *tokenWorld {
 			 "data":{"parsed":{"type":"mint","info":{"decimals":6,"supply":"999998556426740","mintAuthority":null,"freezeAuthority":"Fr33zer"}}}}}}`)
 		case "getAsset":
 			io.WriteString(w, `{"result":{"mutable":false,"content":{"metadata":{"name":"V2EX <b>","symbol":"V2EX","description":"way to explore"},"links":{}}}}`)
+		case "getTokenAccountsByOwner":
+			tw.balN++
+			fmt.Fprintf(w, `{"result":{"value":[{"account":{"data":{"parsed":{"info":{"tokenAmount":{"amount":%q}}}}}}]}}`, tw.held)
+		case "getTokenSupply":
+			io.WriteString(w, `{"result":{"value":{"decimals":6}}}`)
 		case "getSignatureStatuses":
 			tw.txN++
 			io.WriteString(w, `{"result":{"value":[`+tw.tx+`]}}`)
@@ -206,7 +226,7 @@ func TestTokenPage(t *testing.T) {
 		// Buy: a push button where the link to jup.ag was, still that link without script, and its window
 		`<a class="btn" id="tk-buy" href="https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&amp;buy=` + tokenMint + `" target="_blank" rel="noopener nofollow" title="Buy on jup.ag" data-mint="` + tokenMint + `" data-symbol="V2EX" data-dec="6">Buy</a>`,
 		`<div class="tk-veil" id="tk-veil" hidden>`,
-		`<h2 id="tk-buy-h">Buy V2EX</h2>`,
+		`<h2 id="tk-buy-h"></h2>`, // the script names the token being bought
 		`<button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button>`,
 		`<button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button>`,
 		`<button type="button" class="btn default" id="tk-go" disabled>Buy</button>`,
@@ -255,6 +275,25 @@ func TestTokenPage(t *testing.T) {
 	if _, body = get(t, h, "/"); !strings.Contains(body, `(<a href="/token/`+tokenMint+`">about this token</a>)`) {
 		t.Error("the join window has no link to the token page")
 	}
+	// and its Post window carries the guide for a wallet that holds too
+	// little — a row, hidden until the gate says so — and the Buy window
+	// the guide opens, once
+	for _, want := range []string{
+		`<div class="row guide" hidden><span class="grow guide-text"></span><button type="button" class="btn guide-buy"></button></div>`,
+		`<div class="tk-veil" id="tk-veil" hidden>`,
+		`window.hubBuy = opts =>`,
+	} {
+		if n := strings.Count(body, want); n != 1 {
+			t.Errorf("the home page has %q %d times, want once", want, n)
+		}
+	}
+	// a hub with an open gate has neither
+	_, body = get(t, testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}}).Handler(), "/")
+	for _, not := range []string{`class="row guide"`, `id="tk-veil"`, `window.hubBuy = opts`} {
+		if strings.Contains(body, not) {
+			t.Errorf("an open hub's home page has %q", not)
+		}
+	}
 }
 
 // With nobody answering, the page still stands: the mint, what the gate
@@ -282,7 +321,7 @@ func TestTokenPageNothingAnswers(t *testing.T) {
 	if !strings.Contains(body, `title="Buy on jup.ag" data-mint="`+tokenMint+`" data-symbol="9raU…pump">Buy</a>`) {
 		t.Error("the Buy link is not the plain one")
 	}
-	for _, not := range []string{`class="tk-flags"`, `class="tk-mk"`, "<!-- render:", `id="tk-veil"`, `data-dec=`} {
+	for _, not := range []string{`class="tk-flags"`, `class="tk-mk"`, "<!-- render:", `data-dec=`} {
 		if strings.Contains(body, not) {
 			t.Errorf("the page has %q with nothing known", not)
 		}
@@ -356,6 +395,70 @@ func TestTokenTx(t *testing.T) {
 	// a hub with an open gate has no RPC to ask
 	if code, _ := get(t, testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}}).Handler(), "/v1/token/tx/"+sig); code != http.StatusNotFound {
 		t.Errorf("open gate: %d", code)
+	}
+}
+
+// /v1/gate names the token for the Post window's guide — its symbol once
+// anyone has said it, its decimals — and ?fresh=1 reads the balance
+// again though a verdict is kept, which is how a key that has just
+// bought what it lacked gets to post without waiting out recheck.
+func TestGateGuide(t *testing.T) {
+	tw := newTokenWorld(t)
+	s := tokenPageServer(t, tw)
+	h := s.Handler()
+	pub, _, _ := ed25519.GenerateKey(nil)
+	author := url.QueryEscape(base64.StdEncoding.EncodeToString(pub))
+	ask := func(q string) (out struct {
+		Gate  string
+		Mints []struct {
+			Amount, Held, Symbol, Mint string
+			Raw                        bool
+			Decimals                   *int
+		}
+	}) {
+		t.Helper()
+		code, body := get(t, h, "/v1/gate?author="+author+q)
+		if code != http.StatusOK {
+			t.Fatalf("/v1/gate%s: %d %s", q, code, body)
+		}
+		if err := json.Unmarshal([]byte(body), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	tw.held = "0"
+	v := ask("")
+	if v.Gate != "below" || len(v.Mints) != 1 || v.Mints[0].Held != "0" || v.Mints[0].Amount != "10,000" || v.Mints[0].Decimals == nil || *v.Mints[0].Decimals != 6 {
+		t.Fatalf("a key holding nothing: %+v", v)
+	}
+	// the symbol is asked for behind the first answer and stands in a later one
+	for i := 0; i < 100 && v.Mints[0].Symbol == ""; i++ {
+		time.Sleep(10 * time.Millisecond)
+		v = ask("")
+	}
+	if v.Mints[0].Symbol != "V2EX" {
+		t.Errorf("symbol = %q", v.Mints[0].Symbol)
+	}
+	// the key buys: the kept verdict still says below, a fresh check does not
+	tw.held = "10010000000"
+	n := tw.balN
+	if v = ask(""); v.Gate != "below" || tw.balN != n {
+		t.Errorf("a kept verdict: gate %q after %d more balance reads, want below and none", v.Gate, tw.balN-n)
+	}
+	if v = ask("&fresh=1"); v.Gate != "pass" || v.Mints[0].Held != "10,010" || tw.balN != n+1 {
+		t.Errorf("a fresh check: gate %q, held %q, %d balance reads", v.Gate, v.Mints[0].Held, tw.balN-n)
+	}
+	if v = ask(""); v.Gate != "pass" {
+		t.Errorf("after the fresh check the kept verdict is %q", v.Gate)
+	}
+	// fresh checks are rationed like unkept ones
+	limited := false
+	for i := 0; i < 20 && !limited; i++ {
+		code, _ := get(t, h, "/v1/gate?author="+author+"&fresh=1")
+		limited = code == http.StatusTooManyRequests
+	}
+	if !limited {
+		t.Error("twenty fresh checks at once and none turned away")
 	}
 }
 

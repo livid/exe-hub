@@ -361,6 +361,31 @@ func (s *Source) Info(mint string) *Info {
 	return in
 }
 
+// Symbol is the token's symbol as far as anyone has answered yet, ""
+// when nobody has. It never waits: it reads the kept answers, and when
+// there are none it starts the asking behind the caller, so the next
+// one finds them. For a page that must not wait on Jupiter (the Post
+// window's guide, through /v1/gate).
+func (s *Source) Symbol(mint string) string {
+	s.mu.Lock()
+	var sym string
+	if sl := s.slots["asset:"+mint]; sl != nil && sl.ok {
+		if a, _ := sl.val.(*dasAsset); a != nil {
+			sym = a.Symbol
+		}
+	}
+	if sl := s.slots["jupiter:"+mint]; sym == "" && sl != nil && sl.ok {
+		if j, _ := sl.val.(*jupToken); j != nil {
+			sym = j.Symbol
+		}
+	}
+	s.mu.Unlock()
+	if sym == "" {
+		go s.Info(mint)
+	}
+	return sym
+}
+
 // Candles is the pool's price over r, the oldest first, and when it was
 // read; nil when GeckoTerminal has not answered.
 func (s *Source) Candles(mint, pool string, r Range) ([]Candle, time.Time) {

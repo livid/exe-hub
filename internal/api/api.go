@@ -414,12 +414,21 @@ func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
 		// admins pass whatever they hold, but the balance is still theirs
 		// to see, so every key is checked
 		out.Mode = "token"
-		if !s.Gate.Cached(pub) && !s.gateLimit.allow() {
+		// ?fresh=1 reads the balance again whatever verdict is kept: the
+		// Post window asks so after a purchase (PLAN.md, The token page —
+		// The guide). It is an RPC call like an unkept check, and takes
+		// from the same bucket.
+		fresh := r.URL.Query().Get("fresh") == "1"
+		if (fresh || !s.Gate.Cached(pub)) && !s.gateLimit.allow() {
 			w.Header().Set("Retry-After", "1")
 			writeErr(w, http.StatusTooManyRequests, errors.New("too many gate checks: try again in a second"))
 			return
 		}
-		switch err := s.Gate.Check(pub); {
+		check := s.Gate.Check
+		if fresh {
+			check = s.Gate.Recheck
+		}
+		switch err := check(pub); {
 		case err == nil:
 			out.Gate = "pass"
 		case errors.Is(err, gate.ErrDenied):
@@ -435,11 +444,12 @@ func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
 				wm.Held = strconv.FormatUint(n, 10)
 			}
 			if dec, known := s.Gate.Decimals(m.Mint); known {
-				wm.Amount, wm.Raw = humanUnits(m.MinRaw, dec), false
+				wm.Amount, wm.Raw, wm.Decimals = humanUnits(m.MinRaw, dec), false, &dec
 				if read {
 					wm.Held = humanUnits(n, dec)
 				}
 			}
+			wm.Symbol = s.tokens().Symbol(m.Mint)
 			out.Mints = append(out.Mints, wm)
 		}
 	}

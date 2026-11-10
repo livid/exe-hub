@@ -612,6 +612,13 @@ html[data-saved] .saved { display: flex; }
 }
 .compose .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .compose .grow { flex: 1 1 12em; min-width: 0; font-size: 11px; color: #333; }
+/* the guide (PLAN.md, The token page — The guide): for a wallet signed in
+   that holds too little to post, a row over the status line on the
+   note's yellow — what it holds and what posting takes, and Buy, the
+   way to the Buy window, at its right */
+.compose .guide { box-sizing: border-box; padding: 5px 8px; border: 1px solid #262626; background: #ffffc9; box-shadow: inset 1px 1px 0 #fff; }
+.compose .guide[hidden] { display: none; }
+.compose .guide .grow { color: #262626; }
 .compose .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* the address check being made again, the hub out of reach (offline,
    or the edge's 502 while it restarts): an 8px disc of pixels in the
@@ -1671,18 +1678,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     <div class="statusbar"><span>{{if .Stamp}}{{T "token.sources"}} · <time datetime="{{.Stamp}}">{{.Stamp}}</time>{{else}}{{T "token.nodata"}}{{end}}</span></div>
   </div>
 </div>
-{{if .DecKnown}}<div class="tk-veil" id="tk-veil" hidden>
-  <div class="tk-dlg" role="dialog" aria-modal="true" aria-labelledby="tk-buy-h">
-    <h2 id="tk-buy-h">{{T "buy.title" "symbol" (or .Symbol .Name)}}</h2>
-    <div class="irow"><span class="ilab">{{T "buy.pay"}}</span><span class="ival"><span class="tk-seg" id="tk-pay"><button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button></span></span></div>
-    <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span></span></div>
-    <div class="irow"><span class="ilab">{{T "buy.cost"}}</span><span class="ival" id="tk-cost">—</span></div>
-    <div class="irow"><span class="ilab">{{T "buy.get"}}</span><span class="ival" id="tk-get">—</span></div>
-    <div class="irow"><span class="ilab">{{T "buy.wallet"}}</span><span class="ival tk-wal"><span class="popup lang" id="tk-wsel" hidden><select aria-label="{{T "buy.wallet"}}"></select><span class="well"><i><b></b></i></span></span><span id="tk-wname">—</span></span></div>
-    <div class="p-note" id="tk-note" role="status">{{T "buy.note"}}</div>
-    <div class="btns"><button type="button" class="btn" id="tk-cancel">{{T "cancel"}}</button><button type="button" class="btn default" id="tk-go" disabled>{{T "buy"}}</button></div>
-  </div>
-</div>{{end}}{{end}}
+{{end}}
 </div>
 </div>
 {{else if eq .Page "stats"}}
@@ -2035,6 +2031,7 @@ function hubAnswers() {
   ask();
 })();
 </script>
+{{if .BuyWin}}{{template "buywin" .}}{{end}}
 {{if eq .Page "token"}}<script>
 // The token page (PLAN.md, The token page). The page stands without
 // this: the server drew the chart and set its times in UTC. With it,
@@ -2093,14 +2090,16 @@ function hubAnswers() {
   plot.addEventListener("pointerleave", clear);
   plot.addEventListener("pointercancel", clear);
 })();
-// The Buy window (PLAN.md, The token page — Buy). Buy opens a dialog:
-// what to pay with (SOL, USDC or USDT), how many to buy (10,000, 20,000
-// or 50,000), what that costs, and the wallet that pays. The price and
-// the transaction are Jupiter's swap API's, asked by this page; the
-// wallet shows the transaction and sends it; the hub only says, after,
-// whether the chain confirmed it. Nothing here holds a key or moves
-// money by itself: every purchase is one approval in the reader's
-// wallet.
+</script>
+{{end}}{{if .BuyWin}}<script>
+// The Buy window (PLAN.md, The token page — Buy). window.hubBuy(o) opens
+// a dialog: what to pay with (SOL, USDC or USDT), how many to buy
+// (10,000, 20,000 or 50,000), what that costs, and the wallet that
+// pays. The price and the transaction are Jupiter's swap API's, asked by
+// this page; the wallet shows the transaction and sends it; the hub only
+// says, after, whether the chain confirmed it. Nothing here holds a key
+// or moves money by itself: every purchase is one approval in the
+// reader's wallet.
 //
 // Jupiter's route for a token like this one takes an exact amount in,
 // not out, so the amount to pay is found: what the quantity sells for
@@ -2109,22 +2108,34 @@ function hubAnswers() {
 // quantity or a hair over. The reader gets at least what the button
 // said — the point of buying 10,000 is to hold 10,000.
 //
+// Two ways lead here. The token page's Buy button: any wallet, any
+// quantity. And the Post window's guide (the compose script), for a
+// wallet signed in that holds too little to post: it names the address
+// that must receive the tokens, the wallet it signed in with and how
+// many it lacks, and is told when the chain has confirmed the purchase.
+// o: { mint, dec, symbol, jup — the link to jup.ag for a browser with
+// no wallet to pay from; qty — how many are wanted, the least quantity
+// that covers it is pressed; address — the only account that may pay;
+// wallet — its wallet's name; after() — called once the purchase is
+// confirmed, resolves true when the buyer may post; closed() — called
+// when the window shuts; opener — what takes the focus back }.
+//
 // Without script, without BigInt, or for a token whose decimals nobody
-// has said, the button stays what it is in the markup: a link to
-// jup.ag's swap page.
+// has said, the token page's button stays what it is in the markup: a
+// link to jup.ag's swap page.
 (() => {
-  const btn = document.getElementById("tk-buy"), veil = document.getElementById("tk-veil");
-  if (!btn || !veil || !btn.dataset.dec || typeof BigInt !== "function") return;
+  const veil = document.getElementById("tk-veil");
+  if (!veil || typeof BigInt !== "function") return;
   const JUP = "https://lite-api.jup.ag/swap/v1", SLIP = 100; // basis points
-  const mint = btn.dataset.mint, dec = +btn.dataset.dec, symbol = btn.dataset.symbol;
   const PAY = {
     SOL: { mint: "So11111111111111111111111111111111111111112", dec: 9, show: 4 },
     USDC: { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", dec: 6, show: 2 },
     USDT: { mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", dec: 6, show: 2 },
   };
   const $ = id => document.getElementById(id);
-  const payBox = $("tk-pay"), qtyBox = $("tk-qty"), cost = $("tk-cost"), get = $("tk-get"), note = $("tk-note");
+  const payBox = $("tk-pay"), qtyBox = $("tk-qty"), cost = $("tk-cost"), get = $("tk-get"), note = $("tk-note"), title = $("tk-buy-h");
   const wsel = $("tk-wsel"), wpick = wsel.querySelector("select"), wname = $("tk-wname"), cancel = $("tk-cancel"), go = $("tk-go");
+  const QTYS = [...qtyBox.children].map(b => +b.dataset.qty);
   const short = a => a.length > 10 ? a.slice(0, 4) + "…" + a.slice(-4) : a;
   // raw base units as a number set for reading: 10,086.9
   const units = (raw, d, places) => {
@@ -2140,18 +2151,23 @@ function hubAnswers() {
     return out;
   };
   const declined = e => e && (e.code === 4001 || /reject|declin|cancel|denied/i.test(e.message || ""));
+  // a reason that is a whole sentence of its own, said as it is
+  const stop = msg => Object.assign(new Error(msg), { whole: true });
+
+  // what is being bought, and for whom: set by each hubBuy
+  let o = { mint: "", dec: 0, symbol: "", jup: "" };
+  let pay = "SOL", qty = QTYS[0], quote = null, phase = "idle", asked = 0, account = null, timer = 0;
 
   // ---- wallets: the Wallet Standard's handshake, for those that send a transaction ----
   const wallets = [];
-  let pay = "SOL", qty = 10000, quote = null, phase = "idle", asked = 0, account = null, timer = 0;
   const registry = { register(...ws) {
     for (const w of ws) if (w && w.features && w.features["standard:connect"] && w.features["solana:signAndSendTransaction"] && !wallets.includes(w)) wallets.push(w);
     drawWallets();
     return () => {};
   } };
   const remembered = () => { try { return (JSON.parse(localStorage.getItem("exe-hub-wallet") || "null") || {}).name || ""; } catch (e) { return ""; } };
-  function drawWallets() {
-    const was = wpick.value || remembered();
+  function drawWallets(prefer) {
+    const was = prefer || wpick.value || remembered();
     wpick.replaceChildren(...wallets.map(w => Object.assign(document.createElement("option"), { value: w.name, textContent: w.name })));
     if (wallets.some(w => w.name === was)) wpick.value = was;
     wsel.hidden = wallets.length < 2;
@@ -2187,10 +2203,10 @@ function hubAnswers() {
   // a quote that pays in p and gives want raw units at the least, and
   // no more than 0.3% over that
   async function sized(p, want) {
-    const back = await quoteOf(mint, p.mint, want);
+    const back = await quoteOf(o.mint, p.mint, want);
     let amount = BigInt(back.outAmount) * BigInt(10000 + SLIP + 80) / 10000n + 1n, q = null;
     for (let i = 0; i < 4; i++) {
-      q = await quoteOf(p.mint, mint, amount);
+      q = await quoteOf(p.mint, o.mint, amount);
       const least = BigInt(q.otherAmountThreshold);
       if (least >= want && least * 1000n <= want * 1003n) return q;
       if (least <= 0n) break;
@@ -2199,7 +2215,7 @@ function hubAnswers() {
     if (q && BigInt(q.otherAmountThreshold) >= want) return q;
     throw new Error(T("buy.nosize"));
   }
-  const want = () => BigInt(qty) * 10n ** BigInt(dec);
+  const want = () => BigInt(qty) * 10n ** BigInt(o.dec);
   const drawQuote = q => {
     quote = q;
     if (!q) { cost.textContent = get.textContent = "—"; return; }
@@ -2207,7 +2223,7 @@ function hubAnswers() {
     cost.replaceChildren(units(q.inAmount, p.dec, p.show) + " " + pay);
     const usd = Number(q.swapUsdValue);
     if (usd > 0) cost.append(Object.assign(document.createElement("span"), { className: "sub", textContent: " · $" + usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }));
-    get.textContent = T("buy.get.text", { n: units(q.outAmount, dec, 0), min: units(q.otherAmountThreshold, dec, 0), symbol });
+    get.textContent = T("buy.get.text", { n: units(q.outAmount, o.dec, 0), min: units(q.otherAmountThreshold, o.dec, 0), symbol: o.symbol });
   };
 
   // ---- what the window shows while nothing is being bought ----
@@ -2222,8 +2238,8 @@ function hubAnswers() {
     go.textContent = over ? T("buy.done") : T("buy");
     go.disabled = busy || phase === "sent" || (!over && (!quote || !wallets.length));
     if (phase !== "idle") return;
-    if (!wallets.length) say(T("buy.nowallet"), false, { href: btn.href, text: T("buy.jup") });
-    else if (quote) say(T("buy.note"));
+    if (!wallets.length) say(T("buy.nowallet"), false, { href: o.jup, text: T("buy.jup") });
+    else if (quote) say(o.address ? T("buy.note.for", { address: short(o.address) }) : T("buy.note"));
   }
   // ask prices the choice again: at once when it changed, and every 20
   // seconds while the window stands open, so the price shown is one
@@ -2252,18 +2268,21 @@ function hubAnswers() {
 
   // ---- buying ----
   async function buy() {
-    const w = wallet(), p = PAY[pay], paid = pay;
+    const w = wallet(), p = PAY[pay], paid = pay, mine = o;
     if (!w || phase !== "idle") return;
     phase = "busy"; asked++; clearTimeout(timer);
     settle();
     try {
       say(T("waiting"));
-      let a;
-      try {
-        const { accounts } = await w.features["standard:connect"].connect();
-        a = (accounts || []).find(x => (x.chains || []).some(c => c.startsWith("solana:"))) || (accounts || [])[0];
-      } catch (e) { throw new Error(declined(e) ? T("youdeclined") : T("noconnect", { err: e && e.message || e })); }
-      if (!a) throw new Error(T("noconnect", { err: T("noaccount") }));
+      let accounts;
+      try { ({ accounts } = await w.features["standard:connect"].connect()); }
+      catch (e) { throw stop(declined(e) ? T("youdeclined") : T("noconnect", { err: e && e.message || e })); }
+      const sol = (accounts || []).filter(x => (x.chains || []).some(c => c.startsWith("solana:")));
+      // the guide's purchase is for one address, the one signed in: tokens
+      // bought into another account of the wallet would not let it post
+      const a = mine.address ? (accounts || []).find(x => x.address === mine.address) : sol[0] || (accounts || [])[0];
+      if (!a && mine.address && (sol[0] || (accounts || [])[0])) throw stop(T("buy.other", { got: short((sol[0] || accounts[0]).address), want: short(mine.address) }));
+      if (!a) throw stop(T("noconnect", { err: T("noaccount") }));
       account = a;
       wname.textContent = (wallets.length > 1 ? "" : w.name + " · ") + short(a.address);
       say(T("buy.building"));
@@ -2271,28 +2290,27 @@ function hubAnswers() {
       drawQuote(q);
       const built = await jup("/swap", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quoteResponse: q, userPublicKey: a.address, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true }) });
-      if (built.simulationError) throw new Error(T("buy.wouldfail", { pay: paid }));
+      if (built.simulationError) throw stop(T("buy.wouldfail", { pay: paid }));
       if (!built.swapTransaction) throw new Error(built.error || "no transaction");
       const tx = Uint8Array.from(atob(built.swapTransaction), c => c.charCodeAt(0));
       say(T("buy.sign"));
       let out;
       try { [out] = await w.features["solana:signAndSendTransaction"].signAndSendTransaction({ account: a, transaction: tx, chain: "solana:mainnet" }); }
-      catch (e) { throw new Error(declined(e) ? T("youdeclined") : (e && e.message) || String(e)); }
+      catch (e) { throw declined(e) ? stop(T("youdeclined")) : new Error((e && e.message) || String(e)); }
       const sig = typeof out.signature === "string" ? out.signature : b58(new Uint8Array(out.signature));
       phase = "sent";
       settle();
-      watch(sig);
+      watch(sig, mine);
     } catch (e) {
       phase = "idle";
       settle();
-      const m = e && e.message || String(e);
-      say(m === T("youdeclined") || m.startsWith(T("buy.wouldfail", { pay: paid }).slice(0, 20)) ? m : T("buy.error", { err: m }), true);
+      say(e && e.whole ? e.message : T("buy.error", { err: e && e.message || String(e) }), true);
       timer = setTimeout(ask, 20000);
     }
   }
   // the hub says what the chain did with it: asked every two and a half
   // seconds for seventy-five, the life of the transaction's blockhash
-  async function watch(sig) {
+  async function watch(sig, mine) {
     const link = { href: "https://solscan.io/tx/" + sig, text: T("buy.tx") };
     say(T("buy.sent"), false, link);
     let status = "pending";
@@ -2306,30 +2324,48 @@ function hubAnswers() {
     phase = "done";
     settle();
     say(T(status === "confirmed" ? "buy.confirmed" : status === "failed" ? "buy.failed" : "buy.unknown"), status === "failed", link);
-    go.focus();
+    if (!veil.hidden) go.focus();
+    // the guide's purchase: the gate reads the balance again, and the
+    // window says so when the buyer may post
+    if (status === "confirmed" && mine.after) {
+      const can = await Promise.resolve().then(mine.after).catch(() => false);
+      if (can && o === mine && phase === "done") say(T("buy.canpost"), false, link);
+    }
   }
 
   // ---- the window ----
-  const open = () => {
-    if (phase === "done") { phase = "idle"; account = null; drawQuote(null); drawWallets(); }
+  const show = () => {
+    title.textContent = T("buy.title", { symbol: o.symbol });
     veil.hidden = false;
     settle();
     ask();
     (go.disabled ? cancel : go).focus();
   };
   const shut = () => {
-    if (phase === "busy") return;
+    if (phase === "busy" || veil.hidden) return;
     veil.hidden = true;
     clearTimeout(timer);
     asked++;
-    btn.focus();
+    if (o.opener && o.opener.offsetParent) o.opener.focus();
+    if (o.closed) o.closed();
   };
-  btn.addEventListener("click", e => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return; // a new tab is still jup.ag
-    e.preventDefault();
-    open();
-  });
-  btn.removeAttribute("title");
+  // hubBuy opens the window for a purchase. One that is still on its way
+  // (the wallet's prompt up, or sent and not yet confirmed) is shown as
+  // it stands; anything else starts over.
+  window.hubBuy = opts => {
+    if (!opts || !opts.mint || typeof opts.dec !== "number") return false;
+    if ((phase === "busy" || phase === "sent") && opts.mint === o.mint) { show(); return true; }
+    if (phase === "busy" || phase === "sent") return false;
+    o = Object.assign({ symbol: T("token.tokens"), jup: "https://jup.ag/swap?sell=" + PAY.SOL.mint + "&buy=" + encodeURIComponent(opts.mint) }, opts);
+    if (!o.symbol) o.symbol = T("token.tokens");
+    phase = "idle"; account = null;
+    // the least quantity that covers what is wanted; the largest when none does
+    if (o.qty > 0) qty = QTYS.find(n => n >= o.qty) || QTYS[QTYS.length - 1];
+    drawQuote(null);
+    drawWallets(o.wallet);
+    show();
+    return true;
+  };
   cancel.addEventListener("click", shut);
   go.addEventListener("click", () => { if (phase === "sent" || phase === "done") shut(); else buy(); });
   // a modal: Return is the default, Escape backs out, Tab stays inside
@@ -2344,6 +2380,17 @@ function hubAnswers() {
       if (f.length) f[i < 0 ? 0 : (i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
     }
   });
+
+  // the token page's Buy button
+  const btn = document.getElementById("tk-buy");
+  if (btn && btn.dataset.dec) {
+    btn.addEventListener("click", e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return; // a new tab is still jup.ag
+      e.preventDefault();
+      hubBuy({ mint: btn.dataset.mint, dec: +btn.dataset.dec, symbol: btn.dataset.symbol, jup: btn.href, opener: btn });
+    });
+    btn.removeAttribute("title");
+  }
 })();
 </script>
 {{end}}{{if eq .Page "offline"}}<script>
@@ -3568,6 +3615,7 @@ document.addEventListener("change", e => {
   const pEdit = q(".p-edit"), pOk = q(".p-ok"), pCancel = q(".p-cancel"), pSave = q(".p-save");
   const pAva = q(".p-ava img"), pChoose = q(".p-choose"), pFile = q(".p-file");
   const drawBtn = q(".draw-btn");
+  const guide = q(".guide"), guideText = q(".guide-text"), guideBuy = q(".guide-buy");
   const attBtn = q(".att-btn"), attFile = q(".att-file"), attsBox = q(".atts"), attTpl = q(".att-tpl");
   const noteText = note.textContent;
   const enc = new TextEncoder();
@@ -3740,11 +3788,28 @@ document.addEventListener("change", e => {
   function need(v) {
     return (v.mints || []).map(m => T("of.mint", { units: T(m.raw ? "units.raw" : "units.tokens", { n: m.amount }), mint: short(m.mint) })).join(T("or"));
   }
+  // The guide (PLAN.md, The token page — The guide): a wallet signed in
+  // that holds too little to post is shown what it holds, what posting
+  // takes and a Buy button, on a row of its own over the status line.
+  // lack is what it lacks — the gate's first token whose decimals are
+  // known — or null when there is nothing to guide to: the gate passed,
+  // no Buy window on the page, or nobody has said the token's decimals.
+  const count = s => Number(String(s === undefined ? "" : s).replace(/,/g, ""));
+  function lack() {
+    const v = verdict;
+    if (!guide || !window.hubBuy || !v || v.banned || v.gate !== "below") return null;
+    const m = (v.mints || []).find(m => !m.raw && typeof m.decimals === "number");
+    if (!m) return null;
+    const symbol = m.symbol || T("token.tokens"), read = m.held !== undefined;
+    return { m, symbol, short: Math.max(0, count(m.amount) - (read ? count(m.held) : 0)),
+      text: read ? T("guide.held", { held: m.held, need: m.amount, symbol }) : T("guide.need", { need: m.amount, symbol }),
+      buy: T("guide.buy", { symbol }) };
+  }
   function line(left) {
     const v = verdict;
     if (!v) return T("checking");
     if (v.banned) return T("banned");
-    if (v.gate === "below") return T("below" + kind, { need: need(v) });
+    if (v.gate === "below") return lack() ? T("guide.status" + kind) : T("below" + kind, { need: need(v) });
     if (v.gate === "unavailable") return T("unavailable");
     if (target && target.gone) return T("gone");
     if (left > 0) return T("again" + kind, { s: left });
@@ -3764,6 +3829,20 @@ document.addEventListener("change", e => {
     profileBtn.disabled = busy;
     drawBtn.disabled = busy || !can;
     attBtn.disabled = busy || !can || atts.length >= ATT_MAX;
+    // the guide's row: there once the gate has said the address is short
+    // (a remembered one stands while the gate is asked again), gone when
+    // it says anything else
+    if (guide && v && !v.provisional) {
+      const l = lack();
+      guide.hidden = !l;
+      if (l) { guideText.textContent = l.text; guideBuy.textContent = l.buy; }
+    } else if (guide && !v) {
+      // no answer yet: the row the first paint drew stands only for the
+      // address it was remembered for
+      const w = recall();
+      if (!me || !w || w.address !== me.address || !w.guide) guide.hidden = true;
+    }
+    if (guideBuy) guideBuy.disabled = busy;
     const said = over > 0 ? T("over", { n: over, max: MAX_TEXT }) : flash || (retry ? "" : line(left));
     if (said) { status.textContent = said; status.removeAttribute("title"); }
     else { if (status.firstChild !== pulse) status.replaceChildren(pulse); status.title = retry; pulse.setAttribute("aria-label", retry); }
@@ -3785,9 +3864,11 @@ document.addEventListener("change", e => {
   // the gate's verdict (with what the address holds) and the profile,
   // fetched together; adopt puts them in the strip unless the wallet
   // switched accounts meanwhile
-  async function load() {
+  async function load(fresh) {
     const author = b64(me.pub);
-    const { r, out } = await getJSON("/v1/gate?author=" + encodeURIComponent(author));
+    // fresh: the balance read again whatever verdict the hub keeps, after
+    // a purchase (bought, below)
+    const { r, out } = await getJSON("/v1/gate?author=" + encodeURIComponent(author) + (fresh ? "&fresh=1" : ""));
     // a 502–504 with no word from the hub is the edge's, while the hub
     // restarts: the hub will be back, so the check is made again
     if (!r.ok) throw Object.assign(new Error(T("check.fail", { err: out.error || T("http", { code: r.status }) })), { again: r.status >= 502 && r.status <= 504 && !out.error });
@@ -3827,9 +3908,11 @@ document.addEventListener("change", e => {
     // with the profile's name and picture, which the next visit's who
     // line is drawn from as the page is parsed (the compose window's own
     // script), so it shows them from the first paint
+    const short = lack();
     remember({ name: me.name, address: me.address, id: st.v.profile,
       pname: st.profile && st.profile.name || "", ava: st.profile && st.profile.avatar || "",
-      ready: !st.v.banned && st.v.gate !== "below" && st.v.gate !== "unavailable", cooldown: st.v.cooldown || 0, until });
+      ready: !st.v.banned && st.v.gate !== "below" && st.v.gate !== "unavailable", cooldown: st.v.cooldown || 0, until,
+      guide: short ? { text: short.text, buy: short.buy } : undefined });
     // and the Notify subscription follows it (the Notify script listens),
     // and the Navigation window's links, and the kept posts
     document.dispatchEvent(new CustomEvent("exe-hub-id", { detail: st.v.profile }));
@@ -3888,6 +3971,31 @@ document.addEventListener("change", e => {
       } else { retry = ""; if (verdict && verdict.provisional) verdict = null; tell(e.message); }
     } finally { checking = false; }
   }
+  // Buy, on the guide's row: the Buy window, for this address and the
+  // wallet it signed in with, the least quantity that covers what it
+  // lacks pressed. Once the chain has confirmed the purchase, bought has
+  // the hub read the balance again — its kept verdict would say "below"
+  // for the rest of the gate's recheck — a few times over, since the
+  // hub's RPC may be a block behind the one that confirmed; it answers
+  // whether the address may post, and by then the guide's row is gone
+  // and the status line is the usual one.
+  async function bought() {
+    const who = me;
+    for (let i = 0; i < 8 && me && me === who; i++) {
+      if (i) await new Promise(res => setTimeout(res, 2500));
+      try {
+        const st = await load(true);
+        if (adopt(st) && verdict.gate !== "below") return verdict.gate !== "unavailable" && !verdict.banned;
+      } catch (e) {}
+    }
+    return false;
+  }
+  if (guideBuy) guideBuy.addEventListener("click", () => {
+    const l = lack();
+    if (!l || !me || busy) return;
+    hubBuy({ mint: l.m.mint, dec: l.m.decimals, symbol: l.symbol, qty: l.short, wallet: me.name, address: me.address,
+      opener: guideBuy, after: bought, closed: () => { if (guide.hidden && !text.disabled) text.focus(); } });
+  });
   // a check that could not land is made again; the remembered all-clear
   // standing in meanwhile is no answer
   const recheck = () => { if (me && (!verdict || verdict.provisional) && !checking && !busy && !document.hidden) check(); };
@@ -3966,6 +4074,7 @@ document.addEventListener("change", e => {
     meAva("");
     closeProfile();
     closeDraw();
+    if (guide) guide.hidden = true; // and the guide to the Buy window
   }
   // the wallet switched accounts or forgot this site
   function watch(w) {
@@ -5469,7 +5578,16 @@ document.addEventListener("change", e => {
     {{if .ReplyTo}}<div class="row re-row" hidden><span class="grow re-q"></span><button type="button" class="btn re-clear" aria-label="{{T "re.clear"}}">{{template "cross"}}</button></div>
     {{end}}<div class="field"><textarea class="text" placeholder="{{if .ReplyTo}}{{T "placeholder.reply"}}{{else}}{{T "placeholder.post"}}{{end}}" aria-label="{{if .ReplyTo}}{{T "text.reply"}}{{else}}{{T "text.post"}}{{end}}"></textarea><div class="at-list" role="listbox" aria-label="{{T "mention"}}" hidden></div></div>
     <div class="atts"></div><input type="file" class="att-file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden><template class="att-tpl"><div class="row att-row"><span class="att-th"><img alt=""></span><span class="grow att-q"><b class="att-name"></b> <span class="att-size"></span></span><button type="button" class="btn re-clear att-x">{{template "cross"}}</button></div></template>
-    <div class="row"><span class="grow status">{{T "checking"}}</span><button type="button" class="btn att-btn" aria-label="{{T "attach"}}" disabled>{{template "clip"}}<span>{{T "attach"}}</span></button><button type="button" class="btn draw-btn" aria-label="{{T "draw"}}" disabled>{{template "pad"}}<span>{{T "draw"}}</span></button><button type="button" class="btn send" disabled>{{if .ReplyTo}}{{T "reply"}}{{else}}{{T "post"}}{{end}}</button></div>
+    {{if .Token}}<div class="row guide" hidden><span class="grow guide-text"></span><button type="button" class="btn guide-buy"></button></div>
+    <script>// a wallet the gate found short last time: its guide to the Buy window, from the first paint
+    (() => { try {
+      const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"), row = document.currentScript.previousElementSibling;
+      if (!w || !w.guide || typeof w.guide.text !== "string" || typeof w.guide.buy !== "string") return;
+      row.querySelector(".guide-text").textContent = w.guide.text;
+      row.querySelector(".guide-buy").textContent = w.guide.buy;
+      row.hidden = false;
+    } catch (e) {} })();</script>
+    {{end}}<div class="row"><span class="grow status">{{T "checking"}}</span><button type="button" class="btn att-btn" aria-label="{{T "attach"}}" disabled>{{template "clip"}}<span>{{T "attach"}}</span></button><button type="button" class="btn draw-btn" aria-label="{{T "draw"}}" disabled>{{template "pad"}}<span>{{T "draw"}}</span></button><button type="button" class="btn send" disabled>{{if .ReplyTo}}{{T "reply"}}{{else}}{{T "post"}}{{end}}</button></div>
     <script>// a wallet the gate cleared last time: its usual line, and Picture… and Draw… ready, from the first paint — the check is made again quietly
     (() => { try {
       const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"), row = document.currentScript.previousElementSibling;
@@ -5502,6 +5620,22 @@ document.addEventListener("change", e => {
 {{define "bang"}}<svg viewBox="0 0 2 9" width="2" height="9" aria-hidden="true"><path d="M0 0h2v6h-2zM0 7h2v2h-2z"/></svg>{{end}}
 {{define "tri-up"}}<svg viewBox="0 0 7 4" width="7" height="4" aria-hidden="true"><path d="M3 0h1v1h-1zM2 1h3v1h-3zM1 2h5v1h-5zM0 3h7v1h-7z"/></svg>{{end}}
 {{define "tri-down"}}<svg viewBox="0 0 7 4" width="7" height="4" aria-hidden="true"><path d="M0 0h7v1h-7zM1 1h5v1h-5zM2 2h3v1h-3zM3 3h1v1h-1z"/></svg>{{end}}
+{{/* the Buy window (PLAN.md, The token page — Buy): on the token page, and
+     wherever the Post window is on a token-gated hub, whose guide opens it
+     for a wallet that holds too little to post. Its title is the script's
+     to set: it names the token being bought. */}}
+{{define "buywin"}}<div class="tk-veil" id="tk-veil" hidden>
+  <div class="tk-dlg" role="dialog" aria-modal="true" aria-labelledby="tk-buy-h">
+    <h2 id="tk-buy-h"></h2>
+    <div class="irow"><span class="ilab">{{T "buy.pay"}}</span><span class="ival"><span class="tk-seg" id="tk-pay"><button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button></span></span></div>
+    <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span></span></div>
+    <div class="irow"><span class="ilab">{{T "buy.cost"}}</span><span class="ival" id="tk-cost">—</span></div>
+    <div class="irow"><span class="ilab">{{T "buy.get"}}</span><span class="ival" id="tk-get">—</span></div>
+    <div class="irow"><span class="ilab">{{T "buy.wallet"}}</span><span class="ival tk-wal"><span class="popup lang" id="tk-wsel" hidden><select aria-label="{{T "buy.wallet"}}"></select><span class="well"><i><b></b></i></span></span><span id="tk-wname">—</span></span></div>
+    <div class="p-note" id="tk-note" role="status">{{T "buy.note"}}</div>
+    <div class="btns"><button type="button" class="btn" id="tk-cancel">{{T "cancel"}}</button><button type="button" class="btn default" id="tk-go" disabled>{{T "buy"}}</button></div>
+  </div>
+</div>{{end}}
 {{define "arrow-r"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M6 0h1v1h-1zM6 1h2v1h-2zM6 2h3v1h-3zM0 3h10v1h-10zM0 4h11v1h-11zM0 5h10v1h-10zM6 6h3v1h-3zM6 7h2v1h-2zM6 8h1v1h-1z"/></svg>{{end}}
 
 {{/* the cross on the button that lets a reply go: 8×8, two 1px

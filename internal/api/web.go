@@ -476,6 +476,11 @@ type webMint struct {
 	Raw    bool   `json:"raw"`    // Amount (and Held) are raw base units: the RPC has not told the mint's decimals yet
 	Mint   string `json:"mint"`
 	Held   string `json:"held,omitempty"` // /v1/gate only: what the key holds, in the same units; absent when unread
+	// /v1/gate only, for the Post window's guide to the Buy window: the
+	// token's symbol when anyone has said it, and its decimals when the
+	// RPC has (Raw is false then)
+	Symbol   string `json:"symbol,omitempty"`
+	Decimals *int   `json:"decimals,omitempty"`
 }
 
 // wSOL is wrapped SOL's mint: what Jupiter's swap page sells when the
@@ -501,6 +506,9 @@ func (m webMint) Tail() string { return m.Mint[len(m.Mint)/2:] }
 // Posting from a wallet): a new post on the home page, a reply to the
 // post a thread page shows.
 type webCompose struct {
+	// the hub's gate asks for a token: the window carries the guide's
+	// row, for a wallet that holds too little (set by webRender)
+	Token   bool
 	ReplyTo string
 	// a page the new post does not show on (Notifications, Bookmarks):
 	// once it is sent the reader goes to the feed
@@ -568,7 +576,10 @@ type webData struct {
 	Badge     *webBadge    // the badge page's snippets and the GIF's facts
 	Archives  *webArchives // the Archives page's calendars (archives.go)
 	Token     *webToken    // the token page (token.go)
-	Wall      *webWall     // the Pictures page's tiles (pictures.go)
+	// the Buy window is on the page (PLAN.md, The token page — Buy): the
+	// token page, and wherever the Post window is on a token-gated hub
+	BuyWin bool
+	Wall   *webWall // the Pictures page's tiles (pictures.go)
 	// one day of the Archives: the day as its address has it (2006-01-02)
 	// and as the window's title says it
 	Day, DayName string
@@ -1479,6 +1490,10 @@ func (s *Server) webRender(w http.ResponseWriter, r *http.Request, code int, d *
 		d.Nav, d.NavOn = true, "archives"
 	case "thread", "token":
 		d.Nav = true
+	}
+	d.BuyWin = s.Cfg.Get().Gate.Mode == "token" && (d.Page == "token" || d.Compose != nil)
+	if d.Compose != nil {
+		d.Compose.Token = d.BuyWin
 	}
 	// where the Post window is, the wallet can sign a bookmark: every
 	// post on the page carries the button

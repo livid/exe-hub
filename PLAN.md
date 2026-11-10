@@ -335,6 +335,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - Balance check: `getTokenAccountsByOwner(owner, {mint})`, summed, against
   both the classic SPL Token and Token-2022 program IDs. `min_amount` is
   raw base units as a **string** (u64s don't survive JSON floats).
+- Balances are read at the `confirmed` commitment, and `?fresh=1` on
+  `/v1/gate` reads one again whatever verdict is kept (2026-11-10; see
+  The token page — The guide).
 - Verdicts cached per author for `recheck`; on RPC failure serve the cached
   verdict, and only with no cache at all does `rpc_unavailable` apply
   (default `deny`).
@@ -2229,16 +2232,75 @@ for markets, history, holders, metadata and social.
     in the browser: the note says so with the link to jup.ag, and Buy
     stays grey. Without script, without BigInt, or while nobody has
     said the token's decimals, the button is that link itself.
-  - The gate keeps a key's verdict for `recheck`, so a key that was
-    below and has just bought may wait that long before it can post.
-    Not changed here.
+  - The window is one template and one script (`buywin`,
+    `window.hubBuy(o)`), on the token page and wherever the Post window
+    is on a token-gated hub: the guide, next, opens it there.
+- **The guide** (2026-11-10; Livid: "when a new wallet sign in but dont
+  hold enough tokens to post, now we can guide them to use the new buy
+  flow. implement that guide"). A wallet that signs in and holds less
+  than the gate asks for used to get one grey sentence — "This address
+  holds less than 10,000 tokens of 9raU…pump, so it can read but not
+  post." — and nowhere to go. Now the Post (and Reply) window says what
+  to do, where the reader is:
+  - **The row.** Over the status line, on the note's yellow: "This
+    wallet holds 0 V2EX. To post here it needs 10,000." and, at its
+    right, a push button, **Buy V2EX…**. The status line under it says
+    only "This address can read but not post yet." A row of its own,
+    as every button has. It is there when the gate's answer is "below"
+    for a token whose decimals are known, and gone on any other answer
+    and at Sign Out. A wallet found short is remembered so (the row's
+    two strings, with the wallet's name and address), and the row
+    stands from the first paint of its next visit while the gate is
+    asked again: nothing moves when the answer comes.
+  - **Buy V2EX…** opens the Buy window in place, over the page the
+    reader was on, set for them: the least of the three quantities that
+    covers what they lack is pressed (holding 2,500 of 10,000: 10,000;
+    of 15,000 and holding none: 20,000; the largest when none covers
+    it), the wallet they signed in with is the one chosen, and the note
+    says where the tokens go — "The tokens go to F4zC…su8L, the address
+    signed in here." **Only that address may pay**: the gate counts
+    what the signing key's own address holds, so tokens bought into
+    another account of the wallet would be money spent for nothing.
+    When the wallet answers with a different account, nothing is built
+    or signed and the note says which account to change to.
+  - **After the chain confirms**, the Post window has the hub read the
+    balance again — `GET /v1/gate?author=…&fresh=1`, which reads
+    whatever verdict the gate keeps (`Gate.Recheck`; the kept "below"
+    would otherwise stand for the rest of `recheck`, ten minutes), is
+    an RPC call and takes from the bucket the unkept checks share — up
+    to eight times 2.5 seconds apart, for an RPC a block behind. The
+    gate reads balances at `confirmed` now, not `finalized` (the RPC's
+    default, some thirteen seconds behind), so the first asking mostly
+    finds them. The Buy window then says "Confirmed. This wallet holds
+    enough to post now."; behind it the row is gone and the status
+    line is the usual one; Done puts the caret in the text field. A
+    purchase that did not cover the shortfall leaves the row, with the
+    new holding.
+  - What the row needs rides the gate's answer: each of `/v1/gate`'s
+    `mints` carries `decimals` (when the RPC has said them) and
+    `symbol` (when Jupiter or the chain has; it is asked for behind
+    the answer, never waited on — `token.Source.Symbol`), beside
+    `amount` and `held`. Without a symbol the row says "tokens".
+  - Not guided: a banned key, a hub that cannot check holdings, a
+    token whose decimals nobody has said (the old sentence stands),
+    and a wallet found through the older `window.solana` alone, whose
+    Buy window has no wallet to pay from and gives the link to jup.ag.
+  - Tests: `TestGateGuide` (the answer's symbol and decimals, the
+    fresh check, its rationing), `TestTokenPage` (the row and the
+    window on a gated hub's home page, neither on an open one); in a
+    browser `HUB=… node ~/tools/playwright/exe-hub-buy-guide-test.js`
+    — a mock wallet of two accounts, the gate's holding, Jupiter and
+    the status answered by the test, 80 checks: the row's words in
+    three languages, the first paint after a reload, the pressed
+    quantity for four shortfalls, the other account refused, the gate
+    asked afresh until it sees the tokens, the Post window after.
   - Tests: `TestTokenPage` (the button and the window's markup),
     `TestTokenTx`; in a browser `HUB=… node
     ~/tools/playwright/exe-hub-token-buy-test.js` — a mock wallet that
     signs nothing, Jupiter and the hub's status answered by the test,
     339 checks; `LIVE=1` adds one real price from Jupiter.
 - **Words** in English, Chinese (both scripts' tables) and Japanese,
-  keys `token.*`, `buy.*`, `err.notoken`, `err.nomint`; figures are set the same
+  keys `token.*`, `buy.*`, `guide.*`, `err.notoken`, `err.nomint`; figures are set the same
   in all three ($ and a comma every three digits). Stats count it as
   kind `token`, labelled "Token: 9raU…pump".
 - **Tests.** `internal/token`: the three places faked, precedence, the

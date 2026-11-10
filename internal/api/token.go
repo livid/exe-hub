@@ -122,7 +122,7 @@ type webTick struct {
 func (s *Server) tokens() *token.Source {
 	s.tokenOnce.Do(func() {
 		if s.Token == nil {
-			s.Token = token.New(func() string {
+			s.Token = newTokenSource(func() string {
 				if c := s.Cfg.Get(); c.Gate.Mode == "token" {
 					return c.Gate.Token.RPCURL
 				}
@@ -132,6 +132,10 @@ func (s *Server) tokens() *token.Source {
 	})
 	return s.Token
 }
+
+// newTokenSource makes the source a hub asks when it was given none; the
+// package's tests set one that can reach nobody.
+var newTokenSource = token.New
 
 // gateMint is the gate's entry for mint: nil on a hub with an open gate
 // and for a mint its gate does not name.
