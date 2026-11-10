@@ -3322,6 +3322,21 @@ func (s *Store) PostDays(loc *time.Location) (days []DayPosts, first string, err
 // by the author index and one aggregate over posts, so its caller keeps
 // the answer for a while all the same.
 func (s *Store) AuthorDays(author string, loc *time.Location) (days []DayPosts, first string, err error) {
+	return s.authorDays(`SELECT ts, received FROM posts WHERE author = ?`, author, loc)
+}
+
+// AuthorPictureDays is AuthorDays over the profile's pictures (PLAN.md,
+// Activity — the Pictures tab): a row a picture of the wall's — an
+// attached picture or a linked one the hub keeps — on the day of the
+// post that carries it.
+func (s *Store) AuthorPictureDays(author string, loc *time.Location) (days []DayPosts, first string, err error) {
+	return s.authorDays(`SELECT p.ts, p.received FROM (SELECT post FROM embeds WHERE mime LIKE 'image/%'
+	UNION ALL SELECT post FROM pictures WHERE status = 'ok' AND cid <> '') x JOIN posts p ON p.id = x.post WHERE p.author = ?`, author, loc)
+}
+
+// authorDays counts the days of query's rows (ts, received), one row a
+// thing, for author.
+func (s *Store) authorDays(query, author string, loc *time.Location) (days []DayPosts, first string, err error) {
 	var began sql.NullInt64
 	if err := s.db.QueryRow(`SELECT MIN(received) FROM posts`).Scan(&began); err != nil {
 		return nil, "", err
@@ -3330,7 +3345,7 @@ func (s *Store) AuthorDays(author string, loc *time.Location) (days []DayPosts, 
 		return nil, "", nil
 	}
 	first = time.UnixMilli(began.Int64).In(loc).Format("2006-01-02")
-	rows, err := s.db.Query(`SELECT ts, received FROM posts WHERE author = ?`, author)
+	rows, err := s.db.Query(query, author)
 	if err != nil {
 		return nil, "", err
 	}

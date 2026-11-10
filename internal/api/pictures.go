@@ -132,6 +132,10 @@ func (s *Server) wallPage(w http.ResponseWriter, r *http.Request, of *store.Prof
 			s.webError(w, r, http.StatusInternalServerError, "err.pictures")
 			return
 		}
+		if d.Activity, err = s.activity(of.ID, time.Now(), rd.L, "pictures"); err != nil {
+			s.webError(w, r, http.StatusInternalServerError, "err.pictures")
+			return
+		}
 		d.NavFor = of.ID
 	}
 	d.Title, d.Desc = title+" · "+r.Host, desc

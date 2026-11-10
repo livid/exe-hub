@@ -28,12 +28,12 @@ func TestBuildActivity(t *testing.T) {
 		{Day: "2026-10-31", Posts: 2},
 		{Day: "2026-11-09", Posts: 1},
 		{Day: "2026-11-12", Posts: 3}, // ahead of today
-	}, "2026-08-30", now, webLocaleTag("en"))
+	}, "2026-08-30", now, webLocaleTag("en"), "posts")
 	if len(a.Weeks) != 52 || a.Weeks[0].Days[0].Date != "2025-11-16" || a.Weeks[51].Days[6].Date != "2026-11-14" || a.Weeks[51].Days[2].Date != "2026-11-10" {
 		t.Fatalf("the grid runs %s to %s", a.Weeks[0].Days[0].Date, a.Weeks[51].Days[6].Date)
 	}
-	if a.Total != 17 || a.Zone != "UTC" || a.Rows != [7]string{"", "M", "", "W", "", "F", ""} {
-		t.Errorf("total %d in %s, rows %q", a.Total, a.Zone, a.Rows)
+	if a.Total != 17 || a.Zone != "UTC" || a.Rows != [7]string{"", "M", "", "W", "", "F", ""} || a.Caption != "17 posts in the last year" || a.Label != "A year of posts, a square a day" {
+		t.Errorf("total %d in %s, rows %q, %q, %q", a.Total, a.Zone, a.Rows, a.Caption, a.Label)
 	}
 	day := func(date string) webActDay {
 		for _, w := range a.Weeks {
@@ -46,14 +46,32 @@ func TestBuildActivity(t *testing.T) {
 		t.Fatalf("no %s", date)
 		return webActDay{}
 	}
-	if d := day("2026-11-10"); !d.Today || d.Posts != 3 || d.Level != 2 || d.Off { // the 3 ahead of today; the quarters of 1, 2, 3, 5, 11 are 2, 3, 5
+	if d := day("2026-11-10"); !d.Today || d.Posts != 3 || d.Level != 2 || d.Off || d.Title != "2026-11-10 · 3 posts" { // the 3 ahead of today; the quarters of 1, 2, 3, 5, 11 are 2, 3, 5
 		t.Errorf("today %+v", d)
 	}
-	if d := day("2026-11-11"); !d.Off || d.Posts != 0 {
+	if d := day("2026-11-11"); !d.Off || d.Posts != 0 || d.Title != "" {
 		t.Errorf("tomorrow %+v", d)
 	}
-	if d := day("2026-08-29"); !d.Off || d.Level != 0 {
+	if d := day("2026-08-29"); !d.Off || d.Level != 0 || d.Title != "" {
 		t.Errorf("the day before the hub's first %+v", d)
+	}
+	if d := day("2026-11-09"); d.Title != "2026-11-09 · 1 post" {
+		t.Errorf("one post's title %q", d.Title)
+	}
+	if d := day("2026-09-15"); d.Title != "2026-09-15 · no posts" {
+		t.Errorf("a quiet day's title %q", d.Title)
+	}
+	// the Pictures tab's kind: its own words
+	p := buildActivity([]store.DayPosts{{Day: "2026-11-09", Posts: 2}}, "2026-08-30", now, webLocaleTag("zh"), "pictures")
+	if p.Caption != "过去一年 2 张图片" || p.Label != "一年的图片，一格一天" {
+		t.Errorf("pictures in Chinese: %q, %q", p.Caption, p.Label)
+	}
+	for _, w := range p.Weeks {
+		for _, d := range w.Days {
+			if d.Date == "2026-11-09" && d.Title != "2026-11-09 · 2 张图片" || d.Date == "2026-11-08" && d.Title != "2026-11-08 · 没有图片" {
+				t.Errorf("a pictures day's title %q", d.Title)
+			}
+		}
 	}
 	if d := day("2026-08-30"); d.Off || d.Level != 4 || d.Posts != 11 {
 		t.Errorf("the hub's first day %+v", d)
@@ -116,8 +134,8 @@ func TestWebActivity(t *testing.T) {
 	if _, body := get(t, h, "/u/"+id+"?lang=zh"); !strings.Contains(body, `aria-label="一年的帖子，一格一天"`) || !strings.Contains(body, `<span>过去一年 0 条帖子</span>`) || !strings.Contains(body, `<div class="act-wd"><i></i><i>一</i><i></i><i>三</i><i></i><i>五</i><i></i></div>`) {
 		t.Error("the Chinese grid lacks its words")
 	}
-	// kept in memory under the id and the day
-	if _, ok := s.mem.Get("activity:" + id + ":UTC:" + today); !ok {
+	// kept in memory under the kind, the id and the day
+	if _, ok := s.mem.Get("activity:posts:" + id + ":UTC:" + today); !ok {
 		t.Error("the profile's days were not kept")
 	}
 	// a post sent now shows once the counts are drawn again
@@ -126,13 +144,27 @@ func TestWebActivity(t *testing.T) {
 	if _, body := get(t, h, "/u/"+id); !strings.Contains(body, `<span>0 posts in the last year</span>`) {
 		t.Error("the counts were drawn again inside their time")
 	}
-	s.mem.Delete("activity:" + id + ":UTC:" + today)
+	s.mem.Delete("activity:posts:" + id + ":UTC:" + today)
 	if _, body := get(t, h, "/u/"+id); !strings.Contains(body, `<i class="l1 now" title="`+today+` · 1 post"></i>`) || !strings.Contains(body, `<span>1 post in the last year</span>`) {
 		t.Error("drawn again, today's square is not the new post's")
 	}
-	// the Pictures tab has no grid
-	if _, body := get(t, h, "/u/"+id+"/pictures"); strings.Contains(body, `class="acts"`) {
-		t.Error("the Pictures tab carries the grid")
+	// the Pictures tab carries the grid of pictures: none yet, then one
+	_, body = get(t, h, "/u/"+id+"/pictures")
+	if !strings.Contains(body, `<div class="acts" role="img" aria-label="A year of pictures, a square a day">`) ||
+		!strings.Contains(body, `<i class="l0 now" title="`+today+` · no pictures"></i>`) || !strings.Contains(body, `<span>0 pictures in the last year</span>`) {
+		t.Error("the Pictures tab's grid is wrong")
+	}
+	const cat = "bafybeicatcatcat"
+	if err := s.St.AddPin(cat, 1234, "image/jpeg", false); err != nil {
+		t.Fatal(err)
+	}
+	ingestNow(t, s, priv, pub, 5, map[string]any{"text": "a cat", "embeds": []map[string]any{{"cid": cat, "mime": "image/jpeg", "filename": "cat.jpg"}}})
+	s.mem.Delete("activity:pictures:" + id + ":UTC:" + today)
+	if _, body := get(t, h, "/u/"+id+"/pictures"); !strings.Contains(body, `<i class="l1 now" title="`+today+` · 1 picture"></i>`) || !strings.Contains(body, `<span>1 picture in the last year</span>`) {
+		t.Error("the picture is not on the Pictures tab's grid")
+	}
+	if _, body := get(t, h, "/u/"+id+"?lang=ja"); !strings.Contains(body, `<span>過去 1 年に 1 件の投稿</span>`) {
+		t.Error("the Posts grid in Japanese counts wrong, or the pictures changed it")
 	}
 }
 

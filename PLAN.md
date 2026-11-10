@@ -2401,8 +2401,10 @@ Livid, 2026-11-10: "at the top of posts tab, show github activity like
 grids?", then "do it, use memcache".
 
 - **The grid.** At the top of a profile's Posts pane, under the Piano
-  keys: a year of that profile's days as GitHub draws a year of
-  commits. A column is a week, Sunday at the top, 52 columns ending
+  keys, and at the top of its Pictures pane the same grid of its
+  pictures (Livid, 2026-11-10: "love it. let's have the grids for
+  pictures tab too"): a year of that profile's days as GitHub draws a
+  year of commits. A column is a week, Sunday at the top, 52 columns ending
   with the week that holds today, the newest at the right; a square is
   a day, 9px on a 2px gap, in the Archives' five grounds — #eee for no
   post, then the four lavenders by the quarter the day's count falls
@@ -2420,20 +2422,27 @@ grids?", then "do it, use memcache".
   1px #ddd line under the block, then the posts. 52 columns and the
   letters make 586px, inside the pane's 606. A phone holds the last 26
   weeks: the older columns and their names are hidden. The Pictures
-  tab has no grid.
+  tab's grid counts the wall's pictures, attached and linked, on the
+  day of the post that carries each — "{date} · 12 pictures", "… · no
+  pictures", "290 pictures in the last year" — its levels among that
+  profile's days with pictures.
 - **The days are the Archives'.** `store.AuthorDays(author, loc)` is
   `PostDays` for one profile: a post's day is its own time in the
   hub's day zone, a time more than ten minutes ahead of the hub's clock
   not believed, a post dated after today counted as today's; replies
   count, deleted posts do not. It also gives the day the hub received
-  its first post, where the ground begins.
+  its first post, where the ground begins. `AuthorPictureDays` is the
+  same over the wall's rows.
 - **Kept in memory** (`internal/memcache`, as the Archives keep their
-  counts): the profile's day counts under `activity:{id}:{zone}:{day}`
+  counts): the profile's day counts under
+  `activity:{kind}:{id}:{zone}:{day}`, the kind `posts` or `pictures`,
   for `archivesFresh`, five minutes, so a profile page costs no walk
   over the profile's posts on every visit, and the key names the day
   so the first reader after midnight lays the new square. The grid is
   laid out per request from the kept counts, in the reader's language
-  (`activity.months`, the short names; `archives.weekdays`).
+  (`activity.months`, the short names; `archives.weekdays`; a kind's
+  words `activity.{kind}.label` and `.total`, and for pictures `.day`
+  and `.day.none`, a day of posts titled as the Archives title it).
 - **Tested** by `go test ./internal/api` (TestBuildActivity: the
   columns, the off days, the levels, the month names, the total;
   TestWebActivity: the page's grid in two languages, the kept counts

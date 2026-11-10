@@ -2081,7 +2081,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		s.webError(w, r, http.StatusInternalServerError, "err.profile")
 		return
 	}
-	if d.Activity, err = s.activity(d.Profile.ID, time.Now(), rd.L); err != nil {
+	if d.Activity, err = s.activity(d.Profile.ID, time.Now(), rd.L, "posts"); err != nil {
 		s.webError(w, r, http.StatusInternalServerError, "err.profile")
 		return
 	}

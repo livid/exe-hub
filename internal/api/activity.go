@@ -8,12 +8,13 @@ import (
 )
 
 // The activity grid (PLAN.md, Activity): a year of a profile's days at
-// the top of its Posts tab, as GitHub draws a year of commits — a
-// column a week, Sunday at the top, the newest week at the right, a
-// square a day in the Archives' five grounds. The profile's day counts
-// are read once and kept in memory (internal/memcache) for
-// archivesFresh, as the Archives keep theirs; the grid itself is laid
-// out per request, in the reader's language.
+// the top of its Posts tab, and of its pictures at the top of its
+// Pictures tab, as GitHub draws a year of commits — a column a week,
+// Sunday at the top, the newest week at the right, a square a day in
+// the Archives' five grounds. The profile's day counts are read once
+// and kept in memory (internal/memcache) for archivesFresh, as the
+// Archives keep theirs; the grid itself is laid out per request, in
+// the reader's language.
 
 // actWeeks is how many weeks the grid holds: this week and the 51
 // before it.
@@ -26,13 +27,16 @@ type actDays struct {
 }
 
 // webActivity is the grid: its weeks oldest first, the weekday letters
-// at the left (every other row, as GitHub labels them), how many posts
-// the year holds, and the zone its days begin in.
+// at the left (every other row, as GitHub labels them), how many of
+// the kind the year holds and the caption that says so, what the grid
+// is for a screen reader, and the zone its days begin in.
 type webActivity struct {
-	Weeks []webActWeek
-	Rows  [7]string
-	Total int
-	Zone  string
+	Weeks   []webActWeek
+	Rows    [7]string
+	Total   int
+	Caption string
+	Label   string
+	Zone    string
 }
 
 // webActWeek is one column, Sunday first, with the name of the month
@@ -43,24 +47,37 @@ type webActWeek struct {
 }
 
 // webActDay is one square. Off is a day with no ground: after today, or
-// before the hub's first day. Level is its colour, 0 for no post and 1
-// to 4 by the quarter its count falls in among the profile's days.
+// before the hub's first day. Level is its colour, 0 for none and 1 to
+// 4 by the quarter its count falls in among the profile's days. Title
+// is what the pointer reads over it, "" on a day that is off.
 type webActDay struct {
 	Date  string // 2006-01-02
 	Posts int
 	Level int
 	Off   bool
 	Today bool
+	Title string
+}
+
+// actKinds names what a grid counts: "posts" (the Posts tab) or
+// "pictures" (the Pictures tab, the wall's rows). The words are
+// activity.<kind>.label, .total and, for pictures, .day and .day.none;
+// a day of posts is titled as the Archives title one.
+var actKinds = map[string]func(*Server) func(string, *time.Location) ([]store.DayPosts, string, error){
+	"posts": func(s *Server) func(string, *time.Location) ([]store.DayPosts, string, error) { return s.St.AuthorDays },
+	"pictures": func(s *Server) func(string, *time.Location) ([]store.DayPosts, string, error) {
+		return s.St.AuthorPictureDays
+	},
 }
 
 // activity is the grid for id as of now, its counts from memory when
 // they were read in the last archivesFresh. The key names the day, so
 // the first reader after midnight lays the new day's square.
-func (s *Server) activity(id string, now time.Time, l *webLocale) (*webActivity, error) {
+func (s *Server) activity(id string, now time.Time, l *webLocale, kind string) (*webActivity, error) {
 	loc := s.dayZone()
 	now = now.In(loc)
-	v, err := s.mem.Fetch("activity:"+id+":"+loc.String()+":"+now.Format("2006-01-02"), archivesFresh, func() (any, error) {
-		days, first, err := s.St.AuthorDays(id, loc)
+	v, err := s.mem.Fetch("activity:"+kind+":"+id+":"+loc.String()+":"+now.Format("2006-01-02"), archivesFresh, func() (any, error) {
+		days, first, err := actKinds[kind](s)(id, loc)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +87,7 @@ func (s *Server) activity(id string, now time.Time, l *webLocale) (*webActivity,
 		return nil, err
 	}
 	d := v.(*actDays)
-	return buildActivity(d.Days, d.First, now, l), nil
+	return buildActivity(d.Days, d.First, now, l, kind), nil
 }
 
 // buildActivity lays the days out: actWeeks columns ending with the
@@ -81,7 +98,11 @@ func (s *Server) activity(id string, now time.Time, l *webLocale) (*webActivity,
 // poster gets the whole range too. A month's name stands over the
 // column that holds its first day, except in the last column, where
 // the frame would cut it: a name is about two columns wide.
-func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLocale) *webActivity {
+func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLocale, kind string) *webActivity {
+	dayKey, noneKey := "archives.day", "archives.day.none"
+	if kind != "posts" {
+		dayKey, noneKey = "activity."+kind+".day", "activity."+kind+".day.none"
+	}
 	loc := now.Location()
 	today := now.Format("2006-01-02")
 	if first == "" || first > today {
@@ -102,7 +123,7 @@ func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLoc
 	level := archLevels(counts)
 	months := strings.Split(l.T("activity.months"), ",")
 	letters := strings.Split(l.T("archives.weekdays"), ",")
-	a := &webActivity{Zone: zoneName(now)}
+	a := &webActivity{Zone: zoneName(now), Label: l.T("activity." + kind + ".label")}
 	for i := 1; i < 7 && i < len(letters); i += 2 {
 		a.Rows[i] = letters[i]
 	}
@@ -117,6 +138,13 @@ func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLoc
 			date := d.Format("2006-01-02")
 			c := n[date]
 			wk.Days[i] = webActDay{Date: date, Posts: c, Level: level(c), Off: date > today || date < first, Today: date == today}
+			if !wk.Days[i].Off {
+				if c > 0 {
+					wk.Days[i].Title = l.T(dayKey, "date", date, "n", c)
+				} else {
+					wk.Days[i].Title = l.T(noneKey, "date", date)
+				}
+			}
 			if d.Day() == 1 && w < actWeeks-1 && int(d.Month()) <= len(months) {
 				wk.Label = months[d.Month()-1]
 			}
@@ -127,5 +155,6 @@ func buildActivity(days []store.DayPosts, first string, now time.Time, l *webLoc
 		}
 		a.Weeks = append(a.Weeks, wk)
 	}
+	a.Caption = l.T("activity."+kind+".total", "n", a.Total)
 	return a
 }

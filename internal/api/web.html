@@ -404,7 +404,8 @@ a.mention { text-decoration: none; }
   box-shadow: inset 1px 1px 0 #666, inset -1px -1px 0 #aaa, inset 2px 2px 0 #777, inset -2px -2px 0 #999; }
 .keyed { padding-top: 22px; }
 /* the activity grid (PLAN.md, Activity): a year of a profile's days at
-   the top of its Posts pane, as GitHub draws a year of commits. A
+   the top of its Posts pane, and of its pictures at the top of its
+   Pictures pane, as GitHub draws a year of commits. A
    column is a week, Sunday at the top, the newest at the right; a
    square is a day, 9px on a 2px gap, in the Archives' five grounds,
    today with the black ring, a day with no ground off. The month that
@@ -1579,14 +1580,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   </div>
   {{template "ptabs" (.Tabs "posts")}}
   <div class="frame keyed">
-    {{with .Activity}}<div class="acts" role="img" aria-label="{{T "activity.label"}}">
-      <div class="act-months">{{range .Weeks}}<span>{{.Label}}</span>{{end}}</div>
-      <div class="act-body">
-        <div class="act-wd">{{range .Rows}}<i>{{.}}</i>{{end}}</div>
-        <div class="act-grid">{{range .Weeks}}<div class="wk">{{range .Days}}<i class="{{if .Off}}off{{else}}l{{.Level}}{{end}}{{if .Today}} now{{end}}"{{if not .Off}} title="{{if .Posts}}{{T "archives.day" "date" .Date "n" .Posts}}{{else}}{{T "archives.day.none" "date" .Date}}{{end}}"{{end}}></i>{{end}}</div>{{end}}</div>
-      </div>
-      <div class="act-key"><span>{{T "activity.total" "n" .Total}}</span><span class="act-leg">{{T "archives.less"}}<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>{{T "archives.more"}}</span></div>
-    </div>{{end}}
+    {{with .Activity}}{{template "actgrid" .}}{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T "noposts"}}</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
   </div>
@@ -1645,6 +1639,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   </div>
   {{template "ptabs" (.Tabs "pictures")}}
   <div class="frame keyed">
+    {{with .Activity}}{{template "actgrid" .}}{{end}}
     {{template "wallbody" .}}
   </div>
 {{else}}
@@ -5808,6 +5803,18 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
      page's own key down. Dot is .Tabs: the id, the query and which is
      on. */}}
 {{define "ptabs"}}<div class="ptabs" role="tablist"><a class="btn ptab{{if eq .On "posts"}} on{{end}}" href="/u/{{.ID}}{{.Q}}"{{if eq .On "posts"}} aria-current="page"{{end}}>{{T "tab.posts"}}</a><a class="btn ptab{{if eq .On "pictures"}} on{{end}}" href="/u/{{.ID}}/pictures{{.Q}}"{{if eq .On "pictures"}} aria-current="page"{{end}}>{{T "pictures"}}</a></div>{{end}}
+
+{{/* the activity grid (PLAN.md, Activity): a year of a profile's days,
+     the Posts tab's of posts and the Pictures tab's of pictures. Dot is
+     the webActivity. */}}
+{{define "actgrid"}}<div class="acts" role="img" aria-label="{{.Label}}">
+      <div class="act-months">{{range .Weeks}}<span>{{.Label}}</span>{{end}}</div>
+      <div class="act-body">
+        <div class="act-wd">{{range .Rows}}<i>{{.}}</i>{{end}}</div>
+        <div class="act-grid">{{range .Weeks}}<div class="wk">{{range .Days}}<i class="{{if .Off}}off{{else}}l{{.Level}}{{end}}{{if .Today}} now{{end}}"{{if .Title}} title="{{.Title}}"{{end}}></i>{{end}}</div>{{end}}</div>
+      </div>
+      <div class="act-key"><span>{{.Caption}}</span><span class="act-leg">{{T "archives.less"}}<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>{{T "archives.more"}}</span></div>
+    </div>{{end}}
 
 {{/* the wall's body (PLAN.md, Pictures): the months of tiles, Older,
      the status line */}}
