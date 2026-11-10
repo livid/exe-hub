@@ -121,13 +121,19 @@ func (s *Server) wallPage(w http.ResponseWriter, r *http.Request, of *store.Prof
 	}
 	rd := webReadingOf(r)
 	title, desc := rd.L.T("pictures"), rd.L.T("pictures.desc", "host", r.Host)
-	if of != nil {
+	d := &webData{
+		Page: "pictures", Canonical: before == "", Lang: rd.Lang, Q: rd.Q, Wall: wl,
+		Message: rd.L.T("pictures.n", "n", wl.Count),
+	}
+	if of != nil { // the profile's window, its Pictures tab on
 		wl.Of, wl.Name = of, profileName(of)
 		title, desc = rd.L.T("pictures.of", "name", wl.Name), rd.L.T("pictures.of.desc", "name", wl.Name, "host", r.Host)
+		if err := s.profileHead(d, of); err != nil {
+			s.webError(w, r, http.StatusInternalServerError, "err.pictures")
+			return
+		}
+		d.NavFor = of.ID
 	}
-	s.webRender(w, r, http.StatusOK, &webData{
-		Page: "pictures", Title: title + " · " + r.Host, Desc: desc,
-		Canonical: before == "", Lang: rd.Lang, Q: rd.Q, Wall: wl, Profile: of,
-		Message: rd.L.T("pictures.n", "n", wl.Count),
-	})
+	d.Title, d.Desc = title+" · "+r.Host, desc
+	s.webRender(w, r, http.StatusOK, d)
 }

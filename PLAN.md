@@ -2271,8 +2271,17 @@ only under its post, and the feed is words first.
   wall as soon as its post is in the feed — where the Archives keep
   their counts in memory.
 - **One profile's wall.** `GET /u/{id}/pictures` is the same wall for
-  one profile's posts, titled "Pictures by {name}", its back button the
-  profile; a profile the hub does not know has no wall.
+  one profile's posts, titled "Pictures by {name}", in the profile's own
+  window: the head (`phead`, the profile page's block) and under it a
+  row of two tabs, Posts and Pictures, over the pane — the first tab
+  control on the public pages, the Platinum one as the exe desk draws
+  it (`.tabbar` of `.tab`s, trapezoids drawn as an SVG border-image),
+  the active tab on the pane's white and running 2px down over the
+  frame's bevel row and black line. The profile page wears the same
+  row with Posts on; so the way to anyone's pictures is their profile
+  (Livid, 2026-11-10: "when i view other user's profile, want a tab to
+  view their pictures"). An id that posted and never set a profile has
+  the window too, with its id for a name.
 - **Words.** `nav.pictures`, `pictures`, `pictures.desc`, `pictures.of`,
   `pictures.of.desc`, `pictures.tile`, `pictures.none`, `pictures.older`,
   `pictures.n` (`.one`), `err.pictures`, in the four catalogs.

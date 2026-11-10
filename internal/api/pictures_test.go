@@ -88,8 +88,9 @@ func TestWebPictures(t *testing.T) {
 	}
 	for _, want := range []string{
 		"<title>Pictures by " + author2 + " · hub.example</title>",
-		`<span class="title">Pictures by ` + author2 + `</span>`,
-		`<a class="btn prev back" href="/u/` + author2 + `">`,
+		`<span class="title"><a href="/">hub.example</a></span>`, // the profile's own window
+		`<h1>` + author2 + `</h1>`,
+		`<div class="tabbar ptabs" role="tablist"><a class="tab" href="/u/` + author2 + `">Posts</a><a class="tab active" href="/u/` + author2 + `/pictures" aria-current="page">Pictures</a></div>`,
 		`<img src="/v1/embed/` + dog + `"`,
 		`<div class="statusbar"><span>1 picture</span></div>`,
 	} {
@@ -99,6 +100,11 @@ func TestWebPictures(t *testing.T) {
 	}
 	if strings.Contains(body, cat) {
 		t.Error("another profile's picture is on this profile's wall")
+	}
+	// the profile page has the tabs too, Posts on, and the zh query rides on both
+	if _, body := get(t, h, "/u/"+author2+"?lang=zh"); !strings.Contains(body,
+		`<div class="tabbar ptabs" role="tablist"><a class="tab active" href="/u/`+author2+`?lang=zh" aria-current="page">帖子</a><a class="tab" href="/u/`+author2+`/pictures?lang=zh">图片</a></div>`) {
+		t.Error("the profile page has no Posts | Pictures tabs")
 	}
 	if code, body := get(t, h, "/u/0123456789abcdef/pictures"); code != http.StatusOK || !strings.Contains(body, `<div class="wallnone">No pictures yet.</div>`) {
 		t.Errorf("an id that never posted answered %d without the empty wall", code)

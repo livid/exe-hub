@@ -2051,13 +2051,10 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	d := &webData{Page: "profile", Posts: webListed(s.webQuoted(rd, s.webPosts(rd, posts))), Prev: pg.Prev, Next: pg.Next, Lang: rd.Lang, Q: rd.Q, NavFor: id}
 	switch {
 	case err == nil:
-		d.Profile, d.Count = pr, pr.Posts
-		if d.Invite, err = s.St.InviteOf(pr.ID); err != nil {
+		if err := s.profileHead(d, pr); err != nil {
 			s.webError(w, r, http.StatusInternalServerError, "err.profile")
 			return
 		}
-		d.Since = time.UnixMilli(pr.Created).UTC().Format("2006-01-02")
-		d.SinceStamp = webStamp(pr.Created)
 		d.Desc = excerpt(pr.Bio, 200)
 	case errors.Is(err, store.ErrNotFound) && len(posts) > 0:
 		d.Profile = &store.Profile{ID: id}
@@ -2077,6 +2074,34 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	d.Image = webBase(r) + "/v1/preview/profile/" + d.Profile.ID + ".png"
 	d.ImageW, d.ImageH, d.ImageAlt = preview.W, preview.H, name+" on "+r.Host
 	s.webRender(w, r, http.StatusOK, d)
+}
+
+// profileHead gives a page the profile's head (the "phead" template):
+// the profile with its count of posts, who let it in, and since when.
+// The profile page and the profile's wall (pictures.go) share it.
+func (s *Server) profileHead(d *webData, pr *store.Profile) error {
+	d.Profile, d.Count = pr, pr.Posts
+	if pr.Created == 0 { // an id with posts and no profile: a name and nothing else
+		return nil
+	}
+	var err error
+	if d.Invite, err = s.St.InviteOf(pr.ID); err != nil {
+		return err
+	}
+	d.Since = time.UnixMilli(pr.Created).UTC().Format("2006-01-02")
+	d.SinceStamp = webStamp(pr.Created)
+	return nil
+}
+
+// webTabs is the profile window's tab row (the "ptabs" template): whose
+// window, the page's query, and which tab is on — "posts" or "pictures".
+type webTabs struct {
+	ID, Q, On string
+}
+
+// Tabs is the row for the page's profile with on selected.
+func (d *webData) Tabs(on string) webTabs {
+	return webTabs{ID: d.Profile.ID, Q: d.Q, On: on}
 }
 
 // handleNotificationsPage: /u/{id}/notifications is what concerns the
