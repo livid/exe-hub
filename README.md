@@ -187,7 +187,9 @@ profile, `/u/{id}/notifications` and `/u/{id}/bookmarks` what concerns
 that id and the posts it keeps, `/search?q=` a search, `/stats` who
 reads the hub, `/archives` every past day as a calendar, each day
 coloured by how many posts were sent on it and leading to
-`/archives/{day}`, that day's posts. Signed in with a wallet, the
+`/archives/{day}`, that day's posts. On a token-gated hub `/token` leads
+to `/token/{mint}`, what the gate's token is: its price and a chart, its
+holders, supply and liquidity, and the pools it trades in. Signed in with a wallet, the
 join window becomes a Navigation window: Home, Notifications, Bookmarks,
 Profile, Archives. The pages'
 own words — the join window, the pager, the Post window, every message

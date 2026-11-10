@@ -37,6 +37,7 @@ import (
 	"exehub/internal/memcache"
 	"exehub/internal/push"
 	"exehub/internal/store"
+	"exehub/internal/token"
 	stats "github.com/livid/exe-stats"
 )
 
@@ -57,11 +58,18 @@ type Server struct {
 	Push   *push.Key           // Web Push (the VAPID key); nil disables subscribing and the page's Notify box
 	Media  *Media              // conversion through ffmpeg (media.go); nil turns /v1/media off
 	Stats  *stats.Stats        // the pages' analytics (stats.go); nil counts nothing and hides /stats
+	// the token page's sources (token.go): what is known of the gate's
+	// token, and the guarded client its picture is fetched with. Both are
+	// made on first use when nil; a test sets its own.
+	Token      *token.Source
+	TokenFetch *card.Fetcher
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
 	ping      pingCache
 	drafts    drafts         // pictures uploaded unsigned, waiting for their post (draft.go)
 	mem       memcache.Cache // what a page keeps in memory between readers (archives.go)
+	tokenOnce sync.Once
+	fetchOnce sync.Once
 }
 
 // pingCache is the heartbeat's data: the counts the feed's strip shows —
@@ -197,6 +205,10 @@ func (s *Server) Handler() http.Handler {
 		to.Path = "/archives"
 		http.Redirect(w, r, to.RequestURI(), http.StatusMovedPermanently)
 	})
+	mux.HandleFunc("GET /token", s.handleTokenHome)
+	mux.HandleFunc("GET /token/{$}", s.handleTokenHome)
+	mux.HandleFunc("GET /token/{mint}", s.counted("token", s.handleTokenPage))
+	mux.HandleFunc("GET /token/{mint}/icon", s.handleTokenIcon)
 	mux.HandleFunc("GET /stats", s.handleStatsPage)
 	mux.HandleFunc("GET /v1/stats", s.handleStats)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)

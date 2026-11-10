@@ -214,6 +214,108 @@ a.mention { text-decoration: none; }
   .cal td { width: 20px; height: 20px; line-height: 20px; }
   .cal .now { line-height: 18px; }
 }
+/* the token page (PLAN.md, The token page): what the gate's token is.
+   The head is the profile's — a 64px picture, the name, the mint in the
+   id's face — with the token's links and its chips under it: a chip
+   with a tick says a thing that makes its holders safer (nobody may mint
+   more, nobody may freeze, the metadata is fixed), a chip with a bang on
+   the note's yellow says the contrary. Under the head two columns: the
+   figures at the left, the price large and each of the others a row of
+   its name and its number; the chart at the right, under its row of
+   ranges. Then the pools it trades in, a table; then the gate's note.
+   Narrower than 560px the columns stack, figures first. */
+.tk-head .av img { image-rendering: auto; }
+.tk-head .meta { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.tk-head .meta b { font-size: 11px; }
+.tk-links { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 5px; font-size: 11px; }
+.tk-links a { font-weight: bold; text-decoration: none; }
+.tk-links a:hover { text-decoration: underline; }
+.tk-flags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 8px; }
+.tk-flags span { box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px 0 5px;
+  border: 1px solid #999; background: #eee; font-size: 11px; line-height: 16px; white-space: nowrap; }
+.tk-flags .warn { border-color: #262626; background: #ffffc9; }
+.tk-flags svg, .tk-chg svg { display: block; flex: none; shape-rendering: crispEdges; }
+.tk-flags svg path, .tk-chg svg path { fill: currentColor; }
+.tk-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); border-top: 1px solid #ddd; }
+.tk-figs { padding: 10px 12px 8px 14px; border-right: 1px solid #ddd; font-variant-numeric: tabular-nums; }
+.tk-lab { font-size: 11px; line-height: 14px; color: #666; }
+.tk-price { font-size: 20px; font-weight: bold; line-height: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the day's change: its sign and a triangle say which way, the colour
+   only says it again */
+.tk-chg { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: bold; line-height: 14px; }
+.tk-chg.up { color: #1f7a3a; }
+.tk-chg.down { color: #b01c1c; }
+.tk-chg i { font-style: normal; font-weight: normal; color: #666; }
+.tk-rows { margin: 9px 0 0; }
+.tk-rows div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-top: 1px solid #eee; font-size: 11px; line-height: 15px; }
+.tk-rows dt { flex: none; color: #666; }
+.tk-rows dd { margin: 0; min-width: 0; font-weight: bold; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-rows dd a { font-weight: normal; text-decoration: none; }
+.tk-rows dd a:hover { text-decoration: underline; }
+/* the chart: a row of its ranges — push buttons joined in a row, the
+   range shown pressed, each a link to the page at that range — with the
+   reading at the row's right: the range's change, high and low, or the
+   time and price under the pointer. The plot is a box with a grey line
+   round it; the grid's lines are boxes of their own, the price a line
+   in an SVG stretched over them, green when the range ends at or above
+   where it began and red when below. The prices stand at the plot's
+   right, the times under it. */
+.tk-chartcol { display: flex; flex-direction: column; min-width: 0; padding: 10px 12px 8px; }
+.tk-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tk-seg { display: flex; flex: none; }
+.tk-seg .btn { min-width: 0; padding: 2px 7px; border-radius: 0; text-decoration: none; }
+.tk-seg .btn + .btn { margin-left: -1px; }
+.tk-seg .btn:first-child { border-radius: 3px 0 0 3px; }
+.tk-seg .btn:last-child { border-radius: 0 3px 3px 0; }
+.tk-seg .btn[aria-current=true] { background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.tk-read { flex: 1 1 0; min-width: 0; text-align: right; font-size: 11px; line-height: 14px; color: #666;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.tk-read b { color: #262626; }
+.tk-chart { position: relative; flex: 1 1 auto; min-height: 196px; margin: 0 60px 17px 0; }
+.tk-chart.up { color: #1f7a3a; }
+.tk-chart.down { color: #b01c1c; }
+.tk-plot { box-sizing: border-box; position: absolute; inset: 0; border: 1px solid #999; overflow: hidden; touch-action: pan-y; }
+.tk-plot i { box-sizing: border-box; position: absolute; display: block; }
+.tk-plot .gy { left: 0; right: 0; height: 0; border-top: 1px solid #e4e4e4; }
+.tk-plot .gx { top: 0; bottom: 0; width: 0; border-left: 1px solid #e4e4e4; }
+.tk-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tk-plot .a { fill: currentColor; fill-opacity: .1; }
+.tk-plot .l { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.tk-plot .hair { top: 0; bottom: 0; width: 0; border-left: 1px solid #262626; }
+.tk-plot .dot { width: 7px; height: 7px; margin: -3px 0 0 -3px; border: 1px solid #fff; background: #262626; }
+.tk-plot [hidden] { display: none; }
+.tk-chart.none { color: #666; }
+.tk-chart.none .tk-plot { display: flex; align-items: center; justify-content: center; padding: 12px; font-size: 11px; text-align: center; }
+.tk-y span, .tk-x span { box-sizing: border-box; position: absolute; font-size: 10px; line-height: 12px; color: #666; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-y span { left: 100%; height: 12px; margin: -6px 0 0 5px; }
+.tk-x span { top: 100%; width: 80px; margin: 4px 0 0 -40px; text-align: center; }
+/* the pools: a caption on the platinum strip, then a table — the pair
+   and under it where it trades and how old the pool is, then its
+   numbers, right-aligned in figures of one width */
+.tk-cap { padding: 3px 14px; border-top: 1px solid #262626; border-bottom: 1px solid #262626; background: #ddd;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6); font-size: 11px; font-weight: bold; line-height: 14px; }
+.tk-scroll { overflow-x: auto; }
+.tk-mk { width: 100%; border-collapse: collapse; font-size: 11px; line-height: 14px; font-variant-numeric: tabular-nums; }
+.tk-mk th, .tk-mk td { padding: 5px 6px; text-align: right; white-space: nowrap; }
+.tk-mk th { padding-top: 4px; padding-bottom: 4px; border-bottom: 1px solid #ddd; font-weight: normal; color: #666; }
+.tk-mk td { border-bottom: 1px solid #eee; }
+.tk-mk tr:last-child td { border-bottom: 0; }
+.tk-mk th:first-child, .tk-mk td:first-child { padding-left: 14px; text-align: left; }
+.tk-mk th:last-child, .tk-mk td:last-child { padding-right: 14px; }
+.tk-mk td a { font-size: 12px; font-weight: bold; text-decoration: none; }
+.tk-mk td a:hover { text-decoration: underline; }
+.tk-mk td span { display: block; font-size: 10px; line-height: 12px; color: #666; }
+.tk-gate { padding: 2px 14px 4px; border-top: 1px solid #ddd; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .tk-body { grid-template-columns: minmax(0, 1fr); }
+  .tk-figs { border-right: 0; border-bottom: 1px solid #ddd; }
+  /* the reading takes a line of its own under the ranges: beside them
+     a phone's width cuts it short */
+  .tk-bar { flex-wrap: wrap; row-gap: 6px; }
+  .tk-read { flex-basis: 100%; text-align: left; }
+  .tk-mk .opt { display: none; }
+}
 /* narrower than that, the Summary is a press away (Livid's phone
    design, 2026-09-24): Summarize, a push button between Feed and the
    language menu on the thread's top strip, there only when the thread
@@ -1235,7 +1337,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"><div class="pad">
     <p>这里是一个 <b>exe-hub</b>：一个小型的公开信息流。没有注册，也没有密码，一把 ed25519 密钥就是一个账号。任何人都可以阅读；发帖要满足下面的条件。</p>
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
-    <div class="gate">{{if .Join.Token}}<b>发帖条件：</b>你的密钥对应的 Solana 地址需要持有至少 {{range $i, $m := .Join.Mints}}{{if $i}}或 {{end}}<b>{{$m.Amount}}</b> 个{{if $m.Raw}}最小单位{{else}}代币{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="在 jup.ag 用 SOL 购买"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>）{{end}}。持仓由 RPC 查询，你不需要签署任何交易。{{else}}<b>发帖条件：</b>没有限制，任何密钥都可以发帖。{{end}}{{if .Join.Cooldown}}每 {{.Join.Cooldown}} 秒最多发一帖。{{end}}</div>
+    <div class="gate">{{if .Join.Token}}<b>发帖条件：</b>你的密钥对应的 Solana 地址需要持有至少 {{range $i, $m := .Join.Mints}}{{if $i}}或 {{end}}<b>{{$m.Amount}}</b> 个{{if $m.Raw}}最小单位{{else}}代币{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="在 jup.ag 用 SOL 购买"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>，<a href="/token/{{$m.Mint}}{{$.Q}}">{{T "token.about"}}</a>）{{end}}。持仓由 RPC 查询，你不需要签署任何交易。{{else}}<b>发帖条件：</b>没有限制，任何密钥都可以发帖。{{end}}{{if .Join.Cooldown}}每 {{.Join.Cooldown}} 秒最多发一帖。{{end}}</div>
     <ol>
       <li><b>用 Solana 钱包：</b>点信息流上方「发帖」窗口里的「用 Solana 登录」。每发一帖，钱包会请你签一次名——签的是一段消息，不是交易；发帖条件查的就是这个钱包的地址。</li>
       <li><b>从 exe 桌面：</b>打开 Hub 应用，在它询问 hub 地址时填入 <code>{{.Join.Base}}</code>。如果应用已经连着别的 hub，点击状态栏里的地址，选择 Connect…，再填入这个地址。帖子会用你节点自己的密钥签名，不需要安装任何东西。</li>
@@ -1250,7 +1352,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"><div class="pad">
     <p>ここは <b>exe-hub</b> です：ed25519 の鍵がそのままアカウントになる、小さな公開フィード。登録もパスワードもありません。読むのは誰でも自由で、投稿にはこの hub の条件を満たす鍵が要ります。</p>
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
-    <div class="gate">{{if .Join.Token}}<b>投稿の条件：</b>あなたの鍵から導かれる Solana アドレスが、{{range $i, $m := .Join.Mints}}{{if $i}}または {{end}}<b>{{$m.Amount}}</b> {{if $m.Raw}}最小単位{{else}}トークン{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="jup.ag で SOL で購入"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>）{{end}}以上を保有していること。保有量は RPC で確認され、トランザクションに署名することはありません。{{else}}<b>投稿の条件：</b>なし。どの鍵でも投稿できます。{{end}}{{if .Join.Cooldown}}投稿は {{.Join.Cooldown}} 秒に 1 件まで。{{end}}</div>
+    <div class="gate">{{if .Join.Token}}<b>投稿の条件：</b>あなたの鍵から導かれる Solana アドレスが、{{range $i, $m := .Join.Mints}}{{if $i}}または {{end}}<b>{{$m.Amount}}</b> {{if $m.Raw}}最小単位{{else}}トークン{{end}}（mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="jup.ag で SOL で購入"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>、<a href="/token/{{$m.Mint}}{{$.Q}}">{{T "token.about"}}</a>）{{end}}以上を保有していること。保有量は RPC で確認され、トランザクションに署名することはありません。{{else}}<b>投稿の条件：</b>なし。どの鍵でも投稿できます。{{end}}{{if .Join.Cooldown}}投稿は {{.Join.Cooldown}} 秒に 1 件まで。{{end}}</div>
     <ol>
       <li><b>Solana ウォレットから：</b>フィードの上の「投稿」ウィンドウで「Solana でサインイン」を選びます。投稿のたびにウォレットが署名を 1 回求めます。署名するのはメッセージで、トランザクションではありません。条件はそのウォレットのアドレスで確認されます。</li>
       <li><b>exe デスクトップから：</b>Hub アプリを開き、hub のアドレスを尋ねられたら <code>{{.Join.Base}}</code> を入力します。すでに別の hub につながっている場合は、ステータスバーのアドレスをクリックして Connect… を選び、そこに入力します。投稿はノード自身の鍵で署名されます。何もインストールする必要はありません。</li>
@@ -1265,7 +1367,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   <div class="frame"><div class="pad">
     <p>This is an <b>exe-hub</b>: a small public feed where an ed25519 key is the account — no registration, no passwords. Reading is open to everyone; posting needs a key that passes this hub's gate.</p>
     <p>Hub <code>{{.Join.Base}}</code>{{if .Join.HubID}} · id <span class="mono">{{.Join.HubID}}</span>{{end}}</p>
-    <div class="gate">{{if .Join.Token}}<b>Gate:</b> the Solana address derived from your key must hold at least {{range $i, $m := .Join.Mints}}{{if $i}} or {{end}}<b>{{$m.Amount}} {{if $m.Raw}}raw base units{{else}}tokens{{end}}</b> of mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="Buy with SOL on jup.ag"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a>{{end}}. Holding is checked by RPC; you never sign a transaction.{{else}}<b>Gate:</b> open — any key may post.{{end}}{{if .Join.Cooldown}} One post per {{.Join.Cooldown}} seconds.{{end}}</div>
+    <div class="gate">{{if .Join.Token}}<b>Gate:</b> the Solana address derived from your key must hold at least {{range $i, $m := .Join.Mints}}{{if $i}} or {{end}}<b>{{$m.Amount}} {{if $m.Raw}}raw base units{{else}}tokens{{end}}</b> of mint <a href="{{$m.Buy}}" target="_blank" rel="noopener" title="Buy with SOL on jup.ag"><code>{{$m.Head}}<wbr>{{$m.Tail}}</code></a> (<a href="/token/{{$m.Mint}}{{$.Q}}">{{T "token.about"}}</a>){{end}}. Holding is checked by RPC; you never sign a transaction.{{else}}<b>Gate:</b> open — any key may post.{{end}}{{if .Join.Cooldown}} One post per {{.Join.Cooldown}} seconds.{{end}}</div>
     <ol>
       <li><b>From a Solana wallet:</b> choose Sign in with Solana in the Post window above the feed. Each post is one signature in your wallet, a message and never a transaction, and the gate checks that wallet's address.</li>
       <li><b>From an exe desktop:</b> open the Hub app and enter <code>{{.Join.Base}}</code> when it asks for a hub's address. If the app is already on another hub, click the address in its status line, choose Connect… and enter it there. Posts are signed by your node's own key; there is nothing to install.</li>
@@ -1408,6 +1510,53 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
     <div class="statusbar"><span>{{.Message}}</span></div>
   </div>
 </div>
+</div>
+</div>
+{{else if eq .Page "token"}}
+<div class="desk">
+{{template "nav" .}}
+<div class="main">
+{{with .Token}}<div class="window">
+  <div class="titlebar"><a class="tbox" href="/{{$.Q}}" title="{{T "back"}}" aria-label="{{T "back"}}"></a><span class="stripe"></span><span class="title">{{.Name}}</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="pager top"><a class="btn prev back" href="/{{$.Q}}">{{template "arrow"}}<span>{{T "feed"}}</span></a>{{template "lang" $}}</div>
+    <div class="profile tk-head">
+      <span class="av">{{if .Icon}}<img id="tk-icon" src="/token/{{.Mint}}/icon" alt="">{{end}}</span>
+      <div>
+        <h1>{{.Name}}</h1>
+        <div class="meta">{{if .Symbol}}<b>{{.Symbol}}</b> · {{end}}<span class="mono">{{.Head}}<wbr>{{.Tail}}</span></div>
+        {{if .Desc}}<p>{{.Desc}}</p>{{end}}
+        <div class="tk-links">{{if .Website}}<a href="{{.Website}}" target="_blank" rel="noopener nofollow">{{T "token.website"}}</a>{{end}}{{if .Twitter}}<a href="{{.Twitter}}" target="_blank" rel="noopener nofollow">X</a>{{end}}<a href="{{.Explorer}}" target="_blank" rel="noopener nofollow">{{T "token.explorer"}}</a><a href="{{.Buy}}" target="_blank" rel="noopener nofollow">{{T "token.buy"}}</a></div>
+        {{if .Flags}}<div class="tk-flags">{{range .Flags}}<span{{if not .Good}} class="warn"{{end}}>{{if .Good}}{{template "tick"}}{{else}}{{template "bang"}}{{end}}{{T .Key}}</span>{{end}}</div>{{end}}
+      </div>
+    </div>
+    <div class="tk-body">
+      <div class="tk-figs">
+        <div class="tk-lab">{{T "token.price"}}</div>
+        <div class="tk-price">{{if .Price}}{{.Price}}{{else}}—{{end}}</div>
+        {{if .Change}}<div class="tk-chg {{.Dir}}">{{if eq .Dir "up"}}{{template "tri-up"}}{{else if eq .Dir "down"}}{{template "tri-down"}}{{end}}<span>{{.Change}}</span><i>{{T "token.24h"}}</i></div>{{end}}
+        <dl class="tk-rows">{{range .Rows}}<div><dt>{{T .Key}}</dt><dd>{{if .Href}}<a class="mono" href="{{.Href}}" target="_blank" rel="noopener nofollow">{{.Value}}</a>{{else if .Stamp}}<time datetime="{{.Stamp}}" data-date>{{.Value}}</time>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>
+      </div>
+      <div class="tk-chartcol">
+        <div class="tk-bar"><div class="tk-seg">{{range .Ranges}}<a class="btn" href="{{.Href}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div><div class="tk-read" id="tk-read">{{with .Chart}}<b>{{.Change}}</b> · {{T "token.high"}} {{.High}} · {{T "token.low"}} {{.Low}}{{end}}</div></div>
+        {{if .Chart}}{{with .Chart}}<div class="tk-chart {{if .Up}}up{{else}}down{{end}}" id="tk-chart" data-pts="{{.Data}}" data-kind="{{.Kind}}" data-from="{{.From}}" data-to="{{.To}}" data-lo="{{.Lo}}" data-hi="{{.Hi}}">
+          <div class="tk-plot">{{range .Y}}<i class="gy" style="{{.Style}}"></i>{{end}}{{range .X}}<i class="gx" style="{{.Style}}"></i>{{end}}<svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"><polygon class="a" points="{{.Area}}"/><polyline class="l" points="{{.Line}}"/></svg><i class="hair" hidden></i><i class="dot" hidden></i></div>
+          <div class="tk-y">{{range .Y}}<span style="{{.Style}}">{{.Label}}</span>{{end}}</div>
+          <div class="tk-x">{{range .X}}<span style="{{.Style}}" data-t="{{.Unix}}">{{.Label}}</span>{{end}}</div>
+        </div>{{end}}{{else}}<div class="tk-chart none"><div class="tk-plot">{{if .ChartOff}}{{T "token.chart.off"}}{{else}}{{T "token.chart.none"}}{{end}}</div></div>{{end}}
+      </div>
+    </div>
+    {{if .Markets}}<div class="tk-cap">{{T "token.markets"}}</div>
+    <div class="tk-scroll"><table class="tk-mk">
+      <thead><tr><th scope="col">{{T "token.market"}}</th><th scope="col" class="opt">{{T "token.rate"}}</th><th scope="col">{{T "token.liquidity"}}</th><th scope="col">{{T "token.volume24"}}</th><th scope="col" class="opt">{{T "token.trades24"}}</th></tr></thead>
+      <tbody>{{range .Markets}}
+        <tr><td><a href="{{.Href}}" target="_blank" rel="noopener nofollow">{{.Pair}}</a><span>{{.Dex}}{{if .Days}} · {{T "token.days" "n" .Days}}{{end}}</span></td><td class="opt">{{if .Rate}}{{.Rate}}{{else}}—{{end}}</td><td>{{.Liquidity}}</td><td>{{.Volume}}</td><td class="opt">{{.Trades}}</td></tr>{{end}}
+      </tbody>
+    </table></div>{{end}}
+    <div class="tk-gate"><div class="gate"><b>{{T "token.gate.label"}}</b>{{if .NeedRaw}}{{T "token.gate.raw" "amount" .Need}}{{else}}{{T "token.gate.text" "amount" .Need "symbol" (or .Symbol (T "token.tokens"))}}{{end}}{{if .Worth}}{{T "token.gate.worth" "usd" .Worth}}{{end}}{{if .Others}}{{T "token.gate.other"}}{{range $i, $o := .Others}}{{if $i}}, {{end}}<a class="mono" href="/token/{{$o.Mint}}{{$.Q}}">{{$o.Short}}</a>{{end}}{{end}}</div></div>
+    <div class="statusbar"><span>{{if .Stamp}}{{T "token.sources"}} · <time datetime="{{.Stamp}}">{{.Stamp}}</time>{{else}}{{T "token.nodata"}}{{end}}</span></div>
+  </div>
+</div>{{end}}
 </div>
 </div>
 {{else if eq .Page "stats"}}
@@ -1760,7 +1909,66 @@ function hubAnswers() {
   ask();
 })();
 </script>
-{{if eq .Page "offline"}}<script>
+{{if eq .Page "token"}}<script>
+// The token page (PLAN.md, The token page). The page stands without
+// this: the server drew the chart and set its times in UTC. With it,
+// the times under the plot are the reader's own, and the row over the
+// plot reads the line under the pointer — a hairline and a dot where
+// it is, the time and the price there in place of the range's change —
+// and goes back to the range when the pointer leaves. A picture the hub
+// could not fetch leaves its box empty and not a broken-image mark.
+(() => {
+  const icon = document.getElementById("tk-icon");
+  if (icon) {
+    const gone = () => icon.remove();
+    icon.addEventListener("error", gone);
+    if (icon.complete && !icon.naturalWidth) gone();
+  }
+  const chart = document.getElementById("tk-chart");
+  if (!chart) return;
+  const kind = chart.dataset.kind;
+  const tick = d => kind === "month" ? d.toLocaleDateString(LOC, { month: "short", year: "numeric" })
+    : kind === "day" ? d.toLocaleDateString(LOC, { month: "short", day: "numeric" })
+    : d.toLocaleTimeString(LOC, { hour: "numeric", minute: "2-digit" });
+  for (const s of chart.querySelectorAll(".tk-x [data-t]")) s.textContent = tick(new Date(s.dataset.t * 1000));
+
+  const pts = chart.dataset.pts.split(";").map(p => p.split(",").map(Number));
+  const from = +chart.dataset.from, to = +chart.dataset.to, lo = +chart.dataset.lo, hi = +chart.dataset.hi;
+  const plot = chart.querySelector(".tk-plot"), hair = plot.querySelector(".hair"), dot = plot.querySelector(".dot");
+  const read = document.getElementById("tk-read");
+  if (!(to > from) || !(hi > lo) || !pts.length || !read) return;
+  const rest = Array.from(read.childNodes);
+  // a price as the page sets one: cents from a dollar up, six figures under
+  const usd = p => "$" + (p >= 1 ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : p.toFixed(Math.min(12, Math.max(0, 5 - Math.floor(Math.log10(p))))));
+  const when = d => kind === "month" ? d.toLocaleDateString(LOC, { dateStyle: "medium" })
+    : d.toLocaleString(LOC, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const clear = () => { hair.hidden = dot.hidden = true; read.replaceChildren(...rest); };
+  const point = e => {
+    const r = plot.getBoundingClientRect(), w = plot.clientWidth, h = plot.clientHeight;
+    const f = Math.min(1, Math.max(0, (e.clientX - r.left - plot.clientLeft) / w));
+    const t = from + f * (to - from);
+    if (t < pts[0][0]) return clear(); // before the line begins
+    // the price on the line at t: between the two points it runs through
+    let i = pts.findIndex(p => p[0] >= t);
+    if (i < 0) i = pts.length - 1;
+    const b = pts[i], a = pts[Math.max(0, i - 1)];
+    const p = b[0] === a[0] ? b[1] : a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]);
+    const x = Math.min(w - 1, Math.round(f * w)), y = Math.round((hi - p) / (hi - lo) * h);
+    hair.style.left = dot.style.left = x + "px";
+    dot.style.top = y + "px";
+    hair.hidden = dot.hidden = false;
+    const strong = document.createElement("b");
+    strong.textContent = usd(p);
+    read.replaceChildren(strong, " · " + when(new Date(t * 1000)));
+  };
+  plot.addEventListener("pointermove", point);
+  plot.addEventListener("pointerdown", point);
+  plot.addEventListener("pointerleave", clear);
+  plot.addEventListener("pointercancel", clear);
+})();
+</script>
+{{end}}{{if eq .Page "offline"}}<script>
 // The offline page (PLAN.md, Offline): the service worker shows it at the
 // address of a page it never kept while the hub cannot be reached, or
 // has not answered in three seconds. It asks the hub every five seconds
@@ -4910,6 +5118,12 @@ document.addEventListener("change", e => {
      the same glyph mirrored (x → 10 − x) pointing on, for Next */}}
 {{define "arrow"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M4 0h1v1h-1zM3 1h2v1h-2zM2 2h3v1h-3zM1 3h10v1h-10zM0 4h11v1h-11zM1 5h10v1h-10zM2 6h3v1h-3zM3 7h2v1h-2zM4 8h1v1h-1z"/></svg>{{end}}
 {{define "play"}}<svg class="gl" viewBox="0 0 5 9" width="5" height="9" aria-hidden="true"><path class="k" d="M0 0h1v1h-1zM0 1h2v1h-2zM0 2h3v1h-3zM0 3h4v1h-4zM0 4h5v1h-5zM0 5h4v1h-4zM0 6h3v1h-3zM0 7h2v1h-2zM0 8h1v1h-1z"/></svg>{{end}}
+{{/* the token page's glyphs: a tick and a bang for its chips, and the
+     two triangles that say which way the price went */}}
+{{define "tick"}}<svg viewBox="0 0 9 7" width="9" height="7" aria-hidden="true"><path d="M8 0h1v1h-1zM7 1h2v1h-2zM6 2h2v1h-2zM0 3h1v1h-1zM5 3h2v1h-2zM0 4h2v1h-2zM4 4h2v1h-2zM1 5h4v1h-4zM2 6h2v1h-2z"/></svg>{{end}}
+{{define "bang"}}<svg viewBox="0 0 2 9" width="2" height="9" aria-hidden="true"><path d="M0 0h2v6h-2zM0 7h2v2h-2z"/></svg>{{end}}
+{{define "tri-up"}}<svg viewBox="0 0 7 4" width="7" height="4" aria-hidden="true"><path d="M3 0h1v1h-1zM2 1h3v1h-3zM1 2h5v1h-5zM0 3h7v1h-7z"/></svg>{{end}}
+{{define "tri-down"}}<svg viewBox="0 0 7 4" width="7" height="4" aria-hidden="true"><path d="M0 0h7v1h-7zM1 1h5v1h-5zM2 2h3v1h-3zM3 3h1v1h-1z"/></svg>{{end}}
 {{define "arrow-r"}}<svg class="gl" viewBox="0 0 11 9" width="11" height="9" aria-hidden="true"><path class="k" d="M6 0h1v1h-1zM6 1h2v1h-2zM6 2h3v1h-3zM0 3h10v1h-10zM0 4h11v1h-11zM0 5h10v1h-10zM6 6h3v1h-3zM6 7h2v1h-2zM6 8h1v1h-1z"/></svg>{{end}}
 
 {{/* the cross on the button that lets a reply go: 8×8, two 1px

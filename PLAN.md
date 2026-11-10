@@ -577,7 +577,8 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   report `/stats` draws, every list included (see Stats). 404 on a hub
   with stats off.
 - `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=`, `GET /stats`,
-  `GET /archives`, `GET /archives/{day}` — the public pages (see below).
+  `GET /archives`, `GET /archives/{day}`, and on a token-gated hub
+  `GET /token`, `GET /token/{mint}` — the public pages (see below).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -2040,6 +2041,132 @@ sent that day; use memcache for this page".
   pixel ratios 1, 1.5 and 2, a pressed cell opening its day under the
   Archives' row, and on a phone the five tiles with no word cut and two
   months across).
+
+## The token page — what the gate's token is (built 2026-11-09)
+
+Livid, 2026-11-09: "when a hub has token gating enabled: `/token` — 302
+redirect -> `/token/9raU…pump`; on that page, show token info like
+this: https://orbmarkets.io/token/9raU…pump". The reference was read in
+a browser: a head (picture, name, mint, description, links, three
+chips), a column of figures, a price chart with five ranges, and tabs
+for markets, history, holders, metadata and social.
+
+- **The addresses.** `GET /token` (and `/token/`) answers 302 to
+  `/token/{mint}`, the gate's first mint, with the query kept so
+  `?lang=` rides; `Cache-Control: no-cache`, since the gate's token is
+  the config's to change. `GET /token/{mint}` is the page, for a mint
+  the gate names and no other: the hub is not an explorer, and each
+  page costs calls on the gate's RPC key. A hub with an open gate
+  answers 404 to both ("This hub has no token gate."), a mint the gate
+  does not name 404 ("This hub's gate does not ask for that token.").
+  The join window's gate line has the way in, beside the mint: "about
+  this token". No row in the Navigation window.
+- **What it shows**, in one window titled with the token's name, Feed
+  and the language menu heading it:
+  - the head, the profile's block: the picture at 64px, the name, the
+    symbol and the whole mint, the description, links — Website and X
+    when the listing has them, Explorer (orbmarkets.io), Buy on jup.ag
+    (the join window's link) — and chips: Mint revoked, Freeze revoked,
+    Immutable metadata, each with a tick. A chip whose answer is the
+    other one (Mint authority live, Freeze authority live, Mutable
+    metadata) stands on the note's yellow with a bang; a chip nobody
+    could answer is left out;
+  - the figures: the price, large, with the day's change under it — a
+    sign, a triangle and a colour, so the colour is never the only
+    word — then rows: Holders, 24h volume, Supply, Liquidity, Market
+    cap, FDV only when it is not the market cap, Issuer, Created,
+    Creator. A row nobody answered is left out, never a nought;
+  - the chart: five ranges, 1H 24H 7D 1M 1Y, push buttons joined in a
+    row, the shown one pressed, each a link (`?range=7d`; 24H is the
+    address without one). The line is the price in dollars, green when
+    the range ends at or above where it began, red when below, over a
+    grid of round prices (steps of 1, 2 or 5) labelled at the right and
+    four times labelled underneath. The row's right says the range's
+    change, high and low; under the pointer it says the price and the
+    time there, with a hairline and a dot on the line. On a phone the
+    reading has a line of its own;
+  - Markets: up to ten pools, the busiest first — the pair (a link to
+    the pool on GeckoTerminal), where it trades and how many days old
+    it is, its rate, liquidity, 24h volume and 24h trades. A phone
+    keeps the pair, liquidity and volume;
+  - the gate's note: what this hub asks for in the token ("at least
+    10,000 V2EX"), what that is in dollars now, and the gate's other
+    mints as links when it takes several;
+  - the status line: where the market's numbers are from and when they
+    were read.
+  Left out of the reference: its History, Holders and Social tabs (each
+  transfer, the largest accounts, mentions on X) — an explorer's work;
+  the Explorer link leads to them.
+- **Where the numbers come from** (`internal/token`), none of it with
+  a key of the hub's own beyond the gate's RPC:
+  - the gate's RPC: `getAccountInfo` on the mint for the supply, the
+    decimals and whether anyone may still mint or freeze — the chain's
+    word, which stands over anyone else's; and `getAsset` (the DAS API,
+    which Helius speaks) for the description, the picture's address and
+    whether the metadata may change. An RPC without DAS answers "method
+    not found", which is kept as an answer: no description, no third
+    chip;
+  - Jupiter's token search (`lite-api.jup.ag/tokens/v2/search`): name,
+    symbol, picture, website and X, price, the day's change, holders,
+    market cap and FDV, the launchpad (Issuer), when it was created and
+    by whom; and, when the RPC says nothing, decimals, supply and the
+    two authorities;
+  - GeckoTerminal: the token's pools (`/tokens/{mint}/pools`) and one
+    pool's candles (`/pools/{pool}/ohlcv/…`), the deepest pool's.
+    Volume is the pools' sum. Liquidity is the sum over the pools that
+    traded in the last 24 hours, or the deepest alone when none did: an
+    idle pool's reserves are valued at its last trade's price, and
+    V2EX's idle pools, last traded at twice the market, added half
+    again to the total.
+  A link from a listing goes on the page only as an http(s) address.
+- **Kept, and kept when a place is down.** Each answer is kept on its
+  own: Jupiter and the pools a minute, the mint ten minutes, the asset
+  an hour, candles from a minute (1H) to an hour (1Y). A reader with an
+  old answer gets it at once while the place is asked again behind
+  them; only with no answer at all does a reader wait, every reader for
+  the same asking. A place that failed is left alone for 20 seconds,
+  and its last answer stands until it answers again — GeckoTerminal
+  answers 429 after a handful of calls in a minute. With nothing
+  answering the page still stands: the mint, a dash for the price, "The
+  chart is not available right now.", the gate's amount in raw base
+  units, and "The market's numbers are not available right now." on
+  the status line. The page itself is `public, max-age=30`.
+  - GeckoTerminal sends no candle for a span in which nothing traded,
+    so each range asks for more candles than fill it. The chart keeps
+    those inside the range, opens the line at the last close before it
+    and runs it flat from the last trade to now: a quiet hour is a flat
+    hour, not a gap. A range with no price at all says "No trades in
+    this span."
+  - An RPC error never quotes the RPC's address, which holds its key
+    (`Source.rpc`; Go's client errors quote the address they failed
+    on).
+- **The picture** is `GET /token/{mint}/icon`: fetched by the hub, cut
+  to the avatar's 128px square, kept an hour in memory and a day by the
+  browser. The reader's browser asks nobody but the hub. A link that
+  names a CID is read from the hub's own IPFS node first — ipfs.io
+  answered this host 429 — and from its gateway, by the link cards'
+  guarded client, only when the node cannot. The hub decodes WebP for
+  it, which `/v1/avatar` now takes too (the decoder registers for every
+  decode). No picture: the box stays empty.
+- **Drawn on the server.** The chart is an SVG polyline in a 1000 by
+  1000 box stretched over the plot, with the grid's lines as boxes of
+  their own; the page stands without script, its times in UTC. The
+  script sets the times by the reader's clock and reads the line under
+  the pointer. A range is a page load.
+- **Words** in English, Chinese (both scripts' tables) and Japanese,
+  keys `token.*`, `err.notoken`, `err.nomint`; figures are set the same
+  in all three ($ and a comma every three digits). Stats count it as
+  kind `token`, labelled "Token: 9raU…pump".
+- **Tests.** `internal/token`: the three places faked, precedence, the
+  last answer standing, an RPC without DAS, no RPC, no key in a logged
+  error; `TOKEN_LIVE=1 go test -run Live -v ./internal/token` asks the
+  real ones. `internal/api/token_test.go`: the redirect, the page in
+  three languages, a mint the gate does not name, nothing answering,
+  the picture, the chart's geometry, the figures. In a browser:
+  `HUB=… node ~/tools/playwright/exe-hub-token-test.js` (read-only; 261
+  checks at ratios 1, 1.5 and 2 and on a phone).
+- **Not built:** the largest holders, the reader's own holding on the
+  page, a JSON form (`/v1/token`) for the Hub app, candles as candles.
 
 ## Reactions — an emoji on a post (built 2026-10-28)
 
