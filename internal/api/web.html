@@ -279,6 +279,31 @@ a.mention { text-decoration: none; }
 .tk-dlg .ival { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tk-dlg .ival .sub { font-size: 11px; color: #555; }
 .tk-dlg .tk-seg .btn { padding: 2px 9px; }
+/* any other quantity (Livid, 2026-11-10: "in addition to 10000 / 20000 /
+   50000 quick options, user should also be able to enter quantity"): a
+   text field at the three's right, on the same row — the desktop's
+   field, white and sunken — taking what the row has left. Typing in it
+   lets the pressed quantity go; pressing a quantity empties it. */
+.tk-dlg .tk-qrow { display: flex; align-items: center; gap: 8px; overflow: visible; }
+.tk-dlg #tk-qty { flex: none; }
+.tk-dlg #tk-qty .btn { padding: 2px 6px; }
+.tk-dlg #tk-own { display: block; box-sizing: border-box; flex: 1 1 0; width: 0; min-width: 0; height: 20px; margin: 0 1px 0 0; padding: 2px 5px;
+  font: inherit; line-height: 14px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
+  box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; font-variant-numeric: tabular-nums; }
+.tk-dlg #tk-own:focus { outline: none; }
+.tk-dlg #tk-own:disabled { color: #999; background: #eee; }
+.tk-dlg #tk-own::placeholder { color: #999; opacity: 1; }
+@media (pointer: coarse) { .tk-dlg #tk-own { height: 24px; font-size: 16px; } }
+/* a phone's row has no room for it beside the three (an iPhone sets
+   them in a wide face): there the field has the line under them, as
+   wide as they are together */
+@media (max-width: 480px) {
+  .tk-dlg .tk-qrow { flex-wrap: wrap; gap: 6px 8px; }
+  .tk-dlg #tk-own { flex: 0 0 100%; width: 100%; max-width: 220px; }
+  /* and the row's label stays beside the three, on the first line */
+  .tk-dlg .irow:has(.tk-qrow) { align-items: flex-start; }
+  .tk-dlg .irow:has(.tk-qrow) .ilab { line-height: 20px; }
+}
 /* the wallet that pays (Livid, 2026-11-10: "when multiple wallets
    detected, use segmented control to switch; show wallet icon"). One
    wallet in the browser is named, its own icon before its name. Several
@@ -2240,7 +2265,7 @@ function hubAnswers() {
   const $ = id => document.getElementById(id);
   const payBox = $("tk-pay"), qtyBox = $("tk-qty"), cost = $("tk-cost"), get = $("tk-get"), note = $("tk-note"), title = $("tk-buy-h");
   const wsel = $("tk-wsel"), wname = $("tk-wname"), cancel = $("tk-cancel"), go = $("tk-go");
-  const QTYS = [...qtyBox.children].map(b => +b.dataset.qty);
+  const QTYS = [...qtyBox.children].map(b => +b.dataset.qty), own = $("tk-own");
   const short = a => a.length > 10 ? a.slice(0, 4) + "…" + a.slice(-4) : a;
   // raw base units as a number set for reading: 10,086.9
   const units = (raw, d, places) => {
@@ -2262,6 +2287,9 @@ function hubAnswers() {
   // what is being bought, and for whom: set by each hubBuy
   let o = { mint: "", dec: 0, symbol: "", jup: "" };
   let pay = "SOL", qty = QTYS[0], quote = null, phase = "idle", asked = 0, account = null, timer = 0;
+  // the quantity field: bad while what it holds is no quantity; last is
+  // the quantity pressed last, what an emptied field goes back to
+  let bad = false, last = QTYS[0], typing = 0;
 
   // ---- wallets: the Wallet Standard's handshake, for those that send a transaction ----
   const wallets = [];
@@ -2409,14 +2437,17 @@ function hubAnswers() {
   function settle() {
     const busy = phase === "busy", over = phase === "sent" || phase === "done";
     for (const b of payBox.children) { b.setAttribute("aria-pressed", b.dataset.pay === pay); b.disabled = busy || over; }
-    for (const b of qtyBox.children) { b.setAttribute("aria-pressed", +b.dataset.qty === qty); b.disabled = busy || over; }
+    // a quantity is pressed when it is the one being bought and nothing is typed
+    for (const b of qtyBox.children) { b.setAttribute("aria-pressed", +b.dataset.qty === qty && !own.value.trim()); b.disabled = busy || over; }
+    own.disabled = busy || over;
     for (const b of wsel.children) b.disabled = busy || over;
     cancel.hidden = over;
     cancel.disabled = busy;
     go.textContent = over ? T("buy.done") : T("buy");
     go.disabled = busy || phase === "sent" || (!over && (!quote || !wallets.length));
     if (phase !== "idle") return;
-    if (!wallets.length) say(T("buy.nowallet"), false, { href: o.jup, text: T("buy.jup") });
+    if (bad) say(T("buy.qty.bad"), true);
+    else if (!wallets.length) say(T("buy.nowallet"), false, { href: o.jup, text: T("buy.jup") });
     else if (quote) say(o.address ? T("buy.note.for", { address: short(o.address) }) : T("buy.note"));
   }
   // ask prices the choice again: at once when it changed, and every 20
@@ -2424,7 +2455,8 @@ function hubAnswers() {
   // Jupiter would still give
   async function ask() {
     clearTimeout(timer);
-    if (veil.hidden || phase !== "idle") return;
+    clearTimeout(typing);
+    if (veil.hidden || phase !== "idle" || bad) return;
     const n = ++asked, p = PAY[pay];
     if (!quote && wallets.length) say(T("buy.quoting"));
     try {
@@ -2442,7 +2474,33 @@ function hubAnswers() {
   }
   const choose = () => { drawQuote(null); settle(); ask(); };
   payBox.addEventListener("click", e => { const b = e.target.closest("[data-pay]"); if (b && !b.disabled && b.dataset.pay !== pay) { pay = b.dataset.pay; choose(); } });
-  qtyBox.addEventListener("click", e => { const b = e.target.closest("[data-qty]"); if (b && !b.disabled && +b.dataset.qty !== qty) { qty = +b.dataset.qty; choose(); } });
+  qtyBox.addEventListener("click", e => {
+    const b = e.target.closest("[data-qty]");
+    if (!b || b.disabled || (+b.dataset.qty === qty && !own.value.trim())) return;
+    own.value = ""; bad = false;
+    last = qty = +b.dataset.qty;
+    choose();
+  });
+  // A quantity typed: a whole number of tokens, with commas or spaces as
+  // the reader likes. It is priced once the typing has stopped for a
+  // moment — Jupiter gives five requests in ten seconds, and a price a
+  // keystroke would spend them — or at Return. An emptied field goes
+  // back to the quantity pressed last; what is no quantity says so and
+  // prices nothing. Leaving the field sets its number with commas.
+  const typed = () => { const t = own.value.replace(/[\s,，_]/g, ""); return /^[0-9]{1,12}$/.test(t) && Number(t) >= 1 ? Number(t) : null; };
+  own.addEventListener("input", () => {
+    clearTimeout(typing);
+    if (!own.value.trim()) { bad = false; qty = last; choose(); return; }
+    const n = typed();
+    bad = n === null;
+    asked++; clearTimeout(timer);
+    drawQuote(null);
+    if (!bad) qty = n;
+    settle();
+    if (!bad) { if (wallets.length) say(T("buy.quoting")); typing = setTimeout(ask, 600); }
+  });
+  own.addEventListener("keydown", e => { if (e.key === "Enter" && !bad && !quote && own.value.trim()) { e.preventDefault(); e.stopPropagation(); ask(); } });
+  own.addEventListener("blur", () => { const n = typed(); if (n !== null) own.value = n.toLocaleString("en-US"); });
 
   // ---- buying ----
   async function buy() {
@@ -2547,8 +2605,14 @@ function hubAnswers() {
     o.ticker = o.symbol ? "$" + o.symbol : T("token.tokens");
     if (!o.symbol) o.symbol = T("token.tokens");
     phase = "idle"; account = null;
-    // the least quantity that covers what is wanted; the largest when none does
-    if (o.qty > 0) qty = QTYS.find(n => n >= o.qty) || QTYS[QTYS.length - 1];
+    // what is wanted: the least of the three quantities that covers it,
+    // pressed; when none does, the field holds it, a whole number
+    if (o.qty > 0) {
+      const quick = QTYS.find(n => n >= o.qty);
+      bad = false;
+      if (quick) { own.value = ""; last = qty = quick; }
+      else { qty = Math.ceil(o.qty); own.value = qty.toLocaleString("en-US"); }
+    }
     drawQuote(null);
     drawWallets(o.wallet);
     show();
@@ -2562,7 +2626,7 @@ function hubAnswers() {
     if (e.key === "Escape") { e.preventDefault(); shut(); }
     else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); if (!go.disabled) go.click(); }
     else if (e.key === "Tab") {
-      const f = [...veil.querySelectorAll("button, select")].filter(n => !n.disabled && n.offsetParent);
+      const f = [...veil.querySelectorAll("button, select, input")].filter(n => !n.disabled && n.offsetParent);
       const i = f.indexOf(document.activeElement);
       e.preventDefault();
       if (f.length) f[i < 0 ? 0 : (i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
@@ -5916,7 +5980,7 @@ document.addEventListener("change", e => {
   <div class="tk-dlg" role="dialog" aria-modal="true" aria-labelledby="tk-buy-h">
     <h2 id="tk-buy-h"></h2>
     <div class="irow"><span class="ilab">{{T "buy.pay"}}</span><span class="ival"><span class="tk-seg" id="tk-pay"><button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button></span></span></div>
-    <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span></span></div>
+    <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival tk-qrow"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span><input type="text" id="tk-own" inputmode="numeric" autocomplete="off" maxlength="15" placeholder="{{T "buy.qty.other"}}" aria-label="{{T "buy.qty.own"}}"></span></div>
     <div class="irow"><span class="ilab">{{T "buy.cost"}}</span><span class="ival" id="tk-cost">—</span></div>
     <div class="irow"><span class="ilab">{{T "buy.get"}}</span><span class="ival" id="tk-get">—</span></div>
     <div class="irow"><span class="ilab">{{T "buy.wallet"}}</span><span class="ival tk-wal"><span class="tk-seg" id="tk-wsel" role="group" aria-label="{{T "buy.wallet"}}" hidden></span><span id="tk-wname">—</span></span></div>

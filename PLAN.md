@@ -2191,7 +2191,8 @@ for markets, history, holders, metadata and social.
   10000 / 20000 / 50000"). Buy opens a dialog, the Profile dialog's
   panel: **Pay with** SOL, USDC or USDT and **Quantity** 10,000, 20,000
   or 50,000, each three push buttons joined in a row with the chosen
-  one pressed (SOL and 10,000 at first); **You pay** ("0.2301 SOL ·
+  one pressed (SOL and 10,000 at first), and beside the three
+  quantities a text field for any other (below, A quantity typed); **You pay** ("0.2301 SOL ·
   $19.79"); **You get** ("about 10,119 V2EX, at least 10,018");
   **Wallet** (the wallet's own icon and its name; when the browser has
   several, a segmented control like the two over it — each wallet's
@@ -2222,6 +2223,23 @@ for markets, history, holders, metadata and social.
     point of buying 10,000 is to hold 10,000.
   - The price is asked when the window opens, when a choice changes,
     and every 20 seconds while it stands open.
+  - **A quantity typed** (2026-11-10; Livid: "in addition to 10000 /
+    20000 / 50000 quick options, user should also be able to enter
+    quantity"). A text field at the three's right, the desktop's white
+    sunken field, its placeholder "Other": a whole number of tokens, 1
+    or more, with commas or spaces as the reader types them. Typing
+    lets the pressed quantity go and shows a dash for the price until
+    the typing has stopped for 0.6 seconds (or Return), when it is
+    priced like the three — at least that many, sized the same way,
+    one or two requests from the remembered rate. Leaving the field
+    sets its number with commas. What is no quantity ("abc", 0, 12.5)
+    says so in the note, prices nothing and greys Buy; an emptied
+    field goes back to the quantity pressed last; pressing a quantity
+    empties the field. Return in the field prices it at once, and
+    Return again is Buy. On a phone the field has the line under the
+    three, 24px high in 16px type so the page does not zoom. The guide
+    uses it: when none of the three covers what a wallet lacks (a gate
+    of 80,000), the field opens holding what it lacks.
   - **Five requests in ten seconds** is what Jupiter's keyless API
     gives one reader (measured 2026-11-10 from its `x-ratelimit-*`
     headers; found when the first walk through the guide pressed Buy
@@ -2282,8 +2300,8 @@ for markets, history, holders, metadata and social.
   - **Buy $V2EX…** opens the Buy window in place, over the page the
     reader was on, set for them: the least of the three quantities that
     covers what they lack is pressed (holding 2,500 of 10,000: 10,000;
-    of 15,000 and holding none: 20,000; the largest when none covers
-    it), the wallet they signed in with is the one chosen, and the note
+    of 15,000 and holding none: 20,000; when none covers it, the
+    quantity field holds what they lack), the wallet they signed in with is the one chosen, and the note
     says where the tokens go — "The tokens go to F4zC…su8L, the address
     signed in here." **Only that address may pay**: the gate counts
     what the signing key's own address holds, so tokens bought into
