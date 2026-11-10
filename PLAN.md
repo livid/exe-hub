@@ -1025,12 +1025,12 @@ hub that carries the post.
   `X-Forwarded-Proto`, so it is right behind Cloudflare and exe's
   proxy), the hub id, the gate (open, or the holding a token-gated hub
   asks for — human units once the RPC has told it the decimals, raw
-  base units before; **the mint is a link to where it can be bought**
-  (2026-09-17): Jupiter's swap page set to sell SOL for it,
-  `https://jup.ag/swap?sell=<wSOL mint>&buy=<mint>`, in a new tab so
-  the hub stays open to come back to. The query form on purpose —
-  jup.ag rewrites the older `/swap/SOL-<mint>` path to SOL for USDC,
-  checked in a browser, a 200 to curl either way. An open hub has no
+  base units before; **the mint is the link to the hub's own page
+  about the token** (`/token/<mint>`, see The token page; Livid,
+  2026-11-10: "token should simply link to our new token page, the old
+  jup link is not needed" — from 2026-09-17 it was a link to Jupiter's
+  swap page, and the token page, which has Buy, made that one a step
+  too many). It keeps `?lang=`. An open hub has no
   mint and no link), the cooldown, and the three ways in: the Hub app
   on an exe desktop (enter this hub's address where the app asks for
   one — its Join a Hub wizard since exe 899a3f6, a one-field dialog in
@@ -2088,8 +2088,8 @@ for markets, history, holders, metadata and social.
   page costs calls on the gate's RPC key. A hub with an open gate
   answers 404 to both ("This hub has no token gate."), a mint the gate
   does not name 404 ("This hub's gate does not ask for that token.").
-  The join window's gate line has the way in, beside the mint: "about
-  this token". No row in the Navigation window.
+  The join window's gate line has the way in: the mint is the link. No
+  row in the Navigation window.
 - **What it shows**, in one window titled with the token's name, Feed
   and the language menu heading it:
   - the head, the profile's block: the picture at 64px, the name, the

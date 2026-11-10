@@ -283,7 +283,7 @@ func TestTokenPage(t *testing.T) {
 	}
 
 	// the home page's join window leads here
-	if _, body = get(t, h, "/"); !strings.Contains(body, `(<a href="/token/`+tokenMint+`">about this token</a>)`) {
+	if _, body = get(t, h, "/"); !strings.Contains(body, `of mint <a href="/token/`+tokenMint+`"><code>`) {
 		t.Error("the join window has no link to the token page")
 	}
 	// and its Post window carries the guide for a wallet that holds too

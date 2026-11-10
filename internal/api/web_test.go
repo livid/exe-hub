@@ -431,8 +431,9 @@ func TestWebProfileQuotes(t *testing.T) {
 
 // TestWebJoinToken: a token-gated hub's join block names the holding
 // — raw base units until the RPC has told it the mint's decimals — and
-// the mint is a link to Jupiter's swap page, set to buy it with SOL;
-// beside it, the way to the hub's page about the token (token.go).
+// the mint is the link to the hub's own page about the token (token.go),
+// which has the price, the chart and Buy. It links nowhere else: the
+// link to Jupiter's swap page it once was is gone.
 func TestWebJoinToken(t *testing.T) {
 	zero := 0
 	s := testServer(t, &config.Config{
@@ -442,17 +443,27 @@ func TestWebJoinToken(t *testing.T) {
 		Cooldown: &zero,
 	})
 	_, body := get(t, s.Handler(), "/")
-	const buy = `<a href="https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&amp;buy=9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump" target="_blank" rel="noopener"`
-	if !strings.Contains(body, "<b>10000000000 raw base units</b> of mint "+buy+` title="Buy with SOL on jup.ag"><code>9raUVuzeWUk53co63M4WXL<wbr>WPWE4Xc6Lpn7RS9dnkpump</code></a> (<a href="/token/9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump">about this token</a>).`) {
+	const page = `<a href="/token/9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump"><code>9raUVuzeWUk53co63M4WXL<wbr>WPWE4Xc6Lpn7RS9dnkpump</code></a>`
+	if !strings.Contains(body, "<b>10000000000 raw base units</b> of mint "+page+".") {
 		t.Errorf("token join block wrong:\n%s", body)
+	}
+	join := body[strings.Index(body, `class="gate"`):]
+	join = join[:strings.Index(join, "</div>")]
+	if strings.Contains(join, "jup.ag") || strings.Count(join, "<a ") != 1 {
+		t.Errorf("the gate line links elsewhere than the token page: %s", join)
 	}
 	if strings.Contains(body, "One post per") {
 		t.Error("cooldown line shown for a hub with cooldown 0")
 	}
 	_, body = get(t, s.Handler(), "/", "Accept-Language", "zh-TW")
-	if !strings.Contains(body, "需要持有至少 <b>10000000000</b> 个最小单位（mint "+buy+` title="在 jup.ag 用 SOL 购买"><code>9raUVuzeWUk53co63M4WXL<wbr>WPWE4Xc6Lpn7RS9dnkpump</code></a>，<a href="/token/9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump">代币详情</a>）。`) {
+	if !strings.Contains(body, "需要持有至少 <b>10000000000</b> 个最小单位（mint "+page+"）。") {
 		t.Errorf("Chinese token join block wrong:\n%s", body)
 	}
+	// the page's language rides the link
+	if _, body = get(t, s.Handler(), "/?lang=ja"); !strings.Contains(body, `（mint <a href="/token/9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump?lang=ja"><code>`) {
+		t.Error("the Japanese join block's mint does not lead to the token page in Japanese")
+	}
+	_, body = get(t, s.Handler(), "/", "Accept-Language", "zh-TW")
 	if strings.Contains(body, "秒最多发一帖") {
 		t.Error("Chinese cooldown line shown for a hub with cooldown 0")
 	}
