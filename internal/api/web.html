@@ -426,9 +426,9 @@ a.mention { text-decoration: none; }
    white, as the pad drew it. The tile is the way to its post. */
 .wallcap { padding: 10px 12px 6px; font-size: 12px; font-weight: bold; line-height: 16px; }
 .wall { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
-.tile { display: block; box-sizing: border-box; aspect-ratio: 1 / 1; border: 1px solid #999; background: #fff; overflow: hidden; }
-.tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.tile img.draw { object-fit: contain; image-rendering: pixelated; }
+.wtile { display: block; box-sizing: border-box; aspect-ratio: 1 / 1; border: 1px solid #999; background: #fff; overflow: hidden; }
+.wtile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wtile img.draw { object-fit: contain; image-rendering: pixelated; }
 .wallnone { padding: 14px 12px; color: #666; }
 /* the profile window's tabs (PLAN.md, Pictures — One profile's wall):
    Piano, from the Platinum Tabs designs (hub f0578e66): joined push
@@ -6179,7 +6179,7 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
 {{/* the wall's body (PLAN.md, Pictures): the months of tiles, Older,
      the status line */}}
 {{define "wallbody"}}{{if .Day}}<div class="dayhead"><b>{{.DayName}}</b> · {{T "pictures.n" "n" .DayCount}} · <a href="/u/{{.Wall.Of.ID}}/pictures{{.Q}}">{{T "activity.all.pictures"}}</a></div>{{end}}{{range .Wall.Months}}{{if not $.Day}}<div class="wallcap">{{$.MonthName .Year .Month}}</div>{{end}}
-    <div class="wall">{{range .Tiles}}<a class="tile" href="/p/{{.Post}}{{$.Q}}" title="{{T "pictures.tile" "name" .Name "date" .Date}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}" loading="lazy"{{if .Drawing}} class="draw"{{end}}></a>{{end}}</div>
+    <div class="wall">{{range .Tiles}}<a class="wtile" href="/p/{{.Post}}{{$.Q}}" title="{{T "pictures.tile" "name" .Name "date" .Date}}"><img src="/v1/embed/{{.CID}}" alt="{{.Alt}}" loading="lazy"{{if .Drawing}} class="draw"{{end}}></a>{{end}}</div>
     {{else}}<div class="wallnone">{{T "pictures.none"}}</div>{{end}}
     {{if .Wall.Next}}<div class="pager"><span class="stats"></span><a class="btn next fwd" href="{{.Wall.Path}}?{{if .Lang}}lang={{.Lang}}&amp;{{end}}before={{.Wall.Next}}"><span>{{T "pictures.older"}}</span>{{template "arrow-r"}}</a></div>{{end}}
     <div class="statusbar"><span>{{.Message}}</span></div>{{end}}

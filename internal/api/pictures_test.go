@@ -49,9 +49,9 @@ func TestWebPictures(t *testing.T) {
 		`<nav class="places" aria-label="Navigation" data-page="pictures" data-for="" data-q="">`,
 		`<a class="place" data-to="pictures" href="/pictures">`,
 		`<div class="wallcap">August 2025</div>`, // the posts' own time (ingest's seq is their clock)
-		`<a class="tile" href="/p/` + two + `" title="` + author2 + ` · 2025-08-29"><img src="/v1/embed/` + dog + `" alt="a dog" loading="lazy"></a>`,
-		`<a class="tile" href="/p/` + one + `" title="` + author + ` · 2025-08-29"><img src="/v1/embed/` + cat + `" alt="a cat" loading="lazy"></a>` +
-			`<a class="tile" href="/p/` + one + `" title="` + author + ` · 2025-08-29"><img src="/v1/embed/` + pad + `" alt="" loading="lazy" class="draw"></a>`,
+		`<a class="wtile" href="/p/` + two + `" title="` + author2 + ` · 2025-08-29"><img src="/v1/embed/` + dog + `" alt="a dog" loading="lazy"></a>`,
+		`<a class="wtile" href="/p/` + one + `" title="` + author + ` · 2025-08-29"><img src="/v1/embed/` + cat + `" alt="a cat" loading="lazy"></a>` +
+			`<a class="wtile" href="/p/` + one + `" title="` + author + ` · 2025-08-29"><img src="/v1/embed/` + pad + `" alt="" loading="lazy" class="draw"></a>`,
 		`<div class="statusbar"><span>3 pictures</span></div>`,
 	} {
 		if !strings.Contains(body, want) {
@@ -139,7 +139,7 @@ func TestWebPicturesPaged(t *testing.T) {
 	}
 	h := s.Handler()
 	_, body := get(t, h, "/pictures")
-	n := strings.Count(body, `<a class="tile"`)
+	n := strings.Count(body, `<a class="wtile"`)
 	if n != wallPage {
 		t.Errorf("the first page holds %d tiles, want %d", n, wallPage)
 	}
@@ -152,7 +152,7 @@ func TestWebPicturesPaged(t *testing.T) {
 		t.Error("no Older button to the page after")
 	}
 	_, body = get(t, h, "/pictures?before="+last)
-	if n := strings.Count(body, `<a class="tile"`); n != 4 {
+	if n := strings.Count(body, `<a class="wtile"`); n != 4 {
 		t.Errorf("the second page holds %d tiles, want 4", n)
 	}
 	if strings.Contains(body, "pictures?before=") || !strings.Contains(body, `<span>`+fmt.Sprint(wallPage+4)+` pictures</span>`) {

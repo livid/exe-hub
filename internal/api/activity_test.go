@@ -252,7 +252,7 @@ func TestWebProfileDay(t *testing.T) {
 		`<a class="btn ptab on" href="/u/` + id + `/pictures?lang=zh" aria-current="page">图片</a>`,
 		`<a class="l1 now sel" href="/u/` + id + `/pictures/` + today + `?lang=zh" title="` + today + ` · 1 张图片" aria-current="page"></a>`,
 		`<div class="dayhead"><b>` + zhName + `</b> · 1 张图片 · <a href="/u/` + id + `/pictures?lang=zh">全部图片</a></div>`,
-		`<a class="tile" href="/p/` + two + `?lang=zh"`,
+		`<a class="wtile" href="/p/` + two + `?lang=zh"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the pictures day lacks %q", want)

@@ -2441,7 +2441,9 @@ only under its post, and the feed is words first.
   picture a post carries as its own, the newest post first, a month a
   block under the month's name (the Archives' `MonthName`, in the page's
   language), each picture a square tile on a 1px grey line, four across
-  in the 640px window and three on a phone. A picture fills its tile
+  in the 640px window and three on a phone (`.wtile`: the wall's own
+  class — a first version styled `.tile`, which is also the Stats
+  page's stat tiles, and made them squares; Livid, 2026-11-10). A picture fills its tile
   (`object-fit: cover`) so the wall is even; a drawing (the pads,
   `isDrawing`) stands whole in its tile, pixel for pixel on white. A
   tile's title is the author's name and the post's day; the tile is the
