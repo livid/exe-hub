@@ -2240,6 +2240,27 @@ for markets, history, holders, metadata and social.
     three, 24px high in 16px type so the page does not zoom. The guide
     uses it: when none of the three covers what a wallet lacks (a gate
     of 80,000), the field opens holding what it lacks.
+  - **An amount to pay typed** (2026-11-10; Livid: "what if we also
+    provide quantity input next to Buy with", then "do it"). A second
+    field, at the three currencies' right, its placeholder "Amount":
+    how much to pay, for however many tokens that buys — "put in half
+    a SOL", where the quantity field is "get 7,500". More than nothing,
+    with a decimal point and no more decimals than the currency has
+    (nine for SOL, six for USDC and USDT). **One field is the purchase
+    at a time**: typing an amount empties the quantity field and lets
+    the pressed quantity go; typing a quantity empties the amount;
+    pressing a quantity empties both; an emptied amount goes back to
+    the quantity pressed last. With an amount, You pay is exactly what
+    was typed, to its last digit, and You get is "about N, at least M"
+    for it. Pressing another currency keeps the number, as that much
+    of the new currency. It is the direction Jupiter's routes run in,
+    so its price is one request, not a sizing. Bad input says "Type an
+    amount of SOL, more than 0." and prices nothing. In the guide's
+    window, a purchase — an amount, or a typed or pressed quantity —
+    whose least outcome is under what the wallet lacks is the reader's
+    to make: the note says "This buys at least 4,353 V2EX. The wallet
+    needs 5,647 more to post." in place of the usual one, and Buy
+    stays lit.
   - **Five requests in ten seconds** is what Jupiter's keyless API
     gives one reader (measured 2026-11-10 from its `x-ratelimit-*`
     headers; found when the first walk through the guide pressed Buy
@@ -2360,7 +2381,12 @@ for markets, history, holders, metadata and social.
     worth and the price line are left out; a token nobody has said the
     decimals of keeps the old bare line.
   - **Posting**: when the address may post, a green tick and "Enough
-    to post. The hub asks for 10,000 V2EX." When it holds too little, a
+    to post. The hub asks for 10,000 V2EX.", and under it **Buy
+    More…** (Livid, 2026-11-10: "when it says Enough to... put a button
+    at the end to Buy More"), which closes the dialog and opens the Buy
+    window for this address with nothing lacking; after such a purchase
+    the holding is read again and the window says only that it is
+    confirmed. When it holds too little, a
     progress bar — a sunken grey track with a black line round it, 12px
     high, filled in the highlight's lavender as far as the holding
     reaches toward what the gate asks (`role="progressbar"`) — then
@@ -2389,7 +2415,7 @@ for markets, history, holders, metadata and social.
     test.js` — a mock wallet, the gate's answer the test's, 98 checks:
     nothing held, part, enough, a large holding, a phone, no price;
     three languages; the dialog's size unchanged after it opens and
-    after Copy; Buy from the dialog.
+    after Copy; Buy and Buy More from the dialog.
 - **Words** in English, Chinese (both scripts' tables) and Japanese,
   keys `token.*`, `buy.*`, `guide.*`, `held.*`, `gate.more`,
   `profile.posting`, `profile.address`, `err.notoken`, `err.nomint`; figures are set the same

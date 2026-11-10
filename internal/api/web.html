@@ -279,27 +279,30 @@ a.mention { text-decoration: none; }
 .tk-dlg .ival { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tk-dlg .ival .sub { font-size: 11px; color: #555; }
 .tk-dlg .tk-seg .btn { padding: 2px 9px; }
-/* any other quantity (Livid, 2026-11-10: "in addition to 10000 / 20000 /
-   50000 quick options, user should also be able to enter quantity"): a
-   text field at the three's right, on the same row — the desktop's
-   field, white and sunken — taking what the row has left. Typing in it
-   lets the pressed quantity go; pressing a quantity empties it. */
+/* a text field at each row's right (Livid, 2026-11-10: "in addition to
+   10000 / 20000 / 50000 quick options, user should also be able to
+   enter quantity", then "what if we also provide quantity input next to
+   Buy with … do it"): beside the three currencies, how much to pay;
+   beside the three quantities, how many to buy. The desktop's field,
+   white and sunken, taking what its row has left. One of the two is the
+   purchase at a time: typing in one empties the other and lets the
+   pressed quantity go; pressing a quantity empties both. */
 .tk-dlg .tk-qrow { display: flex; align-items: center; gap: 8px; overflow: visible; }
-.tk-dlg #tk-qty { flex: none; }
-.tk-dlg #tk-qty .btn { padding: 2px 6px; }
-.tk-dlg #tk-own { display: block; box-sizing: border-box; flex: 1 1 0; width: 0; min-width: 0; height: 20px; margin: 0 1px 0 0; padding: 2px 5px;
+.tk-dlg .tk-qrow .tk-seg { flex: none; }
+.tk-dlg .tk-qrow .tk-seg .btn { padding: 2px 6px; }
+.tk-dlg .tk-field { display: block; box-sizing: border-box; flex: 1 1 0; width: 0; min-width: 0; height: 20px; margin: 0 1px 0 0; padding: 2px 5px;
   font: inherit; line-height: 14px; color: #262626; background: #fff; border: 1px solid #262626; border-radius: 0;
   box-shadow: -1px -1px 0 #999, -1px 0 0 #999, 0 -1px 0 #999, 1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; font-variant-numeric: tabular-nums; }
-.tk-dlg #tk-own:focus { outline: none; }
-.tk-dlg #tk-own:disabled { color: #999; background: #eee; }
-.tk-dlg #tk-own::placeholder { color: #999; opacity: 1; }
-@media (pointer: coarse) { .tk-dlg #tk-own { height: 24px; font-size: 16px; } }
-/* a phone's row has no room for it beside the three (an iPhone sets
-   them in a wide face): there the field has the line under them, as
-   wide as they are together */
+.tk-dlg .tk-field:focus { outline: none; }
+.tk-dlg .tk-field:disabled { color: #999; background: #eee; }
+.tk-dlg .tk-field::placeholder { color: #999; opacity: 1; }
+@media (pointer: coarse) { .tk-dlg .tk-field { height: 24px; font-size: 16px; } }
+/* a phone's row has no room for a field beside the three (an iPhone
+   sets them in a wide face): there each field has the line under its
+   three, as wide as they are together */
 @media (max-width: 480px) {
   .tk-dlg .tk-qrow { flex-wrap: wrap; gap: 6px 8px; }
-  .tk-dlg #tk-own { flex: 0 0 100%; width: 100%; max-width: 220px; }
+  .tk-dlg .tk-field { flex: 0 0 100%; width: 100%; max-width: 220px; }
   /* and the row's label stays beside the three, on the first line */
   .tk-dlg .irow:has(.tk-qrow) { align-items: flex-start; }
   .tk-dlg .irow:has(.tk-qrow) .ilab { line-height: 20px; }
@@ -2265,7 +2268,7 @@ function hubAnswers() {
   const $ = id => document.getElementById(id);
   const payBox = $("tk-pay"), qtyBox = $("tk-qty"), cost = $("tk-cost"), get = $("tk-get"), note = $("tk-note"), title = $("tk-buy-h");
   const wsel = $("tk-wsel"), wname = $("tk-wname"), cancel = $("tk-cancel"), go = $("tk-go");
-  const QTYS = [...qtyBox.children].map(b => +b.dataset.qty), own = $("tk-own");
+  const QTYS = [...qtyBox.children].map(b => +b.dataset.qty), own = $("tk-own"), spendBox = $("tk-spend");
   const short = a => a.length > 10 ? a.slice(0, 4) + "…" + a.slice(-4) : a;
   // raw base units as a number set for reading: 10,086.9
   const units = (raw, d, places) => {
@@ -2287,9 +2290,16 @@ function hubAnswers() {
   // what is being bought, and for whom: set by each hubBuy
   let o = { mint: "", dec: 0, symbol: "", jup: "" };
   let pay = "SOL", qty = QTYS[0], quote = null, phase = "idle", asked = 0, account = null, timer = 0;
-  // the quantity field: bad while what it holds is no quantity; last is
-  // the quantity pressed last, what an emptied field goes back to
-  let bad = false, last = QTYS[0], typing = 0;
+  // The two fields. One of them is the purchase at a time: a quantity
+  // (pressed or typed: at least that many tokens, whatever they cost) or
+  // an amount to pay (typed: exactly that much, for however many tokens
+  // it buys). spend is the amount to pay in the currency's raw units,
+  // null while a quantity is the purchase. bad names the words for a
+  // field that holds neither a quantity nor an amount, "" when there is
+  // none; last is the quantity pressed last, what an emptied field goes
+  // back to.
+  let bad = "", last = QTYS[0], typing = 0, spend = null;
+  const paying = () => !!spendBox.value.trim();
 
   // ---- wallets: the Wallet Standard's handshake, for those that send a transaction ----
   const wallets = [];
@@ -2417,16 +2427,26 @@ function hubAnswers() {
     throw new Error(T("buy.nosize"));
   }
   const want = () => BigInt(qty) * 10n ** BigInt(o.dec);
+  // the purchase priced: a quantity is sized; an amount to pay is one
+  // quote, the direction Jupiter's routes run in
+  const priced = async p => {
+    if (spend === null) return sized(p, want());
+    const q = await quoteOf(p.mint, o.mint, spend);
+    const least = BigInt(q.otherAmountThreshold);
+    if (least > 0n) rates[o.mint + ":" + p.mint] = Number(q.inAmount) / Number(least);
+    return q;
+  };
   // the quote shown, what it is a quote for and when it was given: Buy
   // uses it as it stands while it is young (fresh, below)
   let quoteFor = "", quoteAt = 0;
-  const choice = () => o.mint + ":" + pay + ":" + qty;
+  const choice = () => o.mint + ":" + pay + ":" + (spend === null ? "q" + qty : "p" + spend);
   const drawQuote = q => {
     quote = q;
     quoteFor = q ? choice() : ""; quoteAt = q ? Date.now() : 0;
     if (!q) { cost.textContent = get.textContent = "—"; return; }
     const p = PAY[pay];
-    cost.replaceChildren(units(q.inAmount, p.dec, p.show) + " " + pay);
+    // an amount the reader typed is shown to its last digit
+    cost.replaceChildren(units(q.inAmount, p.dec, spend === null ? p.show : p.dec) + " " + pay);
     const usd = Number(q.swapUsdValue);
     if (usd > 0) cost.append(Object.assign(document.createElement("span"), { className: "sub", textContent: " · $" + usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }));
     get.textContent = T("buy.get.text", { n: units(q.outAmount, o.dec, 0), min: units(q.otherAmountThreshold, o.dec, 0), symbol: o.symbol });
@@ -2438,17 +2458,25 @@ function hubAnswers() {
     const busy = phase === "busy", over = phase === "sent" || phase === "done";
     for (const b of payBox.children) { b.setAttribute("aria-pressed", b.dataset.pay === pay); b.disabled = busy || over; }
     // a quantity is pressed when it is the one being bought and nothing is typed
-    for (const b of qtyBox.children) { b.setAttribute("aria-pressed", +b.dataset.qty === qty && !own.value.trim()); b.disabled = busy || over; }
-    own.disabled = busy || over;
+    for (const b of qtyBox.children) { b.setAttribute("aria-pressed", +b.dataset.qty === qty && !own.value.trim() && !paying()); b.disabled = busy || over; }
+    own.disabled = spendBox.disabled = busy || over;
     for (const b of wsel.children) b.disabled = busy || over;
     cancel.hidden = over;
     cancel.disabled = busy;
     go.textContent = over ? T("buy.done") : T("buy");
     go.disabled = busy || phase === "sent" || (!over && (!quote || !wallets.length));
     if (phase !== "idle") return;
-    if (bad) say(T("buy.qty.bad"), true);
+    if (bad) say(T(bad, { pay }), true);
     else if (!wallets.length) say(T("buy.nowallet"), false, { href: o.jup, text: T("buy.jup") });
-    else if (quote) say(o.address ? T("buy.note.for", { address: short(o.address) }) : T("buy.note"));
+    else if (quote) {
+      // the guide's purchase is for a wallet that lacks o.qty tokens: a
+      // smaller one is the reader's to make, and the note says how far
+      // short of posting it leaves the wallet
+      const lacks = o.qty > 0 ? BigInt(Math.ceil(o.qty)) * 10n ** BigInt(o.dec) - BigInt(quote.otherAmountThreshold) : 0n;
+      if (lacks > 0n) say(T("buy.short", { least: units(quote.otherAmountThreshold, o.dec, 0), symbol: o.symbol,
+        more: Math.ceil(Number(lacks) / 10 ** o.dec).toLocaleString("en-US") }));
+      else say(o.address ? T("buy.note.for", { address: short(o.address) }) : T("buy.note"));
+    }
   }
   // ask prices the choice again: at once when it changed, and every 20
   // seconds while the window stands open, so the price shown is one
@@ -2460,7 +2488,7 @@ function hubAnswers() {
     const n = ++asked, p = PAY[pay];
     if (!quote && wallets.length) say(T("buy.quoting"));
     try {
-      const q = await sized(p, want());
+      const q = await priced(p);
       if (n !== asked || phase !== "idle") return;
       drawQuote(q);
       settle();
@@ -2473,11 +2501,18 @@ function hubAnswers() {
     timer = setTimeout(ask, 20000);
   }
   const choose = () => { drawQuote(null); settle(); ask(); };
-  payBox.addEventListener("click", e => { const b = e.target.closest("[data-pay]"); if (b && !b.disabled && b.dataset.pay !== pay) { pay = b.dataset.pay; choose(); } });
+  payBox.addEventListener("click", e => {
+    const b = e.target.closest("[data-pay]");
+    if (!b || b.disabled || b.dataset.pay === pay) return;
+    pay = b.dataset.pay;
+    // an amount typed stays as typed and is that much of the new currency
+    if (paying()) { spend = paid(); bad = spend === null ? "buy.pay.bad" : ""; }
+    if (bad) { asked++; clearTimeout(timer); drawQuote(null); settle(); } else choose();
+  });
   qtyBox.addEventListener("click", e => {
     const b = e.target.closest("[data-qty]");
-    if (!b || b.disabled || (+b.dataset.qty === qty && !own.value.trim())) return;
-    own.value = ""; bad = false;
+    if (!b || b.disabled || (+b.dataset.qty === qty && !own.value.trim() && !paying())) return;
+    own.value = spendBox.value = ""; bad = ""; spend = null;
     last = qty = +b.dataset.qty;
     choose();
   });
@@ -2490,9 +2525,10 @@ function hubAnswers() {
   const typed = () => { const t = own.value.replace(/[\s,，_]/g, ""); return /^[0-9]{1,12}$/.test(t) && Number(t) >= 1 ? Number(t) : null; };
   own.addEventListener("input", () => {
     clearTimeout(typing);
-    if (!own.value.trim()) { bad = false; qty = last; choose(); return; }
+    spendBox.value = ""; spend = null; // a quantity is the purchase now
+    if (!own.value.trim()) { bad = ""; qty = last; choose(); return; }
     const n = typed();
-    bad = n === null;
+    bad = n === null ? "buy.qty.bad" : "";
     asked++; clearTimeout(timer);
     drawQuote(null);
     if (!bad) qty = n;
@@ -2501,6 +2537,29 @@ function hubAnswers() {
   });
   own.addEventListener("keydown", e => { if (e.key === "Enter" && !bad && !quote && own.value.trim()) { e.preventDefault(); e.stopPropagation(); ask(); } });
   own.addEventListener("blur", () => { const n = typed(); if (n !== null) own.value = n.toLocaleString("en-US"); });
+  // An amount to pay typed: more than nothing, with no more decimals than
+  // the currency has (nine for SOL, six for USDC and USDT). It is the
+  // purchase while the field holds anything; emptied, the quantity
+  // pressed last is. Priced like a typed quantity, when the typing stops
+  // or at Return, and with one request.
+  const paid = () => {
+    const t = spendBox.value.replace(/[\s,，_]/g, ""), m = /^(\d{0,12})(?:\.(\d*))?$/.exec(t), d = PAY[pay].dec;
+    if (!m || (!m[1] && !m[2]) || (m[2] || "").length > d) return null;
+    const raw = BigInt((m[1] || "0") + (m[2] || "").padEnd(d, "0"));
+    return raw > 0n ? raw : null;
+  };
+  spendBox.addEventListener("input", () => {
+    clearTimeout(typing);
+    if (!paying()) { bad = ""; spend = null; qty = last; choose(); return; }
+    own.value = ""; // an amount to pay is the purchase now
+    spend = paid();
+    bad = spend === null ? "buy.pay.bad" : "";
+    asked++; clearTimeout(timer);
+    drawQuote(null);
+    settle();
+    if (!bad) { if (wallets.length) say(T("buy.quoting")); typing = setTimeout(ask, 600); }
+  });
+  spendBox.addEventListener("keydown", e => { if (e.key === "Enter" && !bad && !quote && paying()) { e.preventDefault(); e.stopPropagation(); ask(); } });
 
   // ---- buying ----
   async function buy() {
@@ -2526,7 +2585,7 @@ function hubAnswers() {
       // asks again every twenty seconds — else a new one. The swap's
       // least amount is the quote's, so an older price can only fail,
       // never give less.
-      const q = quote && quoteFor === choice() && Date.now() - quoteAt < 30000 ? quote : await sized(p, want());
+      const q = quote && quoteFor === choice() && Date.now() - quoteAt < 30000 ? quote : await priced(p);
       if (q !== quote) drawQuote(q);
       const built = await jup("/swap", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quoteResponse: q, userPublicKey: a.address, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true }) });
@@ -2605,11 +2664,12 @@ function hubAnswers() {
     o.ticker = o.symbol ? "$" + o.symbol : T("token.tokens");
     if (!o.symbol) o.symbol = T("token.tokens");
     phase = "idle"; account = null;
+    spendBox.value = ""; spend = null; bad = ""; // a quantity is the purchase to begin with
+    if (own.value.trim() && typed() === null) own.value = "";
     // what is wanted: the least of the three quantities that covers it,
     // pressed; when none does, the field holds it, a whole number
     if (o.qty > 0) {
       const quick = QTYS.find(n => n >= o.qty);
-      bad = false;
       if (quick) { own.value = ""; last = qty = quick; }
       else { qty = Math.ceil(o.qty); own.value = qty.toLocaleString("en-US"); }
     }
@@ -5065,7 +5125,21 @@ document.addEventListener("change", e => {
       const ok = node("span", "ok");
       ok.innerHTML = '<svg viewBox="0 0 9 7" width="9" height="7" aria-hidden="true"><path d="M8 0h1v1h-1zM7 1h2v1h-2zM6 2h2v1h-2zM0 3h1v1h-1zM5 3h2v1h-2zM0 4h2v1h-2zM4 4h2v1h-2zM1 5h4v1h-4zM2 6h2v1h-2z"/></svg>';
       ok.append(span("", T("enough", { need: needs })));
-      return [ok];
+      // Buy More… (Livid, 2026-11-10): the Buy window for this address,
+      // with nothing lacking — the quantity it opens on is the reader's
+      // last. After the purchase the holding is read again; the address
+      // could post already, so the window says only that it is confirmed.
+      const m = (v.mints || []).find(m => !m.raw && typeof m.decimals === "number");
+      if (!m || !window.hubBuy) return [ok];
+      const more = node("button", "btn p-buy", T("held.more"));
+      more.type = "button";
+      more.addEventListener("click", () => {
+        const who = me;
+        closeProfile();
+        hubBuy({ mint: m.mint, dec: m.decimals, symbol: m.symbol, wallet: who.name, address: who.address, opener: profileBtn,
+          after: async () => { try { if (me === who) adopt(await load(true)); } catch (e) {} return false; } });
+      });
+      return [ok, more];
     }
     if (v.gate === "below" && l) {
       const need = count(l.m.amount), have = l.m.held === undefined ? 0 : count(l.m.held);
@@ -5979,8 +6053,8 @@ document.addEventListener("change", e => {
 {{define "buywin"}}<div class="tk-veil" id="tk-veil" hidden>
   <div class="tk-dlg" role="dialog" aria-modal="true" aria-labelledby="tk-buy-h">
     <h2 id="tk-buy-h"></h2>
-    <div class="irow"><span class="ilab">{{T "buy.pay"}}</span><span class="ival"><span class="tk-seg" id="tk-pay"><button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button></span></span></div>
-    <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival tk-qrow"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span><input type="text" id="tk-own" inputmode="numeric" autocomplete="off" maxlength="15" placeholder="{{T "buy.qty.other"}}" aria-label="{{T "buy.qty.own"}}"></span></div>
+    <div class="irow"><span class="ilab">{{T "buy.pay"}}</span><span class="ival tk-qrow"><span class="tk-seg" id="tk-pay"><button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button></span><input type="text" class="tk-field" id="tk-spend" inputmode="decimal" autocomplete="off" maxlength="24" placeholder="{{T "buy.pay.amount"}}" aria-label="{{T "buy.pay.own"}}"></span></div>
+    <div class="irow"><span class="ilab">{{T "buy.qty"}}</span><span class="ival tk-qrow"><span class="tk-seg" id="tk-qty"><button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button></span><input type="text" class="tk-field" id="tk-own" inputmode="numeric" autocomplete="off" maxlength="15" placeholder="{{T "buy.qty.other"}}" aria-label="{{T "buy.qty.own"}}"></span></div>
     <div class="irow"><span class="ilab">{{T "buy.cost"}}</span><span class="ival" id="tk-cost">—</span></div>
     <div class="irow"><span class="ilab">{{T "buy.get"}}</span><span class="ival" id="tk-get">—</span></div>
     <div class="irow"><span class="ilab">{{T "buy.wallet"}}</span><span class="ival tk-wal"><span class="tk-seg" id="tk-wsel" role="group" aria-label="{{T "buy.wallet"}}" hidden></span><span id="tk-wname">—</span></span></div>
