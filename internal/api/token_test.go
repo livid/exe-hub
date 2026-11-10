@@ -181,7 +181,6 @@ func TestTokenPage(t *testing.T) {
 		`<b>V2EX</b> · <span class="mono">9raUVuzeWUk53co63M4WXL<wbr>WPWE4Xc6Lpn7RS9dnkpump</span>`,
 		`<p>way to explore</p>`,
 		`<a href="https://www.v2ex.com/" target="_blank" rel="noopener nofollow">Website</a>`,
-		`<a href="https://orbmarkets.io/token/` + tokenMint + `" target="_blank" rel="noopener nofollow">Explorer</a>`,
 		`Mint revoked</span>`,
 		`Freeze authority live</span>`, // the chain says someone may still freeze
 		`Immutable metadata</span>`,
@@ -194,7 +193,7 @@ func TestTokenPage(t *testing.T) {
 		`<dt>Market cap</dt><dd>$1,946,172</dd>`,
 		`<dt>Issuer</dt><dd>pump.fun</dd>`,
 		`<dt>Created</dt><dd><time datetime="2024-09-27T14:18:41Z" data-date>2024-09-27</time></dd>`,
-		`<dt>Creator</dt><dd><a class="mono" href="https://orbmarkets.io/address/4JBz4tAKgAmxjDPHHi9HRLj14RsCQJyuCkCFKnpz7B9s"`,
+		`<dt>Creator</dt><dd><span class="mono" title="4JBz4tAKgAmxjDPHHi9HRLj14RsCQJyuCkCFKnpz7B9s">4JBz…7B9s</span></dd>`,
 		`<a class="btn" href="/token/` + tokenMint + `" aria-current="true">24H</a>`,
 		`<a class="btn" href="/token/` + tokenMint + `?range=7d">7D</a>`,
 		`<div class="tk-chart up" id="tk-chart"`, `data-kind="time"`, `<polyline class="l" points="0.0,`,
@@ -215,6 +214,9 @@ func TestTokenPage(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
 		}
+	}
+	if strings.Contains(body, "orbmarkets") {
+		t.Error("the page links to Orb")
 	}
 	if strings.Contains(body, "<dt>FDV</dt>") {
 		t.Error("FDV is listed though it is the market cap")

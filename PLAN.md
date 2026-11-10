@@ -2068,8 +2068,8 @@ for markets, history, holders, metadata and social.
   and the language menu heading it:
   - the head, the profile's block: the picture at 64px, the name, the
     symbol and the whole mint, the description, links — Website and X
-    when the listing has them, Explorer (orbmarkets.io) — with Buy, a
-    push button, at the row's right end (see Buy, below) — and chips: Mint revoked, Freeze revoked,
+    when the listing has them — with Buy, a push button, at the row's
+    right end (see Buy, below) — and chips: Mint revoked, Freeze revoked,
     Immutable metadata, each with a tick. A chip whose answer is the
     other one (Mint authority live, Freeze authority live, Mutable
     metadata) stands on the note's yellow with a bang; a chip nobody
@@ -2098,8 +2098,10 @@ for markets, history, holders, metadata and social.
   - the status line: where the market's numbers are from and when they
     were read.
   Left out of the reference: its History, Holders and Social tabs (each
-  transfer, the largest accounts, mentions on X) — an explorer's work;
-  the Explorer link leads to them.
+  transfer, the largest accounts, mentions on X) — an explorer's work.
+  The page links to no explorer (Livid, 2026-11-10: "remove orb links:
+  explorer, creator"): the Explorer link is gone, and Creator is the
+  address cut short, whole under the pointer, and no link.
 - **Where the numbers come from** (`internal/token`), none of it with
   a key of the hub's own beyond the gate's RPC:
   - the gate's RPC: `getAccountInfo` on the mint for the supply, the

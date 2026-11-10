@@ -45,7 +45,7 @@ type webToken struct {
 	Desc             string
 	Icon             bool // the hub has a picture's address to try
 	Website, Twitter string
-	Explorer, Buy    string
+	Buy              string
 	Flags            []webTokenFlag
 	Price            string
 	Change           string // "+2.42%", "" when unknown
@@ -73,9 +73,10 @@ type webTokenFlag struct {
 }
 
 // webTokenRow is a line of the figures: Key names its label; Value is
-// the figure, Href where it leads, Stamp a day for the reader's locale.
+// the figure, Stamp a day for the reader's locale, Whole an address
+// that Value cuts short, shown whole under the pointer.
 type webTokenRow struct {
-	Key, Value, Href, Stamp string
+	Key, Value, Stamp, Whole string
 }
 
 type webTokenRange struct {
@@ -226,7 +227,7 @@ func (s *Server) webTokenOf(in *token.Info, req *config.MintReq, rd webReading, 
 	m := webMint{Mint: in.Mint}
 	t := &webToken{Mint: in.Mint, Head: m.Head(), Tail: m.Tail(), Name: tokenName(in), Symbol: in.Symbol, Desc: in.Desc,
 		Icon: len(in.Icon) > 0, Website: in.Website, Twitter: in.Twitter,
-		Explorer: "https://orbmarkets.io/token/" + url.PathEscape(in.Mint), Buy: m.Buy(), Range: rng.Name}
+		Buy: m.Buy(), Range: rng.Name}
 	for _, f := range []struct {
 		v        *bool
 		yes, no  string
@@ -274,8 +275,7 @@ func (s *Server) webTokenOf(in *token.Info, req *config.MintReq, rd webReading, 
 			Stamp: in.Created.UTC().Format(time.RFC3339)})
 	}
 	if in.Creator != "" {
-		t.Rows = append(t.Rows, webTokenRow{Key: "token.creator", Value: shortMint(in.Creator),
-			Href: "https://orbmarkets.io/address/" + url.PathEscape(in.Creator)})
+		t.Rows = append(t.Rows, webTokenRow{Key: "token.creator", Value: shortMint(in.Creator), Whole: in.Creator})
 	}
 
 	for _, r := range token.Ranges {

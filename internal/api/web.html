@@ -285,8 +285,7 @@ a.mention { text-decoration: none; }
 .tk-rows div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-top: 1px solid #eee; font-size: 11px; line-height: 15px; }
 .tk-rows dt { flex: none; color: #666; }
 .tk-rows dd { margin: 0; min-width: 0; font-weight: bold; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tk-rows dd a { font-weight: normal; text-decoration: none; }
-.tk-rows dd a:hover { text-decoration: underline; }
+.tk-rows dd .mono { font-weight: normal; }
 /* the chart: a row of its ranges — push buttons joined in a row, the
    range shown pressed, each a link to the page at that range — with the
    reading at the row's right: the range's change, high and low, or the
@@ -1594,7 +1593,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
         <h1>{{.Name}}</h1>
         <div class="meta">{{if .Symbol}}<b>{{.Symbol}}</b> · {{end}}<span class="mono">{{.Head}}<wbr>{{.Tail}}</span></div>
         {{if .Desc}}<p>{{.Desc}}</p>{{end}}
-        <div class="tk-links">{{if .Website}}<a href="{{.Website}}" target="_blank" rel="noopener nofollow">{{T "token.website"}}</a>{{end}}{{if .Twitter}}<a href="{{.Twitter}}" target="_blank" rel="noopener nofollow">X</a>{{end}}<a href="{{.Explorer}}" target="_blank" rel="noopener nofollow">{{T "token.explorer"}}</a><a class="btn" id="tk-buy" href="{{.Buy}}" target="_blank" rel="noopener nofollow" title="{{T "buy.jup"}}" data-mint="{{.Mint}}" data-symbol="{{or .Symbol .Name}}"{{if .DecKnown}} data-dec="{{.Dec}}"{{end}}>{{T "buy"}}</a></div>
+        <div class="tk-links">{{if .Website}}<a href="{{.Website}}" target="_blank" rel="noopener nofollow">{{T "token.website"}}</a>{{end}}{{if .Twitter}}<a href="{{.Twitter}}" target="_blank" rel="noopener nofollow">X</a>{{end}}<a class="btn" id="tk-buy" href="{{.Buy}}" target="_blank" rel="noopener nofollow" title="{{T "buy.jup"}}" data-mint="{{.Mint}}" data-symbol="{{or .Symbol .Name}}"{{if .DecKnown}} data-dec="{{.Dec}}"{{end}}>{{T "buy"}}</a></div>
         {{if .Flags}}<div class="tk-flags">{{range .Flags}}<span{{if not .Good}} class="warn"{{end}}>{{if .Good}}{{template "tick"}}{{else}}{{template "bang"}}{{end}}{{T .Key}}</span>{{end}}</div>{{end}}
       </div>
     </div>
@@ -1603,7 +1602,7 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
         <div class="tk-lab">{{T "token.price"}}</div>
         <div class="tk-price">{{if .Price}}{{.Price}}{{else}}—{{end}}</div>
         {{if .Change}}<div class="tk-chg {{.Dir}}">{{if eq .Dir "up"}}{{template "tri-up"}}{{else if eq .Dir "down"}}{{template "tri-down"}}{{end}}<span>{{.Change}}</span><i>{{T "token.24h"}}</i></div>{{end}}
-        <dl class="tk-rows">{{range .Rows}}<div><dt>{{T .Key}}</dt><dd>{{if .Href}}<a class="mono" href="{{.Href}}" target="_blank" rel="noopener nofollow">{{.Value}}</a>{{else if .Stamp}}<time datetime="{{.Stamp}}" data-date>{{.Value}}</time>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>
+        <dl class="tk-rows">{{range .Rows}}<div><dt>{{T .Key}}</dt><dd>{{if .Whole}}<span class="mono" title="{{.Whole}}">{{.Value}}</span>{{else if .Stamp}}<time datetime="{{.Stamp}}" data-date>{{.Value}}</time>{{else}}{{.Value}}{{end}}</dd></div>{{end}}</dl>
       </div>
       <div class="tk-chartcol">
         <div class="tk-bar"><div class="tk-seg">{{range .Ranges}}<a class="btn" href="{{.Href}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</div><div class="tk-read" id="tk-read">{{with .Chart}}<b>{{.Change}}</b> · {{T "token.high"}} {{.High}} · {{T "token.low"}} {{.Low}}{{end}}</div></div>
