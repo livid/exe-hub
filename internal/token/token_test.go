@@ -1,6 +1,7 @@
 package token
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +23,8 @@ type fake struct {
 	*httptest.Server
 	down  map[string]bool
 	asked map[string]*atomic.Int32
-	das   bool // the RPC speaks getAsset
+	das   bool   // the RPC speaks getAsset
+	tx    string // what getSignatureStatuses says of the one signature asked
 }
 
 func newFake(t *testing.T) *fake {
@@ -104,6 +106,8 @@ func newFake(t *testing.T) *fake {
 			}
 			io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"mutable":false,"content":{"metadata":{"name":"V2EX","symbol":"V2EX","description":" way to explore "},
 			 "links":{"image":"https://example.com/v2ex.png"}}}}`)
+		case "getSignatureStatuses":
+			io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"context":{"slot":1},"value":[`+f.tx+`]}}`)
 		default:
 			io.WriteString(w, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}`)
 		}
@@ -286,6 +290,30 @@ func TestRPCErrorHidesAddress(t *testing.T) {
 		if strings.Contains(l, "SECRETKEY") {
 			t.Errorf("the log quotes the RPC's key: %s", l)
 		}
+	}
+}
+
+func TestTxStatus(t *testing.T) {
+	f := newFake(t)
+	s := f.source()
+	for answer, want := range map[string]string{
+		`null`: "pending",
+		`{"slot":1,"confirmations":null,"err":null,"confirmationStatus":"processed"}`:                                  "pending",
+		`{"slot":1,"confirmations":3,"err":null,"confirmationStatus":"confirmed"}`:                                     "confirmed",
+		`{"slot":1,"confirmations":null,"err":null,"confirmationStatus":"finalized"}`:                                  "confirmed",
+		`{"slot":1,"confirmations":3,"err":{"InstructionError":[2,{"Custom":6001}]},"confirmationStatus":"confirmed"}`: "failed",
+	} {
+		f.tx = answer
+		if got, err := s.TxStatus(context.Background(), "sig"); err != nil || got != want {
+			t.Errorf("%s: %q, %v, want %q", answer, got, err, want)
+		}
+	}
+	f.down["rpc"] = true
+	if _, err := s.TxStatus(context.Background(), "sig"); err == nil {
+		t.Error("a dead RPC gave a status")
+	}
+	if _, err := New(nil).TxStatus(context.Background(), "sig"); err == nil {
+		t.Error("no RPC gave a status")
 	}
 }
 

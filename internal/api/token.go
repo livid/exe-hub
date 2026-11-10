@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +56,8 @@ type webToken struct {
 	Chart            *webChart
 	ChartOff         bool // GeckoTerminal has not answered: no chart to draw
 	Markets          []webMarket
+	Dec              int // the token's decimals, when anyone has said them (DecKnown)
+	DecKnown         bool
 	Need             string // what the gate asks for in this token: "10,000"
 	NeedRaw          bool   // Need is raw base units: nobody has said the decimals
 	Worth            string // what that is in dollars now, "" when there is no price
@@ -315,6 +319,7 @@ func (s *Server) webTokenOf(in *token.Info, req *config.MintReq, rd webReading, 
 		dec, known = s.Gate.Decimals(in.Mint)
 	}
 	t.Need, t.NeedRaw = req.MinAmount, true
+	t.Dec, t.DecKnown = dec, known
 	if known {
 		t.Need, t.NeedRaw = humanUnits(req.MinRaw, dec), false
 		if in.Price > 0 {
@@ -524,6 +529,50 @@ func direction(v float64) string {
 		return ""
 	}
 	return "down"
+}
+
+// ---- a sent transaction ----
+
+// txSig is a Solana signature in base58: 64 bytes, 86 to 88 characters.
+var txSig = regexp.MustCompile(`^[1-9A-HJ-NP-Za-km-z]{86,88}$`)
+
+// handleTokenTx: GET /v1/token/tx/{sig}, what the chain knows of a
+// transaction: {"status": "pending" | "confirmed" | "failed"}. The Buy
+// window asks it after the reader's wallet has sent a swap, since the
+// page has no RPC of its own and the hub's holds a key. Each answer is
+// an RPC call, so the answers are kept — a pending one two seconds, a
+// settled one ten minutes — and the calls share a bucket of their own,
+// apart from the gate's: a reader watching a purchase must not use up
+// the checks that let others post. Only a token-gated hub answers.
+func (s *Server) handleTokenTx(w http.ResponseWriter, r *http.Request) {
+	sig := r.PathValue("sig")
+	if s.Cfg.Get().Gate.Mode != "token" || !txSig.MatchString(sig) {
+		writeErr(w, http.StatusNotFound, errors.New("no such transaction"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	key := "token-tx:" + sig
+	if v, ok := s.mem.Get(key); ok {
+		writeJSON(w, http.StatusOK, map[string]string{"status": v.(string)})
+		return
+	}
+	if !s.txLimit.allow() {
+		writeErr(w, http.StatusTooManyRequests, errors.New("too many transactions asked about; try again in a moment"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	st, err := s.tokens().TxStatus(ctx, sig)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, errors.New("the hub cannot ask the chain right now"))
+		return
+	}
+	keep := 2 * time.Second
+	if st != "pending" {
+		keep = 10 * time.Minute
+	}
+	s.mem.Set(key, st, keep)
+	writeJSON(w, http.StatusOK, map[string]string{"status": st})
 }
 
 // ---- the picture ----

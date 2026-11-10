@@ -715,3 +715,38 @@ func (s *Source) rpc(ctx context.Context, rpc, method string, params, out any) e
 	}
 	return nil
 }
+
+// TxStatus says what the chain knows of a transaction by its signature:
+// "pending" while no block the RPC has seen holds it, "confirmed" once
+// one does, "failed" when it ran and failed. It is what the token page's
+// Buy window asks after a wallet has sent a swap (PLAN.md, The token
+// page — Buy).
+func (s *Source) TxStatus(ctx context.Context, sig string) (string, error) {
+	rpc := ""
+	if s.RPC != nil {
+		rpc = s.RPC()
+	}
+	if rpc == "" {
+		return "", errors.New("no RPC")
+	}
+	var out struct {
+		Value []*struct {
+			Err    json.RawMessage `json:"err"`
+			Status string          `json:"confirmationStatus"`
+		} `json:"value"`
+	}
+	if err := s.rpc(ctx, rpc, "getSignatureStatuses", []any{[]string{sig}, map[string]bool{"searchTransactionHistory": false}}, &out); err != nil {
+		return "", err
+	}
+	if len(out.Value) == 0 || out.Value[0] == nil {
+		return "pending", nil
+	}
+	v := out.Value[0]
+	switch {
+	case len(v.Err) > 0 && string(v.Err) != "null":
+		return "failed", nil
+	case v.Status == "confirmed" || v.Status == "finalized":
+		return "confirmed", nil
+	}
+	return "pending", nil // processed: seen, not yet voted on
+}

@@ -31,6 +31,8 @@ const tokenMint = "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump"
 type tokenWorld struct {
 	*httptest.Server
 	down bool
+	tx   string // what the RPC says of a signature
+	txN  int    // how often it was asked
 }
 
 func newTokenWorld(t *testing.T) *tokenWorld {
@@ -73,6 +75,9 @@ func newTokenWorld(t *testing.T) *tokenWorld {
 			 "data":{"parsed":{"type":"mint","info":{"decimals":6,"supply":"999998556426740","mintAuthority":null,"freezeAuthority":"Fr33zer"}}}}}}`)
 		case "getAsset":
 			io.WriteString(w, `{"result":{"mutable":false,"content":{"metadata":{"name":"V2EX <b>","symbol":"V2EX","description":"way to explore"},"links":{}}}}`)
+		case "getSignatureStatuses":
+			tw.txN++
+			io.WriteString(w, `{"result":{"value":[`+tw.tx+`]}}`)
 		default:
 			io.WriteString(w, `{"error":{"code":-32601,"message":"Method not found"}}`)
 		}
@@ -199,6 +204,13 @@ func TestTokenPage(t *testing.T) {
 		`<td class="opt">—</td><td>$0</td><td>$0</td><td class="opt">0</td>`,
 		`<b>Gate:</b> to post on this hub, the Solana address of your key must hold at least 10,000 V2EX. That is about $19.46 now. The gate also takes: <a class="mono" href="/token/OtherMintOfTheGate">Othe…Gate</a>`,
 		`Market data: Jupiter, GeckoTerminal · <time datetime="`,
+		// Buy: a push button where the link to jup.ag was, still that link without script, and its window
+		`<a class="btn" id="tk-buy" href="https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&amp;buy=` + tokenMint + `" target="_blank" rel="noopener nofollow" title="Buy on jup.ag" data-mint="` + tokenMint + `" data-symbol="V2EX" data-dec="6">Buy</a>`,
+		`<div class="tk-veil" id="tk-veil" hidden>`,
+		`<h2 id="tk-buy-h">Buy V2EX</h2>`,
+		`<button type="button" class="btn" data-pay="SOL" aria-pressed="true">SOL</button><button type="button" class="btn" data-pay="USDC" aria-pressed="false">USDC</button><button type="button" class="btn" data-pay="USDT" aria-pressed="false">USDT</button>`,
+		`<button type="button" class="btn" data-qty="10000" aria-pressed="true">10,000</button><button type="button" class="btn" data-qty="20000" aria-pressed="false">20,000</button><button type="button" class="btn" data-qty="50000" aria-pressed="false">50,000</button>`,
+		`<button type="button" class="btn default" id="tk-go" disabled>Buy</button>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
@@ -264,7 +276,11 @@ func TestTokenPageNothingAnswers(t *testing.T) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	for _, not := range []string{`class="tk-flags"`, `class="tk-mk"`, "<!-- render:"} {
+	// nobody said the decimals: Buy is the link to jup.ag and has no window
+	if !strings.Contains(body, `title="Buy on jup.ag" data-mint="`+tokenMint+`" data-symbol="9raU…pump">Buy</a>`) {
+		t.Error("the Buy link is not the plain one")
+	}
+	for _, not := range []string{`class="tk-flags"`, `class="tk-mk"`, "<!-- render:", `id="tk-veil"`, `data-dec=`} {
 		if strings.Contains(body, not) {
 			t.Errorf("the page has %q with nothing known", not)
 		}
@@ -286,6 +302,58 @@ func TestTokenIcon(t *testing.T) {
 	}
 	if code, _ := get(t, h, "/token/NotTheGatesMint/icon"); code != http.StatusNotFound {
 		t.Errorf("a picture for a mint the gate does not name: %d", code)
+	}
+}
+
+// GET /v1/token/tx/{sig}: what the chain did with a transaction the Buy
+// window sent, kept so that a window asking every few seconds costs the
+// RPC one call while the answer stands.
+func TestTokenTx(t *testing.T) {
+	tw := newTokenWorld(t)
+	s := tokenPageServer(t, tw)
+	h := s.Handler()
+	sig := strings.Repeat("5", 87)
+	tw.tx = `null`
+	if code, body := get(t, h, "/v1/token/tx/"+sig); code != http.StatusOK || !strings.Contains(body, `"status":"pending"`) {
+		t.Fatalf("a transaction not seen yet: %d %s", code, body)
+	}
+	get(t, h, "/v1/token/tx/"+sig)
+	if tw.txN != 1 {
+		t.Errorf("the RPC was asked %d times for two asks a moment apart, want 1", tw.txN)
+	}
+	sig2 := strings.Repeat("6", 88)
+	tw.tx = `{"err":null,"confirmationStatus":"confirmed"}`
+	if code, body := get(t, h, "/v1/token/tx/"+sig2); code != http.StatusOK || !strings.Contains(body, `"status":"confirmed"`) {
+		t.Errorf("a confirmed transaction: %d %s", code, body)
+	}
+	tw.tx = `{"err":{"InstructionError":[0,"Custom"]},"confirmationStatus":"confirmed"}`
+	if code, body := get(t, h, "/v1/token/tx/"+strings.Repeat("7", 86)); code != http.StatusOK || !strings.Contains(body, `"status":"failed"`) {
+		t.Errorf("a failed transaction: %d %s", code, body)
+	}
+	for _, bad := range []string{"abc", strings.Repeat("0", 87), strings.Repeat("5", 89)} { // 0 is no base58 digit
+		if code, _ := get(t, h, "/v1/token/tx/"+bad); code != http.StatusNotFound {
+			t.Errorf("%q is no signature, yet the answer was %d", bad, code)
+		}
+	}
+	// the RPC down: a 503 that says nothing of the RPC's address
+	tw.down = true
+	code, body := get(t, h, "/v1/token/tx/"+strings.Repeat("8", 87))
+	if code != http.StatusServiceUnavailable || strings.Contains(body, "rpc") || strings.Contains(body, "127.0.0.1") {
+		t.Errorf("with the RPC down: %d %s", code, body)
+	}
+	// a burst past the bucket is turned away before the RPC
+	tw.down = false
+	limited := false
+	for i := 0; i < 20 && !limited; i++ {
+		code, _ := get(t, h, "/v1/token/tx/"+strings.Repeat("9", 80)+fmt.Sprintf("%07d", 1111111+i))
+		limited = code == http.StatusTooManyRequests
+	}
+	if !limited {
+		t.Error("twenty transactions asked about at once and none turned away")
+	}
+	// a hub with an open gate has no RPC to ask
+	if code, _ := get(t, testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}}).Handler(), "/v1/token/tx/"+sig); code != http.StatusNotFound {
+		t.Errorf("open gate: %d", code)
 	}
 }
 

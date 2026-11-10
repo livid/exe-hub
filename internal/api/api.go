@@ -65,6 +65,7 @@ type Server struct {
 	TokenFetch *card.Fetcher
 
 	gateLimit bucket // uncached /v1/gate checks, each an RPC call
+	txLimit   bucket // /v1/token/tx asks of the chain, each an RPC call (token.go)
 	ping      pingCache
 	drafts    drafts         // pictures uploaded unsigned, waiting for their post (draft.go)
 	mem       memcache.Cache // what a page keeps in memory between readers (archives.go)
@@ -209,6 +210,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /token/{$}", s.handleTokenHome)
 	mux.HandleFunc("GET /token/{mint}", s.counted("token", s.handleTokenPage))
 	mux.HandleFunc("GET /token/{mint}/icon", s.handleTokenIcon)
+	mux.HandleFunc("GET /v1/token/tx/{sig}", s.handleTokenTx)
 	mux.HandleFunc("GET /stats", s.handleStatsPage)
 	mux.HandleFunc("GET /v1/stats", s.handleStats)
 	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)

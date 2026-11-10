@@ -579,6 +579,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
 - `GET /`, `GET /p/{id}`, `GET /u/{id}`, `GET /search?q=`, `GET /stats`,
   `GET /archives`, `GET /archives/{day}`, and on a token-gated hub
   `GET /token`, `GET /token/{mint}` — the public pages (see below).
+- `GET /v1/token/tx/{sig}` — on a token-gated hub, what the chain did
+  with a transaction: `{"status": "pending" | "confirmed" | "failed"}`
+  (see The token page, Buy).
 
 Reads are public with `Access-Control-Allow-Origin: *` (auth is
 per-request signatures, never cookies, so open CORS is safe) — the webui
@@ -2065,8 +2068,8 @@ for markets, history, holders, metadata and social.
   and the language menu heading it:
   - the head, the profile's block: the picture at 64px, the name, the
     symbol and the whole mint, the description, links — Website and X
-    when the listing has them, Explorer (orbmarkets.io), Buy on jup.ag
-    (the join window's link) — and chips: Mint revoked, Freeze revoked,
+    when the listing has them, Explorer (orbmarkets.io) — with Buy, a
+    push button, at the row's right end (see Buy, below) — and chips: Mint revoked, Freeze revoked,
     Immutable metadata, each with a tick. A chip whose answer is the
     other one (Mint authority live, Freeze authority live, Mutable
     metadata) stands on the note's yellow with a bang; a chip nobody
@@ -2142,7 +2145,8 @@ for markets, history, holders, metadata and social.
     on).
 - **The picture** is `GET /token/{mint}/icon`: fetched by the hub, cut
   to the avatar's 128px square, kept an hour in memory and a day by the
-  browser. The reader's browser asks nobody but the hub. A link that
+  browser. To read the page, the reader's browser asks nobody but the
+  hub (Buy is the exception, above). A link that
   names a CID is read from the hub's own IPFS node first — ipfs.io
   answered this host 429 — and from its gateway, by the link cards'
   guarded client, only when the node cannot. The hub decodes WebP for
@@ -2153,8 +2157,63 @@ for markets, history, holders, metadata and social.
   their own; the page stands without script, its times in UTC. The
   script sets the times by the reader's clock and reads the line under
   the pointer. A range is a page load.
+- **Buy** (2026-11-10; Livid: "replace that buy on jup link with a Buy
+  button to call a modal to use jupiter swap api to buy, user and select
+  SOL / USDC / USDT, and provide quick buy quantity options to click
+  10000 / 20000 / 50000"). Buy opens a dialog, the Profile dialog's
+  panel: **Pay with** SOL, USDC or USDT and **Quantity** 10,000, 20,000
+  or 50,000, each three push buttons joined in a row with the chosen
+  one pressed (SOL and 10,000 at first); **You pay** ("0.2301 SOL ·
+  $19.79"); **You get** ("about 10,119 V2EX, at least 10,018");
+  **Wallet** (its name, a pop-up menu when the browser has several, the
+  address once it has connected); a note of three lines; Cancel and
+  Buy, the default.
+  - The price and the transaction are Jupiter's swap API's
+    (`lite-api.jup.ag/swap/v1/quote` and `/swap`: no key, no fee of the
+    hub's or Jupiter's), asked by the page itself. This is the one place
+    a hub page talks to anyone but the hub, and only once Buy is
+    pressed: a purchase is between the reader, their wallet and
+    Jupiter, and the hub relays none of it.
+  - **The quantity is the least the reader gets.** Jupiter's route for
+    a pump.fun pool takes an exact amount in, not out (`ExactOut`
+    answers "No routes found"), so the amount to pay is found: what the
+    quantity sells for is a first measure, then quotes sized again, at
+    most four, until the least the swap can give after 1% slippage
+    (`otherAmountThreshold`) is the quantity or up to 0.3% over. Three
+    quotes in practice. The point of buying 10,000 is to hold 10,000.
+  - The price is asked when the window opens, when a choice changes,
+    every 20 seconds while it stands open, and once more at Buy.
+  - **Buy**: the wallet connects (Wallet Standard, a wallet with
+    `solana:signAndSendTransaction`), Jupiter writes the transaction
+    for that address, and the wallet shows it, signs it and sends it —
+    one approval. Jupiter simulates what it wrote: a transaction that
+    would fail (not enough to pay with) is not handed to the wallet,
+    and the note says to check the balance. Declined in the wallet:
+    nothing is sent and the window is ready again.
+  - **After**: the note says Sent with a link to the transaction
+    (solscan.io), and the page asks the hub what the chain did with it,
+    `GET /v1/token/tx/{sig}` → `{"status": "pending" | "confirmed" |
+    "failed"}`, every 2.5 seconds for 75: the page has no RPC, and the
+    hub's holds a key. The hub asks its RPC (`getSignatureStatuses`),
+    keeps a pending answer 2 seconds and a settled one 10 minutes, and
+    gives the calls a bucket of their own (1 a second, 10 at once) so a
+    purchase watched never uses up the gate's checks. Then Confirmed,
+    or that it failed, or that the network has not confirmed it yet;
+    the one button is Done.
+  - Nothing moves: every row has its height from the start. No wallet
+    in the browser: the note says so with the link to jup.ag, and Buy
+    stays grey. Without script, without BigInt, or while nobody has
+    said the token's decimals, the button is that link itself.
+  - The gate keeps a key's verdict for `recheck`, so a key that was
+    below and has just bought may wait that long before it can post.
+    Not changed here.
+  - Tests: `TestTokenPage` (the button and the window's markup),
+    `TestTokenTx`; in a browser `HUB=… node
+    ~/tools/playwright/exe-hub-token-buy-test.js` — a mock wallet that
+    signs nothing, Jupiter and the hub's status answered by the test,
+    339 checks; `LIVE=1` adds one real price from Jupiter.
 - **Words** in English, Chinese (both scripts' tables) and Japanese,
-  keys `token.*`, `err.notoken`, `err.nomint`; figures are set the same
+  keys `token.*`, `buy.*`, `err.notoken`, `err.nomint`; figures are set the same
   in all three ($ and a comma every three digits). Stats count it as
   kind `token`, labelled "Token: 9raU…pump".
 - **Tests.** `internal/token`: the three places faked, precedence, the
