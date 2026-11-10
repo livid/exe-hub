@@ -1532,7 +1532,10 @@ hub that carries the post.
   bottom, on the desktop's platinum strip under a black rule, the feed
   and profile pages carry a pager — Prev at the left, the counts
   centred, Next at the right, as Platinum push buttons that appear
-  only when that page exists, each with the Hub app's 11×9 pixel arrow
+  only when that page exists (the profile's list has it at its foot
+  only: under the Piano keys a second ruled strip looked ugly, Livid
+  2026-11-10, so the count of posts stands in the head's line instead,
+  after since when, and that line wraps between its parts on a phone), each with the Hub app's 11×9 pixel arrow
   in currentColor (Prev's the app's back arrow verbatim, Next's the
   same mirrored) 5px from the word on the side it points. On a phone
   (480px wide or less) the words do not fit beside the counts — an

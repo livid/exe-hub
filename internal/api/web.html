@@ -1283,6 +1283,10 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
 .profile .av img.idn { width: 40px; height: 40px; padding: 11px; }
 .profile h1 { margin: 0; font-size: 14px; }
 .profile p { margin: 4px 0 0; overflow-wrap: anywhere; }
+/* the head's line wraps on a phone, between its parts and never inside
+   one: the id, since when, how many posts, who let the key in */
+.profile .meta { white-space: normal; overflow: visible; text-overflow: clip; }
+.profile .meta > span { white-space: nowrap; }
 .alert { padding: 16px 14px; }
 /* the badge page (PLAN.md, Public pages — The badge): the badge at its
    own size and at three times, on the desktop's lavender in a sunken
@@ -1534,7 +1538,6 @@ code { font: 11px Monaco, "Courier New", monospace; background: #eee; padding: 0
   </div>
   {{template "ptabs" (.Tabs "posts")}}
   <div class="frame keyed">
-    {{if or .Prev .Next}}<div class="pager top">{{template "pager" .}}</div>{{end}}
     {{if .Posts}}{{range .Posts}}{{template "post" .}}{{end}}{{else}}<div class="pad">{{T "noposts"}}</div>{{end}}
     <div class="pager">{{template "pager" .}}</div>
   </div>
@@ -5588,7 +5591,7 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hu
       <span class="av">{{if .Profile.Avatar}}<img src="/v1/embed/{{.Profile.Avatar}}" alt="">{{else}}<img class="idn" src="/v1/identicon/{{.Profile.ID}}.svg" alt="">{{end}}</span>
       <div>
         <h1>{{if .Profile.Name}}{{.Profile.Name}}{{else}}{{.Profile.ID}}{{end}}</h1>
-        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}} · {{T "since.pre"}}<time datetime="{{.SinceStamp}}" data-date>{{.Since}}</time>{{T "since.post"}}{{end}}{{with .Invite}} · <a href="/u/{{.By}}{{$.Q}}">{{T "invited.by" "name" (or .ByName .By)}}</a>{{end}}</div>
+        <div class="meta"><span class="mono">{{.Profile.ID}}</span>{{if .Since}}<span> · {{T "since.pre"}}<time datetime="{{.SinceStamp}}" data-date>{{.Since}}</time>{{T "since.post"}}</span><span> · {{T "archives.posts" "n" .Count}}</span>{{end}}{{with .Invite}}<span> · <a href="/u/{{.By}}{{$.Q}}">{{T "invited.by" "name" (or .ByName .By)}}</a></span>{{end}}</div>
         {{if .Profile.Bio}}<p>{{.Profile.Bio}}</p>{{end}}
       </div>
     </div>{{end}}
