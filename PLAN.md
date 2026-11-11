@@ -2098,7 +2098,11 @@ for markets, history, holders, metadata and social.
 - **What it shows**, in one window titled with the token's name, Feed
   and the language menu heading it:
   - the head, the profile's block: the picture at 64px, the name, the
-    symbol and the whole mint, the description, links — Website and X
+    symbol and the whole mint (in two halves where the line is short:
+    it breaks at a `<wbr>`, and its span is `white-space: normal`,
+    since only Chromium breaks at a `<wbr>` inside `nowrap` — in Safari
+    the 44 characters stayed on one line and a phone's page scrolled
+    sideways), the description, links — Website and X
     when the listing has them — with Buy, a push button, at the row's
     right end (see Buy, below) — and chips: Mint revoked, Freeze revoked,
     Immutable metadata, each with a tick. A chip whose answer is the

@@ -254,6 +254,11 @@ a.mention { text-decoration: none; }
    Narrower than 560px the columns stack, figures first. */
 .tk-head .av img { image-rendering: auto; }
 .tk-head .meta { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+/* the mint breaks at its <wbr> where the line is short. The profile's
+   spans are nowrap, and inside nowrap only Chromium honours a <wbr>:
+   Safari and Firefox kept the 44 characters on one line, and a phone's
+   page scrolled sideways. */
+.tk-head .meta .mono { white-space: normal; }
 .tk-head .meta b { font-size: 11px; }
 .tk-links { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 5px; font-size: 11px; }
 .tk-links a { font-weight: bold; text-decoration: none; }
