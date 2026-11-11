@@ -512,8 +512,8 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   keeps, newest bookmark first; `GET /v1/profile/{id}/bookmarks/ids` —
   just their ids, the newest 1,000 (what a page marks its posts by).
 - `GET  /v1/post/{id}` — one post plus its replies (oldest-first, keyset-
-  paginated via `after=`); `?lang=` adds the post's `translation` (see
-  Translations).
+  paginated via `after=`), and `html`, the post's text as the pages
+  draw it; `?lang=` adds the post's `translation` (see Translations).
 - `GET  /v1/post/{id}/reactions` — who gave each emoji the post carries,
   with names and pictures (see Reactions). Every post's JSON carries
   `reactions` (`{emoji, by}`) itself.
@@ -3779,7 +3779,11 @@ the original one press away. Asked by Livid 2026-09-19.
   query alone decides, never Accept-Language: a card on another site
   reads what its link asked for. The post itself only; its replies and
   thread stay as written, and the Hub app shows posts as written.
-  `TestPostTranslationJSON`.
+  The same read carries `html`, the post's text as the pages draw it
+  (`renderPost`, its mentions and boxes set), and the translation its
+  own `html` (Livid, 2026-11-11: the V2EX card showed a post's
+  Markdown as typed), so a card on another site draws a post as `/p/`
+  does without a renderer of its own. `TestPostTranslationJSON`.
 - **The table is the queue again** (`internal/lang`, `Translator`): a
   pass takes every post and language still owed, newest first, so the
   newest posts, the ones on the first page, are translated first and

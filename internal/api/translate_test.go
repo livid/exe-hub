@@ -187,16 +187,17 @@ func TestWebSearchTranslated(t *testing.T) {
 // TestPostTranslationJSON: GET /v1/post/{id}?lang= carries the post in
 // the language the query names, through a short id's redirect too; no
 // query, whatever the browser says, ?lang=orig and the post's own
-// language carry none.
+// language carry none. Every read carries the post drawn as the pages
+// draw it, and a translation its own.
 func TestPostTranslationJSON(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	h := s.Handler()
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	id := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "Lovely weather today"})
+	id := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "Lovely **weather** today"})
 	if err := s.St.SetLang(id, "en", "m", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.St.SetTranslation(id, "zh-Hans", "今天天气很好", "m", true); err != nil {
+	if err := s.St.SetTranslation(id, "zh-Hans", "今天**天气**很好", "m", true); err != nil {
 		t.Fatal(err)
 	}
 	var read func(path string, hdr ...string) *postTranslation
@@ -212,15 +213,17 @@ func TestPostTranslationJSON(t *testing.T) {
 		}
 		var out struct {
 			Post        store.FeedPost   `json:"post"`
+			HTML        string           `json:"html"`
 			Translation *postTranslation `json:"translation"`
 		}
-		if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != http.StatusOK || err != nil || out.Post.Text != "Lovely weather today" {
+		if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != http.StatusOK || err != nil ||
+			out.Post.Text != "Lovely **weather** today" || out.HTML != "Lovely <strong>weather</strong> today" {
 			t.Fatalf("GET %s: %d %s", path, w.Code, w.Body)
 		}
 		return out.Translation
 	}
 	for _, path := range []string{"/v1/post/" + id + "?lang=zh", "/v1/post/" + id[:8] + "?lang=zh-CN"} {
-		if tr := read(path); tr == nil || *tr != (postTranslation{Lang: "zh-Hans", From: "en", Text: "今天天气很好"}) {
+		if tr := read(path); tr == nil || *tr != (postTranslation{Lang: "zh-Hans", From: "en", Text: "今天**天气**很好", HTML: "今天<strong>天气</strong>很好"}) {
 			t.Errorf("%s: translation %+v", path, tr)
 		}
 	}

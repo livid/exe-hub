@@ -1102,21 +1102,28 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	// the post in the language ?lang= names, as /p/ shows it (PLAN.md,
 	// Translations — the JSON API): by the query alone, never the
 	// browser's language, so a card on another site reads what its link
-	// asked for; the replies stay as written
-	if rd := readingOf(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang"))), ""); rd.Target != "" {
+	// asked for; the replies stay as written. html is the post's text as
+	// the pages draw it (renderPost), the translation's too, for that
+	// card to show its Markdown as /p/ does
+	rd := readingOf(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang"))), "")
+	out["html"] = renderPost(p.Text, p.Mentions, rd, p.Boxes)
+	if rd.Target != "" {
 		if t, ok := s.webTranslations(rd, []string{p.ID})[p.ID]; ok {
-			out["translation"] = postTranslation{Lang: rd.Target, From: t.From, Text: t.Text}
+			out["translation"] = postTranslation{Lang: rd.Target, From: t.From, Text: t.Text,
+				HTML: string(renderPost(t.Text, p.Mentions, rd, p.Boxes))}
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 // postTranslation is the post in GET /v1/post/{id}?lang=: the language
-// it was put into, the one it was written in, and its words there.
+// it was put into, the one it was written in, and its words there, as
+// written and as the pages draw them.
 type postTranslation struct {
 	Lang string `json:"lang"`
 	From string `json:"from"`
 	Text string `json:"text"`
+	HTML string `json:"html"`
 }
 
 // postSummary is a thread's summary in GET /v1/post/{id}: the step of
