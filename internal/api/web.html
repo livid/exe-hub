@@ -170,9 +170,10 @@ a.mention { text-decoration: none; }
    outline round a white face, like the old black-and-white icons; on
    the selected row the two turn white and the highlight. A row whose
    address waits for the id (a first sign-in, until the gate names it)
-   is greyed. Narrower than 1060px it is a strip: the five across, each
-   glyph over its word. Archives, the last row, is the hub's own page
-   like Home: its address needs no id. */
+   is greyed. Narrower than 1060px it is a strip: the six across, each
+   a glyph alone in a tile as wide as the next. Archives and Pictures,
+   the last rows, are the hub's own pages like Home: their addresses
+   need no id. */
 .nav { display: none; }
 .wallet .nav { display: block; }
 .places { display: flex; flex-direction: column; padding: 3px 0; }
@@ -189,11 +190,13 @@ a.mention { text-decoration: none; }
 .place.on .w { fill: #333399; }
 @media (max-width: 1059px) {
   .places { flex-direction: row; padding: 0; }
-  /* each tile as wide as its word and an even share of what is left: five
-     even tiles cut Notifications short on a phone (an iPhone sets the
-     strip in Verdana, a wide face) */
-  .place { flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 2px; padding: 5px 2px 4px; font-size: 11px; line-height: 14px; }
-  .place span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* even tiles, the glyph alone in the middle of each, 44px tall for a
+     finger. No words (Livid, 2026-11-10: "it appears uneven, text labels
+     are not needed"): six words do not fit six even tiles on a phone, and
+     tiles as wide as their words stood uneven. The word stays in the
+     markup, clipped, as the link's name for a screen reader */
+  .place { position: relative; flex: 1 1 0; min-width: 0; justify-content: center; padding: 10px 0; }
+  .place span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 /* the Archives page (PLAN.md, Archives): every past day of the hub, a
    cell in its month's calendar, the months newest first and as many

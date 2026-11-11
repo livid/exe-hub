@@ -1905,10 +1905,15 @@ bookmark op for post), Profile".
   on the strip, the summary sliding into the feed (Livid chose it,
   2026-10-09). Signed out, the Summary window stands at the side as it
   did. Narrower, on the home page, Notifications, Bookmarks
-  and a profile, it is a strip at the top of the column — the five as
-  tiles across, each glyph over its word, each tile as wide as its word
-  and an even share of what is left (five even tiles cut Notifications
-  short at 390px in an iPhone's Verdana) — where the join window stood
+  and a profile, it is a strip at the top of the column — the six as
+  even tiles across, each a glyph alone in the middle of its tile, 44px
+  tall for a finger. Since 2026-11-10 the strip has no words (Livid: "it
+  appears uneven, text labels are not needed"): until then each glyph
+  stood over its word in a tile as wide as that word, because even tiles
+  cut Notifications short at 390px in an iPhone's Verdana, and tiles of
+  six widths looked uneven. The word stays in the markup, clipped, as
+  the link's name for a screen reader; the side window's rows keep their
+  words — where the join window stood
   and where a signed-in reader on a phone had nothing (the feed still
   comes up under the Post window, one short strip lower); a thread on a
   phone shows none, as its side shows nothing there yet. Signed out,
