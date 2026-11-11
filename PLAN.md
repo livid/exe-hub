@@ -512,7 +512,8 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   keeps, newest bookmark first; `GET /v1/profile/{id}/bookmarks/ids` —
   just their ids, the newest 1,000 (what a page marks its posts by).
 - `GET  /v1/post/{id}` — one post plus its replies (oldest-first, keyset-
-  paginated via `after=`).
+  paginated via `after=`); `?lang=` adds the post's `translation` (see
+  Translations).
 - `GET  /v1/post/{id}/reactions` — who gave each emoji the post carries,
   with names and pictures (see Reactions). Every post's JSON carries
   `reactions` (`{emoji, by}`) itself.
@@ -3768,8 +3769,17 @@ the original one press away. Asked by Livid 2026-09-19.
   language it was put into, `text`, `model`, `status`, `tries`, `ts`),
   keyed by post and language, derived by every hub for itself like
   `langs`: kept across `Rebuild` with orphans dropped, gone with its
-  post. `FeedPost` carries the post's own `lang` in every JSON read; no
-  read serves a translation yet, so the Hub app shows posts as written.
+  post. `FeedPost` carries the post's own `lang` in every JSON read.
+- **The JSON API** (2026-11-11, asked by Livid: a V2EX topic's card for
+  a `/p/{id}?lang=zh` link read in English): `GET /v1/post/{id}?lang=`
+  carries `translation` — `lang` the language it was put into, `from`
+  the one it was written in, `text` — when the post has one that
+  reader is shown, read the way `/p/` reads `?lang=` (`readingOf`,
+  `shows`), so `orig` and the post's own language carry none. The
+  query alone decides, never Accept-Language: a card on another site
+  reads what its link asked for. The post itself only; its replies and
+  thread stay as written, and the Hub app shows posts as written.
+  `TestPostTranslationJSON`.
 - **The table is the queue again** (`internal/lang`, `Translator`): a
   pass takes every post and language still owed, newest first, so the
   newest posts, the ones on the first page, are translated first and
@@ -3959,7 +3969,8 @@ the original one press away. Asked by Livid 2026-09-19.
   said so, since those were already in flight. 1 is exactly the old
   loop, and the default. The account pays for the parallelism; the
   number the host ran the backfill at is in the memory of the day.
-- Not built: translations in the JSON API and the Hub app, search inside
+- Not built: translations in the Hub app and in the JSON API's replies
+  and other reads, search inside
   translations, a Traditional Chinese target, a hub with no model at all
   taking its peers' languages along with their translations, and an
   editor's note travelling with the post.

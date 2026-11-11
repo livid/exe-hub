@@ -1099,7 +1099,24 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		out["summary"] = postSummary{Step: sum.Step, Lang: sum.Lang, Text: sum.Text, Model: sum.Model,
 			Replies: sum.Replies, Cites: sum.Cites, TS: sum.TS}
 	}
+	// the post in the language ?lang= names, as /p/ shows it (PLAN.md,
+	// Translations — the JSON API): by the query alone, never the
+	// browser's language, so a card on another site reads what its link
+	// asked for; the replies stay as written
+	if rd := readingOf(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang"))), ""); rd.Target != "" {
+		if t, ok := s.webTranslations(rd, []string{p.ID})[p.ID]; ok {
+			out["translation"] = postTranslation{Lang: rd.Target, From: t.From, Text: t.Text}
+		}
+	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// postTranslation is the post in GET /v1/post/{id}?lang=: the language
+// it was put into, the one it was written in, and its words there.
+type postTranslation struct {
+	Lang string `json:"lang"`
+	From string `json:"from"`
+	Text string `json:"text"`
 }
 
 // postSummary is a thread's summary in GET /v1/post/{id}: the step of

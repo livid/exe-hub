@@ -184,6 +184,53 @@ func TestWebSearchTranslated(t *testing.T) {
 	}
 }
 
+// TestPostTranslationJSON: GET /v1/post/{id}?lang= carries the post in
+// the language the query names, through a short id's redirect too; no
+// query, whatever the browser says, ?lang=orig and the post's own
+// language carry none.
+func TestPostTranslationJSON(t *testing.T) {
+	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
+	h := s.Handler()
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	id := ingest(t, s, priv, pub, 1, "post.create", map[string]any{"text": "Lovely weather today"})
+	if err := s.St.SetLang(id, "en", "m", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.St.SetTranslation(id, "zh-Hans", "今天天气很好", "m", true); err != nil {
+		t.Fatal(err)
+	}
+	var read func(path string, hdr ...string) *postTranslation
+	read = func(path string, hdr ...string) *postTranslation {
+		req := httptest.NewRequest("GET", "http://hub.example"+path, nil)
+		for i := 0; i+1 < len(hdr); i += 2 {
+			req.Header.Set(hdr[i], hdr[i+1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code == http.StatusFound {
+			return read(w.Header().Get("Location"), hdr...)
+		}
+		var out struct {
+			Post        store.FeedPost   `json:"post"`
+			Translation *postTranslation `json:"translation"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != http.StatusOK || err != nil || out.Post.Text != "Lovely weather today" {
+			t.Fatalf("GET %s: %d %s", path, w.Code, w.Body)
+		}
+		return out.Translation
+	}
+	for _, path := range []string{"/v1/post/" + id + "?lang=zh", "/v1/post/" + id[:8] + "?lang=zh-CN"} {
+		if tr := read(path); tr == nil || *tr != (postTranslation{Lang: "zh-Hans", From: "en", Text: "今天天气很好"}) {
+			t.Errorf("%s: translation %+v", path, tr)
+		}
+	}
+	for _, path := range []string{"/v1/post/" + id, "/v1/post/" + id + "?lang=orig", "/v1/post/" + id + "?lang=en"} {
+		if tr := read(path, "Accept-Language", "zh-CN"); tr != nil {
+			t.Errorf("%s: translation %+v", path, tr)
+		}
+	}
+}
+
 // TestWebTrNote: the line names the language alone, and the script only
 // to a Chinese reader, whom it tells Traditional from Simplified.
 func TestWebTrNote(t *testing.T) {
