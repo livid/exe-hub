@@ -22,7 +22,8 @@ var swSrc []byte
 
 // webBuild names the bytes the pages are made of: the template, their
 // words in every language, the chrome and the stats desk's blocks the
-// template takes from exe-stats, and the worker. A deploy that changes
+// template takes from exe-stats, the colours' night values (theme.go),
+// and the worker. A deploy that changes
 // any of them is another build. Every page says which build served it
 // (its exe-hub-build meta), so a page left open can tell that the hub
 // has moved on under it (web.html, the live script); the worker carries
@@ -33,7 +34,7 @@ var webBuild = func() string {
 	h.Write([]byte(webHTML))
 	words, _ := json.Marshal(webStrings) // map keys sorted: the same words, the same bytes
 	h.Write(words)
-	for _, part := range []string{stats.ChromeCSS(), stats.PopupCSS(), stats.TemplateHTML()} {
+	for _, part := range []string{stats.ChromeCSS(), stats.PopupCSS(), stats.TemplateHTML(), webTheme.scheme} {
 		h.Write([]byte(part))
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]

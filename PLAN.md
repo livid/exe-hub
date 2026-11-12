@@ -4096,6 +4096,79 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   and Profile dialog show in each language; a token-gated second hub
   for the gate sentence; DPR 1, 1.5, 2 and a phone).
 
+## Appearance — the pages by day and by night (built 2026-11-12)
+
+Livid asked for it on 2026-11-12 from a live mockup (hub thread
+562f2b61): the public pages get a dark appearance, a menu to choose
+it, and Auto, which follows the reader's system.
+
+- **Three choices: Light, Dark, Auto.** Auto is the default and needs
+  no script: the stylesheet itself turns dark when the system is
+  (`prefers-color-scheme`), and follows the system while the page is
+  open. A choice of Light or Dark is kept in the browser
+  (`localStorage`, `exe-hub-scheme`) and said on the root as
+  `data-scheme` by a script in the head, before the first paint, so a
+  page never shows the other scheme first. Auto is no attribute and no
+  stored value. A choice made in one tab reaches the others as it is
+  made (the `storage` event). `theme-color` follows: `#cccccc` by day,
+  `#2a2a2a` by night.
+- **The Appearance menu** stands beside the language menu, wherever
+  that is: the find strip, and the top strip of a thread, a day,
+  Archives and the other pages that carry it. Its button is the shared
+  pop-up's frame and well around a button, the choice's icon and word;
+  the list is a Platinum menu, not the browser's, because each item
+  carries an icon (exe's docs/platinum.md, "A pop-up whose items carry
+  icons": check mark, 16px icon, word; one row inverted at a time; a
+  click or Return picks; Escape, a press elsewhere, a scroll or the
+  window losing the keyboard puts it away). It hangs 2px under the
+  button, or over it when the window ends first. The order is the
+  system's: Light, Dark, Auto. The icons are 16px pixel art: a sun, a
+  moon, a disc half day and half night. On a phone (480px and under)
+  the button is its icon alone. The button's icon and word and the
+  menu's check mark are read off `data-scheme` by the stylesheet, so
+  they are right from the first paint. Without script the menu is not
+  shown, and the page still follows the system.
+- **The stylesheets stay written as Platinum says them** — `#ccc`,
+  `#262626` — and say nothing of the night. As the hub starts,
+  `internal/api/theme.go` reads each sheet the pages are drawn with
+  (exe-stats' chrome and pop-up, the template's own, the stats desk's)
+  and puts a variable where every colour stands; the page's head
+  defines the variables three times: by day, by night for a dark
+  system unless the reader chose Light, by night for a reader who
+  chose Dark. A variable is named for the job the colour does and for
+  the colour (`--t-666` is `#666` as text, `--b-fff` white as a
+  ground), because one Platinum grey does several jobs and each wants
+  another value by night: `#999` is a faint word, a bevel's shadow and
+  a hairline round a picture. Where the selector says a colour stands
+  somewhere particular the name says that too: a button held down, a
+  black line on the white frame, the heat scale's steps.
+- **The day does not change.** A variable's day value is the literal
+  it replaced. `TestThemeDay` puts the colours back and compares each
+  sheet to the byte.
+- **Every colour has its night, by name.** A rule written with a new
+  colour, or with an old colour in a new place, fails
+  `TestThemeNight` until `theme.go` says what it is at night; a night
+  no sheet uses fails it too. A page script that writes a rule of its
+  own uses the variables (`hubMine`: `var(--l-339)`).
+- **The night's palette** keeps Platinum's bevels, lit from the top
+  left, on darker greys: the desk `#2a2a2a`, a window `#3b3b3b`, a
+  button, a strip and a dialog `#4a4a4a`, the frame `#1c1c1c`, text
+  `#e2e2e2`, a link `#a9a9ff`, a bevel's lit edge `#6c6c6c`, outlines
+  black. A button held down is darker than its strip. A black line
+  drawn on the white frame (round a picture, a table, a card, an
+  avatar) is `#707070` by night, or it would be lost on the dark
+  paper. The gate note stays yellow, dimmed. The heat scale of
+  Archives and of a profile's year counts up towards the light.
+- **What keeps the day whatever the choice:** a picture, a drawing's
+  white paper, a page window's page (it brought its own colours), an
+  identicon's pale ground (its dark blues are lost on a dark one), and
+  the gold of the bell.
+- **Not part of it.** The replies frame (`/p/{id}/replies`) looks as
+  the page that frames it wants: its Platinum look stays the day's, and
+  the paper look keeps the night of its own. The link preview pictures
+  are drawn by the hub and stay light. The Hub app on the exe desk is
+  another program.
+
 ## Thread summaries — a quick read of a long thread (built 2026-09-24)
 
 Asked by Livid 2026-09-24: a thread with ten or more replies gets a

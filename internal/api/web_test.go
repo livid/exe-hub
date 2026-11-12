@@ -115,7 +115,7 @@ func TestWebHome(t *testing.T) {
 	}
 	// the hand and the faint grey under the mouse say the body is the way
 	// in; the grey waits for a mouse, so a phone keeps the post as it is
-	if !strings.Contains(body, ".post[data-href] { cursor: pointer; transition: background-color .12s; }") || !strings.Contains(body, "@media (hover: hover) { .post[data-href]:hover { background-color: rgba(0, 0, 0, .03); } }") {
+	if !strings.Contains(body, ".post[data-href] { cursor: pointer; transition: background-color .12s; }") || !strings.Contains(body, "@media (hover: hover) { .post[data-href]:hover { background-color: var(--b-rgba-0-0-0-03); } }") || !strings.Contains(body, " --b-rgba-0-0-0-03: rgba(0, 0, 0, .03);") {
 		t.Error("the listed post lacks its hand, its hover grey or the grey's 0.12 s fade")
 	}
 	if _, zh := get(t, h, "/?lang=zh"); !strings.Contains(zh, ` data-href="/p/`+id+`?lang=zh"`) {
@@ -278,7 +278,8 @@ func TestWebThreadProfile(t *testing.T) {
 	// other end (the thread page has no find strip to carry it); the
 	// status line along the bottom is text only
 	if top := topStrip(body); !strings.HasPrefix(top, `<div class="pager top"><a class="btn prev back" href="/"><svg class="gl" viewBox="0 0 11 9"`) ||
-		!strings.HasSuffix(top, `</svg><span>Feed</span></a><span class="popup lang" id="lang"><select aria-label="Language" title="Language"><option value="en" selected>English</option><option value="zh">中文</option><option value="ja">日本語</option></select><span class="well"><i><b></b></i></span></span></div>`) ||
+		!strings.Contains(top, `</svg><span>Feed</span></a><span class="popup lang" id="lang"><select aria-label="Language" title="Language"><option value="en" selected>English</option><option value="zh">中文</option><option value="ja">日本語</option></select><span class="well"><i><b></b></i></span></span><span class="popup scheme" id="scheme"><button type="button" aria-label="Appearance"`) ||
+		!strings.HasSuffix(top, `Auto</button></span></div>`) ||
 		strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) || strings.Count(body, `id="lang"`) != 1 {
 		t.Errorf("thread page strip: %q", top)
 	}
@@ -1276,7 +1277,7 @@ func TestWebPage(t *testing.T) {
 	}
 	for _, want := range []string{
 		`.viewer.pageview .tbox.zoom::before { content: ""; position: absolute; top: 1px; left: 1px; width: 7px; height: 7px;`,
-		`box-shadow: inset 0 0 0 1px var(--black); }`,
+		`box-shadow: inset 0 0 0 1px var(--s-262626); }`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page window CSS lacks %q", want)
@@ -1901,8 +1902,10 @@ func TestOpening(t *testing.T) {
 func TestWebChromeIsShared(t *testing.T) {
 	s := testServer(t, &config.Config{Gate: config.Gate{Mode: "open"}})
 	_, body := get(t, s.Handler(), "/")
-	chrome := stats.ChromeCSS()
-	if !strings.Contains(body, chrome) {
+	// the chrome as theme.go read it: a variable where each colour stood,
+	// and nothing else changed (TestThemeDay puts the colours back)
+	chrome := webTheme.chrome
+	if !strings.Contains(body, chrome) || !strings.Contains(stats.ChromeCSS(), ".titlebar .stripe") {
 		t.Fatal("the page does not carry the shared chrome")
 	}
 	// the tile the desktop draws: 13px with its black ring, not a copy

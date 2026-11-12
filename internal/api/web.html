@@ -4,7 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="exe-hub-build" content="{{build}}">
-<title>{{.Title}}</title>
+{{if ne .Page "frame"}}<meta name="color-scheme" content="light dark">
+<script>// Appearance (PLAN.md): a page is light or dark as the reader's system
+// is, by the stylesheet alone, unless the reader chose one in the
+// Appearance menu. The choice is kept in this browser and said on the
+// root here, before the first paint, so a page never shows the other
+// scheme first; Auto is no attribute at all. What the menu's button and
+// its check mark show is read off the same attribute by the stylesheet.
+// Another tab's choice reaches this one as it is made. The replies
+// frame takes no part: the page that frames it decides how it looks.
+(() => {
+  const root = document.documentElement, KEY = "exe-hub-scheme", night = matchMedia("(prefers-color-scheme: dark)");
+  const known = s => s === "light" || s === "dark" ? s : "auto";
+  let v = "auto";
+  try { v = known(localStorage.getItem(KEY)); } catch (e) {}
+  const paint = () => {
+    if (v === "auto") root.removeAttribute("data-scheme"); else root.setAttribute("data-scheme", v);
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.content = v === "dark" || (v === "auto" && night.matches) ? "#2a2a2a" : "#cccccc";
+  };
+  window.hubScheme = s => {
+    if (s === undefined) return v;
+    v = known(s);
+    try { if (v === "auto") localStorage.removeItem(KEY); else localStorage.setItem(KEY, v); } catch (e) {}
+    paint();
+    return v;
+  };
+  night.addEventListener("change", paint);
+  addEventListener("storage", e => { if (e.key === KEY) { v = known(e.newValue); paint(); } });
+  document.addEventListener("DOMContentLoaded", paint);
+  root.classList.add("sch");
+  paint();
+})();</script>
+{{end}}<title>{{.Title}}</title>
 <link rel="icon" href="/favicon.ico" sizes="32x32 16x16">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -16,7 +48,7 @@
 window.hubMine = id => {
   const css = document.getElementById("mine") || document.head.appendChild(Object.assign(document.createElement("style"), { id: "mine" }));
   const sel = /^[0-9a-f]{16}$/.test(id || "") ? '.rxs .rx[data-ids~="' + id + '"]' : "";
-  css.textContent = sel ? sel + ", " + sel + ":hover, " + sel + ":active { border-color: #333399; color: #333399; } .paper " + sel + ", .paper " + sel + ":hover, .paper " + sel + ":active { border-color: var(--ink); color: var(--ink); }" : "";
+  css.textContent = sel ? sel + ", " + sel + ":hover, " + sel + ":active { border-color: var(--l-339); color: var(--t-339); } .paper " + sel + ", .paper " + sel + ":hover, .paper " + sel + ":active { border-color: var(--ink); color: var(--ink); }" : "";
   if (window.hubRxDress) hubRxDress();
 };
 try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null"); hubMine(w && w.id); } catch (e) { hubMine(""); }</script>
@@ -59,6 +91,12 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null");
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,100..900;1,100..900{{if .Faces.SC}}&family=Noto+Serif+SC:wght@200..900{{end}}{{if .Faces.TC}}&family=Noto+Serif+TC:wght@200..900{{end}}{{if .Faces.JP}}&family=Noto+Serif+JP:wght@200..900{{end}}&display=swap">{{end}}
 <style>
+/* Every colour below is said twice, by day and by night: theme.go reads
+   these sheets as the hub starts and puts a variable where each colour
+   stands, and this block defines the variables — the day's values, the
+   colours as they are written here, and the night's (PLAN.md,
+   Appearance). */
+{{schemevars}}
 /* The Platinum chrome — the window with its striped bar, hard shadow and
    close box, the sunken frame, the status strip and the push button —
    is github.com/livid/exe-stats' chrome.css, the same file the exe site
@@ -677,7 +715,74 @@ html[data-saved] .saved { display: flex; }
 /* on a thread page, which has no find strip, the menu stands at the
    right end of the strip that leads back to the feed, across from Feed
    in the pager's third column, 12px from the frame's edge like Next */
-.pager .lang { grid-column: 3; justify-self: end; }
+.pager .lang { grid-column: 3; grid-row: 1; justify-self: end; }
+/* The two menus stand together at the end of their strip: the language,
+   then Appearance (PLAN.md, Appearance): Light, Dark or Auto. On the find
+   strip they are two of its row. A thread's top strip is a grid of three
+   columns, and both stand at the end of the third, in its one row (each
+   says the row, or the grid would give the second a row of its own):
+   the language menu steps left by the other's width and the 12px
+   between them. No span
+   wraps the two: inside one, Chromium drew the language menu's word
+   with another smoothing than it has drawn it with since the menu came. Its button
+   is the shared pop-up's frame and well around a button in the select's
+   place, the 16px icon and then the word, because a native list cannot
+   draw a picture beside an item; the list that opens is a Platinum menu
+   (docs/platinum.md in exe, "A pop-up whose items carry icons": the
+   check mark 5px in beside the chosen item, the icon at 17px, the text
+   at 40px, one row inverted at a time, .on, never :hover). Which of the
+   three is chosen is the root's data-scheme, set before the first
+   paint, and the rules here read it: the button's icon and word and the
+   menu's check mark need no script to be right. Without script the
+   menu could do nothing, so it is not shown. */
+.scheme { display: none; flex: none; width: 92px; }
+.sch .scheme { display: block; }
+.pager .scheme { grid-column: 3; grid-row: 1; justify-self: end; }
+.sch .pager .lang { margin-right: 104px; }
+.popup.scheme { height: 20px; }
+.popup.scheme .well b { background-position: 4px 3px; }
+.scheme button { position: absolute; inset: 0; box-sizing: border-box; width: 100%; height: 100%; appearance: none; -webkit-appearance: none;
+  display: flex; align-items: center; gap: 5px; margin: 0; padding: 0 27px 0 5px; border: 0; border-radius: 0; background: transparent;
+  color: #000; font: inherit; font-size: 12px; line-height: 17px; text-align: left; cursor: default; }
+.scheme button:focus { outline: none; }
+.scheme button:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
+.scheme .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scheme .nm span { display: none; }
+:root[data-scheme="light"] .scheme .nm .li, :root[data-scheme="dark"] .scheme .nm .da, :root:not([data-scheme]) .scheme .nm .au { display: inline; }
+/* the three icons, 16px pixel art: a sun, a moon, a disc half day and
+   half night; pixels at whole scales, geometry between 1x and 2x */
+.sci { flex: none; display: block; width: 16px; height: 16px; }
+.sci svg { display: block; width: 16px; height: 16px; shape-rendering: crispEdges; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .sci svg { shape-rendering: geometricPrecision; } }
+.sci .k { fill: #262626; } .sci .w { fill: #fff; } .sci .g { fill: #fff; } .sci .f { fill: #ffcc33; } .sci .s { fill: #cc9933; } .sci .m { fill: #ccccff; }
+.scheme button .sci svg { display: none; }
+:root[data-scheme="light"] .scheme button .sci svg:nth-child(1), :root[data-scheme="dark"] .scheme button .sci svg:nth-child(2), :root:not([data-scheme]) .scheme button .sci svg:nth-child(3) { display: block; }
+.schmenu { display: block; position: fixed; z-index: 95; box-sizing: border-box; min-width: 92px; max-width: calc(100vw - 12px); padding: 2px 1px; background: #ddd;
+  border: 1px solid #262626; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb, 2px 2px 0 rgba(38,38,38,.85);
+  cursor: default; user-select: none; -webkit-user-select: none; }
+.schmenu[hidden] { display: none; }
+.schmenu .mi { display: block; box-sizing: border-box; width: 100%; position: relative; margin: 0; padding: 3px 22px 3px 40px; border: 0; border-radius: 0;
+  background: none; font: inherit; font-size: 12px; line-height: 18px; color: #262626; text-align: left; white-space: nowrap; cursor: default;
+  -webkit-tap-highlight-color: transparent; }
+.schmenu .mi:focus { outline: none; }
+.schmenu .mi.on { background: #333399; color: #fff; }
+.schmenu .mi.on .k { fill: #fff; }
+.schmenu .mi.on .w { fill: #333399; }
+.schmenu .sci { position: absolute; left: 17px; top: 50%; margin-top: -8px; }
+.schmenu .chk { position: absolute; left: 5px; top: 50%; margin-top: -4px; width: 10px; height: 8px; display: none; }
+.schmenu .chk svg { display: block; width: 10px; height: 8px; shape-rendering: crispEdges; fill: currentColor; }
+:root[data-scheme="light"] .schmenu .li .chk, :root[data-scheme="dark"] .schmenu .da .chk, :root:not([data-scheme]) .schmenu .au .chk { display: block; }
+/* a finger gets rows of 30px */
+@media (pointer: coarse) { .schmenu .mi { padding-top: 6px; padding-bottom: 6px; } }
+/* on a phone the word will not fit: the button is its icon alone, the
+   bevel closed at the right where the arrows' well was */
+@media (max-width: 480px) {
+  .scheme { width: 28px; }
+  .sch .pager .lang { margin-right: 36px; }
+  .scheme .well, .scheme .nm { display: none; }
+  .scheme button { padding: 0 5px; }
+  .popup.scheme::before { width: 100%; border-right: 1px solid #aaa; }
+}
 /* posting from a Solana wallet: a window of its own above the posts —
    Post over the feed on the home page, Reply over the thread on a thread
    page — its frame holding one strip on the find strip's platinum.
@@ -2933,6 +3038,60 @@ document.addEventListener("change", e => {
   u.hash = "";
   location.assign(u);
 });
+// The Appearance menu (PLAN.md, Appearance): a Platinum menu under its
+// button, 2px down at the button's left edge, at least as wide and kept
+// inside the window — over the button, 2px up, when the window ends
+// before the menu would. One row is inverted at a time, moved by the
+// pointer and the arrow keys alike; a click or Return picks, and
+// Escape, a press elsewhere, a scroll or the window losing the keyboard
+// puts the menu away. A pick is hubScheme's to keep (the head script).
+(() => {
+  const wrap = document.getElementById("scheme"), menu = document.getElementById("schmenu");
+  if (!wrap || !menu || !window.hubScheme) return;
+  const btn = wrap.querySelector("button"), rows = [...menu.querySelectorAll(".mi")];
+  const on = row => { for (const r of rows) r.classList.toggle("on", r === row); };
+  const mark = () => { for (const r of rows) r.setAttribute("aria-checked", r.dataset.v === hubScheme() ? "true" : "false"); };
+  const open = () => {
+    mark();
+    menu.hidden = false;
+    const r = wrap.getBoundingClientRect();
+    menu.style.minWidth = r.width + "px";
+    // under the button, or over it when the window ends first
+    const mh = menu.offsetHeight, under = r.bottom + 2;
+    menu.style.top = (under + mh <= innerHeight - 6 || r.top - 2 - mh < 4 ? Math.max(4, Math.min(under, innerHeight - mh - 6)) : r.top - 2 - mh) + "px";
+    menu.style.left = Math.max(4, Math.min(r.left, document.documentElement.clientWidth - menu.offsetWidth - 6)) + "px";
+    on(rows.find(row => row.dataset.v === hubScheme()));
+    btn.setAttribute("aria-expanded", "true");
+  };
+  const close = () => {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  };
+  const pick = row => { hubScheme(row.dataset.v); close(); btn.focus(); };
+  btn.addEventListener("click", () => { if (menu.hidden) open(); else close(); });
+  menu.addEventListener("pointermove", e => { const row = e.target.closest(".mi"); if (row && !row.classList.contains("on")) on(row); });
+  menu.addEventListener("click", e => { const row = e.target.closest(".mi"); if (row) pick(row); });
+  document.addEventListener("pointerdown", e => { if (!e.target.closest("#schmenu, #scheme")) close(); }, true);
+  addEventListener("blur", close);
+  addEventListener("scroll", close, { passive: true });
+  addEventListener("resize", close);
+  document.addEventListener("keydown", e => {
+    if (menu.hidden) {
+      if (document.activeElement === btn && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); open(); }
+      return;
+    }
+    const at = rows.findIndex(r => r.classList.contains("on"));
+    if (e.key === "Escape") { close(); btn.focus(); }
+    else if (e.key === "ArrowDown") on(rows[Math.min(rows.length - 1, at + 1)]);
+    else if (e.key === "ArrowUp") on(rows[Math.max(0, at - 1)]);
+    else if (e.key === "Enter" && at >= 0) pick(rows[at]);
+    else if (e.key === "Tab") { close(); return; }
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+})();
 </script>
 {{if eq .Page "frame"}}<script>
 // The replies frame (PLAN.md, Replies under a blog post). The page that
@@ -5982,7 +6141,17 @@ document.addEventListener("change", e => {
      and at the right end of a thread page's top strip, which has no find
      strip, across from Feed. One on a page, so the change listener finds
      it by id. */}}
-{{define "lang"}}<span class="popup lang" id="lang"><select aria-label="{{T "language"}}" title="{{T "language"}}"><option value="en"{{if eq .L.Code "en"}} selected{{end}}>English</option><option value="zh"{{if eq .L.Code "zh"}} selected{{end}}>中文</option><option value="ja"{{if eq .L.Code "ja"}} selected{{end}}>日本語</option></select><span class="well"><i><b></b></i></span></span>{{end}}
+{{define "lang"}}<span class="popup lang" id="lang"><select aria-label="{{T "language"}}" title="{{T "language"}}"><option value="en"{{if eq .L.Code "en"}} selected{{end}}>English</option><option value="zh"{{if eq .L.Code "zh"}} selected{{end}}>中文</option><option value="ja"{{if eq .L.Code "ja"}} selected{{end}}>日本語</option></select><span class="well"><i><b></b></i></span></span>{{template "appear" .}}{{template "appearmenu" .}}{{end}}
+
+{{/* Appearance (PLAN.md): the button, which shows the reader's choice by
+     the stylesheet alone, and the Platinum menu it opens, one of each on
+     a page. The words are the system's own for the same three. */}}
+{{define "appear"}}<span class="popup scheme" id="scheme"><button type="button" aria-label="{{T "appearance"}}" title="{{T "appearance"}}" aria-haspopup="menu" aria-expanded="false" aria-controls="schmenu"><span class="sci">{{template "g-sun"}}{{template "g-moon"}}{{template "g-half"}}</span><span class="nm"><span class="li">{{T "appearance.light"}}</span><span class="da">{{T "appearance.dark"}}</span><span class="au">{{T "appearance.auto"}}</span></span></button><span class="well"><i><b></b></i></span></span>{{end}}
+{{define "appearmenu"}}<span class="schmenu" id="schmenu" role="menu" aria-label="{{T "appearance"}}" hidden><button type="button" class="mi li" role="menuitemradio" data-v="light"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-sun"}}</span>{{T "appearance.light"}}</button><button type="button" class="mi da" role="menuitemradio" data-v="dark"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-moon"}}</span>{{T "appearance.dark"}}</button><button type="button" class="mi au" role="menuitemradio" data-v="auto"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-half"}}</span>{{T "appearance.auto"}}</button></span>{{end}}
+{{define "g-sun"}}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path class="g" d="M6 5h1v1h-1zM5 6h1v1h-1z"/><path class="f" d="M6 4h4v1h-4zM4 5h2v1h-2zM7 5h5v1h-5zM4 6h1v1h-1zM6 6h6v1h-6zM4 7h8v1h-8zM4 8h8v1h-8zM4 9h6v1h-6zM11 9h1v1h-1zM4 10h5v1h-5zM10 10h2v1h-2zM6 11h4v1h-4z"/><path class="s" d="M10 9h1v1h-1zM9 10h1v1h-1z"/><path class="k" d="M7 0h2v1h-2zM1 1h1v1h-1zM7 1h2v1h-2zM14 1h1v1h-1zM2 2h1v1h-1zM13 2h1v1h-1zM6 3h4v1h-4zM4 4h2v1h-2zM10 4h2v1h-2zM3 5h1v1h-1zM12 5h1v1h-1zM3 6h1v1h-1zM12 6h1v1h-1zM0 7h2v1h-2zM3 7h1v1h-1zM12 7h1v1h-1zM14 7h2v1h-2zM0 8h2v1h-2zM3 8h1v1h-1zM12 8h1v1h-1zM14 8h2v1h-2zM3 9h1v1h-1zM12 9h1v1h-1zM3 10h1v1h-1zM12 10h1v1h-1zM4 11h2v1h-2zM10 11h2v1h-2zM6 12h4v1h-4zM2 13h1v1h-1zM13 13h1v1h-1zM1 14h1v1h-1zM7 14h2v1h-2zM14 14h1v1h-1zM7 15h2v1h-2z"/></svg>{{end}}
+{{define "g-moon"}}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path class="m" d="M6 2h2v1h-2zM4 3h3v1h-3zM3 4h3v1h-3zM3 5h2v1h-2zM2 6h3v1h-3zM2 7h3v1h-3zM2 8h3v1h-3zM2 9h4v1h-4zM3 10h4v1h-4zM12 10h1v1h-1zM3 11h5v1h-5zM11 11h2v1h-2zM4 12h8v1h-8zM6 13h4v1h-4z"/><path class="k" d="M6 1h4v1h-4zM4 2h2v1h-2zM8 2h1v1h-1zM3 3h1v1h-1zM7 3h1v1h-1zM2 4h1v1h-1zM6 4h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM1 6h1v1h-1zM5 6h1v1h-1zM1 7h1v1h-1zM5 7h1v1h-1zM1 8h1v1h-1zM5 8h1v1h-1zM13 8h1v1h-1zM1 9h1v1h-1zM6 9h1v1h-1zM12 9h2v1h-2zM2 10h1v1h-1zM7 10h1v1h-1zM11 10h1v1h-1zM13 10h1v1h-1zM2 11h1v1h-1zM8 11h3v1h-3zM13 11h1v1h-1zM3 12h1v1h-1zM12 12h1v1h-1zM4 13h2v1h-2zM10 13h2v1h-2zM6 14h4v1h-4z"/></svg>{{end}}
+{{define "g-half"}}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path class="w" d="M5 2h3v1h-3zM3 3h5v1h-5zM2 4h6v1h-6zM2 5h6v1h-6zM2 6h6v1h-6zM2 7h6v1h-6zM2 8h6v1h-6zM2 9h6v1h-6zM2 10h6v1h-6zM2 11h6v1h-6zM3 12h5v1h-5zM5 13h3v1h-3z"/><path class="k" d="M5 1h6v1h-6zM3 2h2v1h-2zM8 2h5v1h-5zM2 3h1v1h-1zM8 3h6v1h-6zM1 4h1v1h-1zM8 4h7v1h-7zM1 5h1v1h-1zM8 5h7v1h-7zM1 6h1v1h-1zM8 6h7v1h-7zM1 7h1v1h-1zM8 7h7v1h-7zM1 8h1v1h-1zM8 8h7v1h-7zM1 9h1v1h-1zM8 9h7v1h-7zM1 10h1v1h-1zM8 10h7v1h-7zM1 11h1v1h-1zM8 11h7v1h-7zM2 12h1v1h-1zM8 12h6v1h-6zM3 13h2v1h-2zM8 13h5v1h-5zM5 14h6v1h-6z"/></svg>{{end}}
+{{define "g-check"}}<svg viewBox="0 0 10 8" width="10" height="8" aria-hidden="true"><path d="M9 0h1v2H9zM8 1h1v2H8zM7 2h1v2H7zM6 3h1v2H6zM5 4h1v2H5zM4 5h1v2H4zM3 6h1v2H3zM0 3h1v2H0zM1 4h1v2H1zM2 5h1v2H2z"/></svg>{{end}}
 
 {{/* the Post and Reply windows have nothing to close: no close box,
      the stripes run the whole bar (Livid, 2026-10-09) */}}

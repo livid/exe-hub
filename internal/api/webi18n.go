@@ -194,7 +194,12 @@ var webTmpls = func() map[string]*template.Template {
 	for code, l := range webLocales {
 		t := template.New("web").Funcs(stats.Funcs()).Funcs(template.FuncMap{"T": l.T, "build": func() string { return webBuild },
 			"rxname": l.rxName, "words": func(ids []string) string { return strings.Join(ids, " ") }})
-		out[code] = template.Must(template.Must(t.Parse(webHTML)).Parse(stats.TemplateHTML()))
+		// the sheets as theme.go read them: a variable where each colour
+		// stood, and the variables' two sets at the head of the page's own
+		t.Funcs(template.FuncMap{"chrome": func() template.CSS { return template.CSS(webTheme.chrome) },
+			"popup":      func() template.CSS { return template.CSS(webTheme.popup) },
+			"schemevars": func() template.CSS { return template.CSS(webTheme.scheme) }})
+		out[code] = template.Must(template.Must(t.Parse(webTheme.page)).Parse(webTheme.stats))
 	}
 	return out
 }()
@@ -607,6 +612,12 @@ var webStrings = map[string]map[string]string{
 		"badge.own":   "Its own size",
 		"badge.x3":    "Three times",
 		"badge.facts": "GIF, 88 × 31, {n} frames, {size}",
+
+		// Appearance (PLAN.md): the menu beside the language menu, and its three choices
+		"appearance":       "Appearance",
+		"appearance.light": "Light",
+		"appearance.dark":  "Dark",
+		"appearance.auto":  "Auto",
 	},
 	"zh": {
 		"nothing":                    "这里还没有内容。",
@@ -972,6 +983,12 @@ var webStrings = map[string]map[string]string{
 		"badge.own":   "原始尺寸",
 		"badge.x3":    "放大三倍",
 		"badge.facts": "GIF，88 × 31，{n} 帧，{size}",
+
+		// Appearance
+		"appearance":       "外观",
+		"appearance.light": "浅色",
+		"appearance.dark":  "深色",
+		"appearance.auto":  "自动",
 	},
 	// Traditional Chinese, which the replies frame alone speaks so far
 	// (webFrameLocale): the hub's own pages still read a Traditional
@@ -1341,6 +1358,12 @@ var webStrings = map[string]map[string]string{
 		"badge.own":   "原始尺寸",
 		"badge.x3":    "放大三倍",
 		"badge.facts": "GIF，88 × 31，{n} 幀，{size}",
+
+		// Appearance
+		"appearance":       "外觀",
+		"appearance.light": "淺色",
+		"appearance.dark":  "深色",
+		"appearance.auto":  "自動",
 	},
 	"ja": {
 		"nothing":                    "まだ何もありません。",
@@ -1706,5 +1729,11 @@ var webStrings = map[string]map[string]string{
 		"badge.own":   "原寸",
 		"badge.x3":    "3 倍",
 		"badge.facts": "GIF、88 × 31、{n} フレーム、{size}",
+
+		// Appearance
+		"appearance":       "外観",
+		"appearance.light": "ライト",
+		"appearance.dark":  "ダーク",
+		"appearance.auto":  "自動",
 	},
 }

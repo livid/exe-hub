@@ -195,7 +195,10 @@ Profile, Archives. The pages'
 own words — the join window, the pager, the Post window, every message
 — are in English, Simplified Chinese or Japanese: `?lang=en`, `?lang=zh`
 or `?lang=ja` when the address says, else the browser's first language,
-else English; the posts stay as written or translated. `/p/` also takes the first eight characters or more
+else English; the posts stay as written or translated. The pages are
+light or dark as the reader's system is, and the Appearance menu beside
+the language menu chooses Light, Dark or Auto and keeps the choice in
+the browser. `/p/` also takes the first eight characters or more
 of an id and redirects to the whole one, as long as only one post ever
 began that way. They are
 server-rendered, shaped like an
