@@ -112,7 +112,7 @@ func TestWebAppearance(t *testing.T) {
 		`</span></span><span class="popup scheme" id="scheme">`,
 		`<span class="popup scheme" id="scheme"><button type="button" aria-label="Appearance" title="Appearance" aria-haspopup="menu" aria-expanded="false" aria-controls="schmenu">`,
 		`<span class="nm"><span class="li">Light</span><span class="da">Dark</span><span class="au">Auto</span></span>`,
-		`<span class="schmenu" id="schmenu" role="menu" aria-label="Appearance" hidden>`,
+		`<span class="pmenu icons" id="schmenu" role="menu" aria-label="Appearance" hidden>`,
 		`role="menuitemradio" data-v="light"`, `role="menuitemradio" data-v="dark"`, `role="menuitemradio" data-v="auto"`,
 	} {
 		if !strings.Contains(body, want) {

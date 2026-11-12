@@ -145,7 +145,9 @@ func TestWebHome(t *testing.T) {
 		`placeholder="搜索帖子"`, `<button class="btn" type="submit">搜索</button>`,
 		`<span class="title">发帖</span>`, `<button type="button" class="btn signin">用 Solana 登录</button>`,
 		`"checking":"正在检查这个地址…"`, // the scripts' words, as JSON in the head
-		`<span class="popup lang" id="lang"><select aria-label="语言" title="语言"><option value="en">English</option><option value="zh" selected>中文</option><option value="ja">日本語</option></select><span class="well"><i><b></b></i></span></span>`,
+		`<span class="popup lang" id="lang"><button type="button" aria-label="语言" title="语言" aria-haspopup="menu" aria-expanded="false" aria-controls="langmenu"><span class="nm">中文</span></button><span class="well"><i><b></b></i></span></span>`,
+		`<span class="pmenu" id="langmenu" role="menu" aria-label="语言" hidden>`,
+		`role="menuitemradio" aria-checked="false" data-v="en" lang="en">`, `role="menuitemradio" aria-checked="true" data-v="zh" lang="zh-Hans">`, `role="menuitemradio" aria-checked="false" data-v="ja" lang="ja">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Chinese home lacks %q\n%s", want, body)
@@ -167,7 +169,7 @@ func TestWebHome(t *testing.T) {
 		`<span class="m"><span data-n="members">1</span> 人のメンバー · </span><span data-n="posts">1</span> 件の投稿`,
 		`placeholder="投稿を検索"`, `<span class="title">投稿</span>`, `<button type="button" class="btn signin">Solana でサインイン</button>`,
 		`"checking":"このアドレスを確認しています…"`,
-		`<option value="ja" selected>日本語</option>`, `aria-label="言語"`,
+		`<span class="nm">日本語</span>`, `role="menuitemradio" aria-checked="true" data-v="ja" lang="ja">`, `aria-label="言語"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Japanese home lacks %q\n%s", want, body)
@@ -278,7 +280,7 @@ func TestWebThreadProfile(t *testing.T) {
 	// other end (the thread page has no find strip to carry it); the
 	// status line along the bottom is text only
 	if top := topStrip(body); !strings.HasPrefix(top, `<div class="pager top"><a class="btn prev back" href="/"><svg class="gl" viewBox="0 0 11 9"`) ||
-		!strings.Contains(top, `</svg><span>Feed</span></a><span class="popup lang" id="lang"><select aria-label="Language" title="Language"><option value="en" selected>English</option><option value="zh">中文</option><option value="ja">日本語</option></select><span class="well"><i><b></b></i></span></span><span class="popup scheme" id="scheme"><button type="button" aria-label="Appearance"`) ||
+		!strings.Contains(top, `</svg><span>Feed</span></a><span class="popup lang" id="lang"><button type="button" aria-label="Language" title="Language" aria-haspopup="menu" aria-expanded="false" aria-controls="langmenu"><span class="nm">English</span></button><span class="well"><i><b></b></i></span></span><span class="popup scheme" id="scheme"><button type="button" aria-label="Appearance"`) ||
 		!strings.HasSuffix(top, `Auto</button></span></div>`) ||
 		strings.Index(body, `class="pager top"`) > strings.Index(body, `class="post"`) || strings.Count(body, `id="lang"`) != 1 {
 		t.Errorf("thread page strip: %q", top)

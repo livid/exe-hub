@@ -4070,7 +4070,16 @@ Livid 2026-09-21: add Japanese, and make the UI's i18n complete.
   reading English, 中文 or 日本語, the page's language selected; a choice
   opens the same page in that language, `?lang=` set and the rest of the
   address kept, and the links carry it from there. Without script it
-  shows the language and does nothing more. The button is the shared
+  shows the language and does nothing more. Since 2026-11-12 (Livid:
+  "language also a platinum menu, no icon needed for language options")
+  the list that opens is a Platinum menu of the page's own, not the
+  browser's: the shared block's frame and well stand around a button in
+  the select's place, and the menu is the one Appearance has, without
+  its icon column — a check mark beside the page's language, a name on
+  each row at 18px, one row inverted at a time by pointer or arrow
+  keys, Return or a click to pick, Escape or a press elsewhere to put
+  it away. The page's own language picks nothing. Closed, the button is
+  drawn pixel for pixel as the select was. The button is the shared
   block: `popup.css` in exe-stats beside the chrome, taken here as
   `{{popup}}` as the chrome is `{{chrome}}`, and served by the exe
   daemon at `/platinum/popup.css` to the Weather app and Blue Pencil,
@@ -4116,8 +4125,9 @@ it, and Auto, which follows the reader's system.
   that is: the find strip, and the top strip of a thread, a day,
   Archives and the other pages that carry it. Its button is the shared
   pop-up's frame and well around a button, the choice's icon and word;
-  the list is a Platinum menu, not the browser's, because each item
-  carries an icon (exe's docs/platinum.md, "A pop-up whose items carry
+  the list is a Platinum menu, not the browser's — the same block and
+  the same script as the language menu's, with an icon on each item
+  (exe's docs/platinum.md, "A pop-up whose items carry
   icons": check mark, 16px icon, word; one row inverted at a time; a
   click or Return picks; Escape, a press elsewhere, a scroll or the
   window losing the keyboard puts it away). It hangs 2px under the

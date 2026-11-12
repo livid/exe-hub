@@ -711,7 +711,6 @@ html[data-saved] .saved { display: flex; }
 .find .bell:focus-visible { outline: 2px solid #9999fe; outline-offset: 1px; }
 .lang { flex: none; width: 84px; } /* "English", the longest name, and the arrow well */
 @media (max-width: 480px) { .find { gap: 8px; } } /* four controls on a phone: the field keeps its width */
-.lang select:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
 /* on a thread page, which has no find strip, the menu stands at the
    right end of the strip that leads back to the feed, across from Feed
    in the pager's third column, 12px from the frame's edge like Next */
@@ -722,31 +721,35 @@ html[data-saved] .saved { display: flex; }
    columns, and both stand at the end of the third, in its one row (each
    says the row, or the grid would give the second a row of its own):
    the language menu steps left by the other's width and the 12px
-   between them. No span
-   wraps the two: inside one, Chromium drew the language menu's word
-   with another smoothing than it has drawn it with since the menu came. Its button
-   is the shared pop-up's frame and well around a button in the select's
-   place, the 16px icon and then the word, because a native list cannot
-   draw a picture beside an item; the list that opens is a Platinum menu
-   (docs/platinum.md in exe, "A pop-up whose items carry icons": the
-   check mark 5px in beside the chosen item, the icon at 17px, the text
-   at 40px, one row inverted at a time, .on, never :hover). Which of the
-   three is chosen is the root's data-scheme, set before the first
-   paint, and the rules here read it: the button's icon and word and the
-   menu's check mark need no script to be right. Without script the
-   menu could do nothing, so it is not shown. */
+   between them. No span wraps the two: inside one, Chromium drew the
+   language menu's word with another smoothing than it had.
+   Each is the shared pop-up's frame and well around a button in the
+   select's place, and the list that opens is a Platinum menu, never the
+   browser's own (docs/platinum.md in exe, "A pop-up whose items carry
+   icons": the check mark 5px in beside the chosen item, one row
+   inverted at a time, .on, never :hover). The language's rows are a
+   check mark and a name, the text at 18px; Appearance's carry a 16px
+   icon at 17px and the text at 40px (.icons), and its button shows the
+   choice's icon before its word. Which language is the page's the
+   server says on its row. Which appearance is chosen is the root's
+   data-scheme, set before the first paint, and the rules here read it:
+   that button's icon and word and that menu's check mark need no
+   script to be right. Without script a menu could not open: the
+   language button shows the page's language and does nothing more, and
+   Appearance is not shown. */
 .scheme { display: none; flex: none; width: 92px; }
 .sch .scheme { display: block; }
 .pager .scheme { grid-column: 3; grid-row: 1; justify-self: end; }
 .sch .pager .lang { margin-right: 104px; }
 .popup.scheme { height: 20px; }
 .popup.scheme .well b { background-position: 4px 3px; }
-.scheme button { position: absolute; inset: 0; box-sizing: border-box; width: 100%; height: 100%; appearance: none; -webkit-appearance: none;
-  display: flex; align-items: center; gap: 5px; margin: 0; padding: 0 27px 0 5px; border: 0; border-radius: 0; background: transparent;
+.lang button, .scheme button { position: absolute; inset: 0; box-sizing: border-box; width: 100%; height: 100%; appearance: none; -webkit-appearance: none;
+  display: flex; align-items: center; gap: 5px; margin: 0; padding: 0 27px 0 6px; border: 0; border-radius: 0; background: transparent;
   color: #000; font: inherit; font-size: 12px; line-height: 17px; text-align: left; cursor: default; }
-.scheme button:focus { outline: none; }
-.scheme button:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
-.scheme .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scheme button { padding-left: 5px; }
+.lang button:focus, .scheme button:focus { outline: none; }
+.lang button:focus-visible, .scheme button:focus-visible { outline: 2px solid #9999fe; outline-offset: -1px; }
+.lang .nm, .scheme .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scheme .nm span { display: none; }
 :root[data-scheme="light"] .scheme .nm .li, :root[data-scheme="dark"] .scheme .nm .da, :root:not([data-scheme]) .scheme .nm .au { display: inline; }
 /* the three icons, 16px pixel art: a sun, a moon, a disc half day and
@@ -757,23 +760,25 @@ html[data-saved] .saved { display: flex; }
 .sci .k { fill: #262626; } .sci .w { fill: #fff; } .sci .g { fill: #fff; } .sci .f { fill: #ffcc33; } .sci .s { fill: #cc9933; } .sci .m { fill: #ccccff; }
 .scheme button .sci svg { display: none; }
 :root[data-scheme="light"] .scheme button .sci svg:nth-child(1), :root[data-scheme="dark"] .scheme button .sci svg:nth-child(2), :root:not([data-scheme]) .scheme button .sci svg:nth-child(3) { display: block; }
-.schmenu { display: block; position: fixed; z-index: 95; box-sizing: border-box; min-width: 92px; max-width: calc(100vw - 12px); padding: 2px 1px; background: #ddd;
+.pmenu { display: block; position: fixed; z-index: 95; box-sizing: border-box; min-width: 84px; max-width: calc(100vw - 12px); padding: 2px 1px; background: #ddd;
   border: 1px solid #262626; box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb, 2px 2px 0 rgba(38,38,38,.85);
   cursor: default; user-select: none; -webkit-user-select: none; }
-.schmenu[hidden] { display: none; }
-.schmenu .mi { display: block; box-sizing: border-box; width: 100%; position: relative; margin: 0; padding: 3px 22px 3px 40px; border: 0; border-radius: 0;
+.pmenu[hidden] { display: none; }
+.pmenu .mi { display: block; box-sizing: border-box; width: 100%; position: relative; margin: 0; padding: 3px 22px 3px 18px; border: 0; border-radius: 0;
   background: none; font: inherit; font-size: 12px; line-height: 18px; color: #262626; text-align: left; white-space: nowrap; cursor: default;
   -webkit-tap-highlight-color: transparent; }
-.schmenu .mi:focus { outline: none; }
-.schmenu .mi.on { background: #333399; color: #fff; }
-.schmenu .mi.on .k { fill: #fff; }
-.schmenu .mi.on .w { fill: #333399; }
-.schmenu .sci { position: absolute; left: 17px; top: 50%; margin-top: -8px; }
-.schmenu .chk { position: absolute; left: 5px; top: 50%; margin-top: -4px; width: 10px; height: 8px; display: none; }
-.schmenu .chk svg { display: block; width: 10px; height: 8px; shape-rendering: crispEdges; fill: currentColor; }
-:root[data-scheme="light"] .schmenu .li .chk, :root[data-scheme="dark"] .schmenu .da .chk, :root:not([data-scheme]) .schmenu .au .chk { display: block; }
+.pmenu.icons .mi { padding-left: 40px; }
+.pmenu .mi:focus { outline: none; }
+.pmenu .mi.on { background: #333399; color: #fff; }
+.pmenu .mi.on .k { fill: #fff; }
+.pmenu .mi.on .w { fill: #333399; }
+.pmenu .sci { position: absolute; left: 17px; top: 50%; margin-top: -8px; }
+.pmenu .chk { position: absolute; left: 5px; top: 50%; margin-top: -4px; width: 10px; height: 8px; display: none; }
+.pmenu .chk svg { display: block; width: 10px; height: 8px; shape-rendering: crispEdges; fill: currentColor; }
+#langmenu .mi[aria-checked="true"] .chk { display: block; }
+:root[data-scheme="light"] #schmenu .li .chk, :root[data-scheme="dark"] #schmenu .da .chk, :root:not([data-scheme]) #schmenu .au .chk { display: block; }
 /* a finger gets rows of 30px */
-@media (pointer: coarse) { .schmenu .mi { padding-top: 6px; padding-bottom: 6px; } }
+@media (pointer: coarse) { .pmenu .mi { padding-top: 6px; padding-bottom: 6px; } }
 /* on a phone the word will not fit: the button is its icon alone, the
    bevel closed at the right where the arrows' well was */
 @media (max-width: 480px) {
@@ -3027,70 +3032,75 @@ async function copyCode(b) {
   clearTimeout(b.tick);
   b.tick = setTimeout(() => b.classList.remove("done"), 1500);
 }
-// The language menu on the find strip: a choice opens this same page in
-// that language, ?lang= set and everything else in the address kept,
-// and the links carry it from there. Without script the menu shows the
-// page's language and does nothing more.
-document.addEventListener("change", e => {
-  if (!(e.target instanceof HTMLSelectElement) || !e.target.closest("#lang")) return;
-  const u = new URL(location.href);
-  u.searchParams.set("lang", e.target.value);
-  u.hash = "";
-  location.assign(u);
-});
-// The Appearance menu (PLAN.md, Appearance): a Platinum menu under its
-// button, 2px down at the button's left edge, at least as wide and kept
-// inside the window — over the button, 2px up, when the window ends
-// before the menu would. One row is inverted at a time, moved by the
-// pointer and the arrow keys alike; a click or Return picks, and
-// Escape, a press elsewhere, a scroll or the window losing the keyboard
-// puts the menu away. A pick is hubScheme's to keep (the head script).
+// The strip's two pop-up menus, Platinum both (PLAN.md, The pages in the
+// reader's language; Appearance): a menu hangs under its button, 2px
+// down at the button's left edge, at least as wide and kept inside the
+// window — over the button, 2px up, when the window ends before the
+// menu would. One row is inverted at a time, moved by the pointer and
+// the arrow keys alike; a click or Return picks, and Escape, a press
+// elsewhere, a scroll or the window losing the keyboard puts the menu
+// away.
+// A language picked opens this same page in that language, ?lang= set
+// and everything else in the address kept, and the links carry it from
+// there. An appearance picked is hubScheme's to keep (the head script).
+// Without script the language button shows the page's language and
+// does nothing more.
 (() => {
-  const wrap = document.getElementById("scheme"), menu = document.getElementById("schmenu");
-  if (!wrap || !menu || !window.hubScheme) return;
-  const btn = wrap.querySelector("button"), rows = [...menu.querySelectorAll(".mi")];
-  const on = row => { for (const r of rows) r.classList.toggle("on", r === row); };
-  const mark = () => { for (const r of rows) r.setAttribute("aria-checked", r.dataset.v === hubScheme() ? "true" : "false"); };
-  const open = () => {
-    mark();
-    menu.hidden = false;
-    const r = wrap.getBoundingClientRect();
-    menu.style.minWidth = r.width + "px";
-    // under the button, or over it when the window ends first
-    const mh = menu.offsetHeight, under = r.bottom + 2;
-    menu.style.top = (under + mh <= innerHeight - 6 || r.top - 2 - mh < 4 ? Math.max(4, Math.min(under, innerHeight - mh - 6)) : r.top - 2 - mh) + "px";
-    menu.style.left = Math.max(4, Math.min(r.left, document.documentElement.clientWidth - menu.offsetWidth - 6)) + "px";
-    on(rows.find(row => row.dataset.v === hubScheme()));
-    btn.setAttribute("aria-expanded", "true");
+  const popMenu = (wrap, menu, current, choose) => {
+    if (!wrap || !menu) return;
+    const btn = wrap.querySelector("button"), rows = [...menu.querySelectorAll(".mi")];
+    const on = row => { for (const r of rows) r.classList.toggle("on", r === row); };
+    const open = () => {
+      for (const r of rows) r.setAttribute("aria-checked", r.dataset.v === current() ? "true" : "false");
+      menu.hidden = false;
+      const r = wrap.getBoundingClientRect();
+      menu.style.minWidth = r.width + "px";
+      // under the button, or over it when the window ends first
+      const mh = menu.offsetHeight, under = r.bottom + 2;
+      menu.style.top = (under + mh <= innerHeight - 6 || r.top - 2 - mh < 4 ? Math.max(4, Math.min(under, innerHeight - mh - 6)) : r.top - 2 - mh) + "px";
+      menu.style.left = Math.max(4, Math.min(r.left, document.documentElement.clientWidth - menu.offsetWidth - 6)) + "px";
+      on(rows.find(row => row.dataset.v === current()));
+      btn.setAttribute("aria-expanded", "true");
+    };
+    const close = () => {
+      if (menu.hidden) return;
+      menu.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    };
+    const pick = row => { close(); btn.focus(); choose(row.dataset.v); };
+    btn.addEventListener("click", () => { if (menu.hidden) open(); else close(); });
+    menu.addEventListener("pointermove", e => { const row = e.target.closest(".mi"); if (row && !row.classList.contains("on")) on(row); });
+    menu.addEventListener("click", e => { const row = e.target.closest(".mi"); if (row) pick(row); });
+    document.addEventListener("pointerdown", e => { if (!wrap.contains(e.target) && !menu.contains(e.target)) close(); }, true);
+    addEventListener("blur", close);
+    addEventListener("scroll", close, { passive: true });
+    addEventListener("resize", close);
+    document.addEventListener("keydown", e => {
+      if (menu.hidden) {
+        if (document.activeElement === btn && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); open(); }
+        return;
+      }
+      const at = rows.findIndex(r => r.classList.contains("on"));
+      if (e.key === "Escape") { close(); btn.focus(); }
+      else if (e.key === "ArrowDown") on(rows[Math.min(rows.length - 1, at + 1)]);
+      else if (e.key === "ArrowUp") on(rows[Math.max(0, at - 1)]);
+      else if (e.key === "Enter" && at >= 0) pick(rows[at]);
+      else if (e.key === "Tab") { close(); return; }
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
   };
-  const close = () => {
-    if (menu.hidden) return;
-    menu.hidden = true;
-    btn.setAttribute("aria-expanded", "false");
-  };
-  const pick = row => { hubScheme(row.dataset.v); close(); btn.focus(); };
-  btn.addEventListener("click", () => { if (menu.hidden) open(); else close(); });
-  menu.addEventListener("pointermove", e => { const row = e.target.closest(".mi"); if (row && !row.classList.contains("on")) on(row); });
-  menu.addEventListener("click", e => { const row = e.target.closest(".mi"); if (row) pick(row); });
-  document.addEventListener("pointerdown", e => { if (!e.target.closest("#schmenu, #scheme")) close(); }, true);
-  addEventListener("blur", close);
-  addEventListener("scroll", close, { passive: true });
-  addEventListener("resize", close);
-  document.addEventListener("keydown", e => {
-    if (menu.hidden) {
-      if (document.activeElement === btn && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); open(); }
-      return;
-    }
-    const at = rows.findIndex(r => r.classList.contains("on"));
-    if (e.key === "Escape") { close(); btn.focus(); }
-    else if (e.key === "ArrowDown") on(rows[Math.min(rows.length - 1, at + 1)]);
-    else if (e.key === "ArrowUp") on(rows[Math.max(0, at - 1)]);
-    else if (e.key === "Enter" && at >= 0) pick(rows[at]);
-    else if (e.key === "Tab") { close(); return; }
-    else return;
-    e.preventDefault();
-    e.stopPropagation();
-  }, true);
+  const langMenu = document.getElementById("langmenu");
+  const page = langMenu && (langMenu.querySelector('.mi[aria-checked="true"]') || {}).dataset;
+  popMenu(document.getElementById("lang"), langMenu, () => page ? page.v : "", v => {
+    if (page && v === page.v) return;
+    const u = new URL(location.href);
+    u.searchParams.set("lang", v);
+    u.hash = "";
+    location.assign(u);
+  });
+  if (window.hubScheme) popMenu(document.getElementById("scheme"), document.getElementById("schmenu"), () => hubScheme(), v => { hubScheme(v); });
 })();
 </script>
 {{if eq .Page "frame"}}<script>
@@ -6137,17 +6147,21 @@ document.addEventListener("change", e => {
 {{define "find"}}<form class="find" id="find" action="/search" method="get">{{if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}<input type="text" name="q" value="{{.Query}}" placeholder="{{T "find"}}" aria-label="{{T "find"}}" maxlength="200" enterkeyhint="search" autocomplete="off"><button class="btn" type="submit">{{T "search"}}</button>{{if .PushKey}}<button type="button" class="btn bell" id="notify" aria-pressed="false" title="{{T "notify.off"}}" data-key="{{.PushKey}}" disabled>{{template "bell"}}</button>{{end}}{{template "lang" .}}</form>
 {{end}}
 
-{{/* The language menu, the shared pop-up: at the end of the find strip,
-     and at the right end of a thread page's top strip, which has no find
-     strip, across from Feed. One on a page, so the change listener finds
-     it by id. */}}
-{{define "lang"}}<span class="popup lang" id="lang"><select aria-label="{{T "language"}}" title="{{T "language"}}"><option value="en"{{if eq .L.Code "en"}} selected{{end}}>English</option><option value="zh"{{if eq .L.Code "zh"}} selected{{end}}>中文</option><option value="ja"{{if eq .L.Code "ja"}} selected{{end}}>日本語</option></select><span class="well"><i><b></b></i></span></span>{{template "appear" .}}{{template "appearmenu" .}}{{end}}
+{{/* The language menu, the shared pop-up's frame round a button: at the
+     end of the find strip, and at the right end of a thread page's top
+     strip, which has no find strip, across from Feed. Its list is a
+     Platinum menu ("langmenu"): a check mark beside the page's language,
+     a name on each row and no icon (Livid, 2026-11-12: "language also a
+     platinum menu, no icon needed for language options"). One on a
+     page, found by id. Appearance comes with it. */}}
+{{define "lang"}}<span class="popup lang" id="lang"><button type="button" aria-label="{{T "language"}}" title="{{T "language"}}" aria-haspopup="menu" aria-expanded="false" aria-controls="langmenu"><span class="nm">{{if eq .L.Code "zh"}}中文{{else if eq .L.Code "ja"}}日本語{{else}}English{{end}}</span></button><span class="well"><i><b></b></i></span></span>{{template "appear" .}}{{template "langmenu" .}}{{template "appearmenu" .}}{{end}}
 
 {{/* Appearance (PLAN.md): the button, which shows the reader's choice by
      the stylesheet alone, and the Platinum menu it opens, one of each on
      a page. The words are the system's own for the same three. */}}
 {{define "appear"}}<span class="popup scheme" id="scheme"><button type="button" aria-label="{{T "appearance"}}" title="{{T "appearance"}}" aria-haspopup="menu" aria-expanded="false" aria-controls="schmenu"><span class="sci">{{template "g-sun"}}{{template "g-moon"}}{{template "g-half"}}</span><span class="nm"><span class="li">{{T "appearance.light"}}</span><span class="da">{{T "appearance.dark"}}</span><span class="au">{{T "appearance.auto"}}</span></span></button><span class="well"><i><b></b></i></span></span>{{end}}
-{{define "appearmenu"}}<span class="schmenu" id="schmenu" role="menu" aria-label="{{T "appearance"}}" hidden><button type="button" class="mi li" role="menuitemradio" data-v="light"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-sun"}}</span>{{T "appearance.light"}}</button><button type="button" class="mi da" role="menuitemradio" data-v="dark"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-moon"}}</span>{{T "appearance.dark"}}</button><button type="button" class="mi au" role="menuitemradio" data-v="auto"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-half"}}</span>{{T "appearance.auto"}}</button></span>{{end}}
+{{define "langmenu"}}<span class="pmenu" id="langmenu" role="menu" aria-label="{{T "language"}}" hidden><button type="button" class="mi" role="menuitemradio" aria-checked="{{if eq .L.Code "en"}}true{{else}}false{{end}}" data-v="en" lang="en"><span class="chk">{{template "g-check"}}</span>English</button><button type="button" class="mi" role="menuitemradio" aria-checked="{{if eq .L.Code "zh"}}true{{else}}false{{end}}" data-v="zh" lang="zh-Hans"><span class="chk">{{template "g-check"}}</span>中文</button><button type="button" class="mi" role="menuitemradio" aria-checked="{{if eq .L.Code "ja"}}true{{else}}false{{end}}" data-v="ja" lang="ja"><span class="chk">{{template "g-check"}}</span>日本語</button></span>{{end}}
+{{define "appearmenu"}}<span class="pmenu icons" id="schmenu" role="menu" aria-label="{{T "appearance"}}" hidden><button type="button" class="mi li" role="menuitemradio" data-v="light"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-sun"}}</span>{{T "appearance.light"}}</button><button type="button" class="mi da" role="menuitemradio" data-v="dark"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-moon"}}</span>{{T "appearance.dark"}}</button><button type="button" class="mi au" role="menuitemradio" data-v="auto"><span class="chk">{{template "g-check"}}</span><span class="sci">{{template "g-half"}}</span>{{T "appearance.auto"}}</button></span>{{end}}
 {{define "g-sun"}}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path class="g" d="M6 5h1v1h-1zM5 6h1v1h-1z"/><path class="f" d="M6 4h4v1h-4zM4 5h2v1h-2zM7 5h5v1h-5zM4 6h1v1h-1zM6 6h6v1h-6zM4 7h8v1h-8zM4 8h8v1h-8zM4 9h6v1h-6zM11 9h1v1h-1zM4 10h5v1h-5zM10 10h2v1h-2zM6 11h4v1h-4z"/><path class="s" d="M10 9h1v1h-1zM9 10h1v1h-1z"/><path class="k" d="M7 0h2v1h-2zM1 1h1v1h-1zM7 1h2v1h-2zM14 1h1v1h-1zM2 2h1v1h-1zM13 2h1v1h-1zM6 3h4v1h-4zM4 4h2v1h-2zM10 4h2v1h-2zM3 5h1v1h-1zM12 5h1v1h-1zM3 6h1v1h-1zM12 6h1v1h-1zM0 7h2v1h-2zM3 7h1v1h-1zM12 7h1v1h-1zM14 7h2v1h-2zM0 8h2v1h-2zM3 8h1v1h-1zM12 8h1v1h-1zM14 8h2v1h-2zM3 9h1v1h-1zM12 9h1v1h-1zM3 10h1v1h-1zM12 10h1v1h-1zM4 11h2v1h-2zM10 11h2v1h-2zM6 12h4v1h-4zM2 13h1v1h-1zM13 13h1v1h-1zM1 14h1v1h-1zM7 14h2v1h-2zM14 14h1v1h-1zM7 15h2v1h-2z"/></svg>{{end}}
 {{define "g-moon"}}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path class="m" d="M6 2h2v1h-2zM4 3h3v1h-3zM3 4h3v1h-3zM3 5h2v1h-2zM2 6h3v1h-3zM2 7h3v1h-3zM2 8h3v1h-3zM2 9h4v1h-4zM3 10h4v1h-4zM12 10h1v1h-1zM3 11h5v1h-5zM11 11h2v1h-2zM4 12h8v1h-8zM6 13h4v1h-4z"/><path class="k" d="M6 1h4v1h-4zM4 2h2v1h-2zM8 2h1v1h-1zM3 3h1v1h-1zM7 3h1v1h-1zM2 4h1v1h-1zM6 4h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM1 6h1v1h-1zM5 6h1v1h-1zM1 7h1v1h-1zM5 7h1v1h-1zM1 8h1v1h-1zM5 8h1v1h-1zM13 8h1v1h-1zM1 9h1v1h-1zM6 9h1v1h-1zM12 9h2v1h-2zM2 10h1v1h-1zM7 10h1v1h-1zM11 10h1v1h-1zM13 10h1v1h-1zM2 11h1v1h-1zM8 11h3v1h-3zM13 11h1v1h-1zM3 12h1v1h-1zM12 12h1v1h-1zM4 13h2v1h-2zM10 13h2v1h-2zM6 14h4v1h-4z"/></svg>{{end}}
 {{define "g-half"}}<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path class="w" d="M5 2h3v1h-3zM3 3h5v1h-5zM2 4h6v1h-6zM2 5h6v1h-6zM2 6h6v1h-6zM2 7h6v1h-6zM2 8h6v1h-6zM2 9h6v1h-6zM2 10h6v1h-6zM2 11h6v1h-6zM3 12h5v1h-5zM5 13h3v1h-3z"/><path class="k" d="M5 1h6v1h-6zM3 2h2v1h-2zM8 2h5v1h-5zM2 3h1v1h-1zM8 3h6v1h-6zM1 4h1v1h-1zM8 4h7v1h-7zM1 5h1v1h-1zM8 5h7v1h-7zM1 6h1v1h-1zM8 6h7v1h-7zM1 7h1v1h-1zM8 7h7v1h-7zM1 8h1v1h-1zM8 8h7v1h-7zM1 9h1v1h-1zM8 9h7v1h-7zM1 10h1v1h-1zM8 10h7v1h-7zM1 11h1v1h-1zM8 11h7v1h-7zM2 12h1v1h-1zM8 12h6v1h-6zM3 13h2v1h-2zM8 13h5v1h-5zM5 14h6v1h-6z"/></svg>{{end}}
