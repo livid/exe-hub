@@ -2492,6 +2492,18 @@ func (s *Store) ProfileFeedNewer(author, after string, limit int) ([]FeedPost, e
 	return s.scanFeed(rows)
 }
 
+// ProfileRoots is the newest limit posts author began — the threads,
+// never the replies — as a feed reader takes them (PLAN.md, Feeds).
+func (s *Store) ProfileRoots(author string, limit int) ([]FeedPost, error) {
+	rows, err := s.db.Query(feedQuery+`WHERE p.author = ? AND p.reply_to = '' ORDER BY p.received DESC, p.id DESC LIMIT ?`,
+		author, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanFeed(rows)
+}
+
 // ---- the signed-in reader's desk (PLAN.md) ----
 
 // Bookmarks is the posts author (a profile id) keeps, the newest

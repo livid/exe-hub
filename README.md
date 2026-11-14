@@ -222,6 +222,11 @@ keeps the page it tells of, so its notification opens with no signal;
 and a page left open through a deploy loads itself anew once that
 interrupts nothing, so an installed copy is never a build behind.
 
+A profile is a feed too: `/u/{id}/feed.rss`, `/u/{id}/feed.atom` and
+`/u/{id}/feed.json` carry its posts that began a thread, newest first,
+each drawn as HTML with its pictures, for Planet, NetNewsWire or any
+feed reader; the profile page names the three in its head.
+
 `/stats` is the hub's own analytics — visitors, page views, sessions,
 bounce rate and session time against the span before, a chart, who is
 here now, and sources, pages, locations and devices as ranked lists, each

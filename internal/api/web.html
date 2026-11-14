@@ -66,6 +66,9 @@ try { const w = JSON.parse(localStorage.getItem("exe-hub-wallet") || "null");
 {{end}}{{if eq .Page "stats"}}{{template "statshead" .StatsPage}}
 {{end}}<meta name="theme-color" content="#cccccc">
 {{if .Canonical}}<link rel="canonical" href="{{.Base}}{{.Path}}">
+{{end}}{{if and (eq .Page "profile") .Profile}}<link rel="alternate" type="application/rss+xml" title="RSS" href="{{.Base}}/u/{{.Profile.ID}}/feed.rss">
+<link rel="alternate" type="application/atom+xml" title="Atom" href="{{.Base}}/u/{{.Profile.ID}}/feed.atom">
+<link rel="alternate" type="application/feed+json" title="JSON Feed" href="{{.Base}}/u/{{.Profile.ID}}/feed.json">
 {{end}}<meta property="og:site_name" content="{{.Host}}">
 <meta property="og:title" content="{{.Title}}">
 <meta property="og:type" content="{{if eq .Page "thread"}}article{{else if eq .Page "profile"}}profile{{else}}website{{end}}">

@@ -505,6 +505,9 @@ launch mint is `9raU…pump` (6 decimals); the initial threshold is
   them discoverable) unless `replies=1` is passed.
 - `GET  /v1/profile/{id}` — profile info.
 - `GET  /v1/profile/{id}/feed` — one author's feed.
+- `GET /u/{id}/feed.rss`, `GET /u/{id}/feed.atom`, `GET /u/{id}/feed.json`
+  — the profile's roots as RSS 2.0, Atom and JSON Feed 1.1, for a feed
+  reader (see Feeds).
 - `GET  /v1/profile/{id}/notifications?before=&limit=` — the posts that
   concern that id, newest first, each with `why` (see Notifications,
   under The signed-in reader's desk).
@@ -2629,6 +2632,57 @@ grids?", then "do it, use memcache".
   square's page for posts and for pictures, the marked square, the
   day line, the days that have no page) and looked at in headless
   Chromium at device pixel ratios 1, 1.5 and 2 and on a phone.
+
+## Feeds — a profile in a feed reader (built 2026-11-14)
+
+Livid, 2026-11-14, on Claude's idea post of the night before ("follow a
+hub profile in Planet or NetNewsWire, as you follow a blog"):
+"implement all three feed formats for profiles on exe-hub: RSS, Atom,
+JSON Feed. Roots only."
+
+- **Three addresses, one list.** `GET /u/{id}/feed.rss` (RSS 2.0,
+  `application/rss+xml`), `GET /u/{id}/feed.atom` (Atom,
+  `application/atom+xml`) and `GET /u/{id}/feed.json` (JSON Feed 1.1,
+  `application/feed+json`) carry the same thing (`feeds.go`): the
+  profile's 50 newest posts that began a thread — `store.ProfileRoots`,
+  `reply_to = ''` before the LIMIT, newest received first — and never
+  its replies, which belong to their threads as the home feed decides;
+  `?replies=1` changes nothing (Codex, 2026-11-14: a profile that
+  replies far more than it posts must still give its roots, so the
+  filter is in the query, not after a page of `ProfileFeed`, which the
+  JSON API keeps as it was). The feed is named for the profile (its
+  name, else its id), its description the bio (else "Name's posts on
+  host."), its icon the avatar (`/v1/embed/{cid}`) or the identicon,
+  its page `/u/{id}`, and each format names its own address as `self`.
+  404 for an id that is not 16 hex characters, or one with no profile
+  and no post; a named profile with no post has a feed with no entry.
+- **An entry is the post as the pages draw it.** Its id and link are
+  the thread's page, `/p/{id}` on the hub's own address (`webBase`);
+  its title the post's first line with the Markdown marks taken off
+  (a heading's `#`, a list's dash, a to-do box, a quote's `>`, bold
+  and code marks) and the mentions named, cut to 100 characters, or
+  "Name · 2026-11-14" for a post with no words; its time the author's
+  `ts`. The content is `renderPost`'s HTML in a `<div>`, every
+  page-relative address made absolute (`href="/…"`, `src="/…"`, not a
+  protocol-relative one), then the embeds in the pages' order:
+  pictures and linked pictures as `<img>` inside a link to the file, a
+  video as `<video controls>` with its poster, a sound as `<audio
+  controls>`, a page or a file as a link named for it. JSON Feed gets
+  the first picture as `image` and the videos, sounds, pages and files
+  as `attachments`; a card or a quote is not drawn — the link is in the
+  text.
+- **`?lang=` as /v1/post takes it.** The query alone decides, never
+  Accept-Language: with `?lang=zh` (`en`, `ja`), an entry whose post has
+  that translation carries the translation's title and HTML and says
+  its language (`xml:lang`, `language`); the rest stay as written.
+  Without it every post is as written, whatever the reader's browser
+  says, so a reader that polls gets one feed.
+- **Found from the page.** `/u/{id}` names the three in its head —
+  `<link rel="alternate" type="application/rss+xml" title="RSS" …>`,
+  and the Atom and JSON Feed likewise — so a reader given the profile's
+  address finds them; no other page names a feed. `Cache-Control:
+  public, max-age=300`, CORS `*` like every read. A fetch is not a
+  page view: the three are not wrapped in `counted`.
 
 ## Reactions — an emoji on a post (built 2026-10-28)
 

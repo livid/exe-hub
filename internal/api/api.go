@@ -204,6 +204,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pictures", s.counted("pictures", s.handlePicturesPage))
 	mux.HandleFunc("GET /u/{id}/pictures", s.counted("pictures", s.handleProfilePicturesPage))
 	mux.HandleFunc("GET /u/{id}/pictures/{day}", s.counted("pictures", s.handleProfilePicturesDayPage))
+	// a profile as a feed reader takes it (feeds.go): not page views
+	mux.HandleFunc("GET /u/{id}/feed.rss", s.handleProfileRSS)
+	mux.HandleFunc("GET /u/{id}/feed.atom", s.handleProfileAtom)
+	mux.HandleFunc("GET /u/{id}/feed.json", s.handleProfileJSONFeed)
 	mux.HandleFunc("GET /u/{id}/{day}", s.counted("profile", s.handleProfileDayPage))
 	mux.HandleFunc("GET /archives/{$}", func(w http.ResponseWriter, r *http.Request) {
 		to := *r.URL
