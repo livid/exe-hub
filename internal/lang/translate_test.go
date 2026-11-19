@@ -287,6 +287,47 @@ func TestTranslateSetsPunctuation(t *testing.T) {
 	}
 }
 
+// TestVerbatim: the model composes what the post spelled decomposed —
+// an e and a combining accent come back as é, a span Check refuses — so
+// the post's own code spans go back in where they read the same,
+// in order, and nothing else is let through (the 2026-11-19 Unicode
+// post, a2f34792, refused three times over).
+func TestVerbatim(t *testing.T) {
+	const (
+		dec = "e\u0301" // é as the post wrote it
+		pre = "\u00e9"  // é as the model writes it
+	)
+	post := "Decomposed `" + dec + "` and `❤\ufe0f` stay, see https://a.example/x."
+	answer := "分解的 `" + pre + "` 和 `❤\ufe0f` 保留，见 https://a.example/x。"
+	want := "分解的 `" + dec + "` 和 `❤\ufe0f` 保留，见 https://a.example/x。"
+	if got := Verbatim(post, answer); got != want {
+		t.Fatalf("Verbatim = %+q, want %+q", got, want)
+	}
+	if err := Check(post, answer, "zh-Hans"); err == nil {
+		t.Fatal("Check took the composed spans: the test proves nothing")
+	}
+	// the same é both ways in one post: put back in the post's order
+	both := "Compare `" + dec + "` with `" + pre + "`."
+	if got := Verbatim(both, "比较 `"+pre+"` 和 `"+pre+"`。"); got != "比较 `"+dec+"` 和 `"+pre+"`。" {
+		t.Errorf("both forms = %+q", got)
+	}
+	// a span changed in more than its encoding, or one too many, is Check's
+	for _, out := range []string{
+		"分解的 `e` 和 `❤\ufe0f` 保留，见 https://a.example/x。",
+		"分解的 `" + pre + "` `" + pre + "` 和 `❤\ufe0f` 保留，见 https://a.example/x。",
+		"分解的 `" + pre + "` 和 `❤` 保留，见 https://a.example/x。",
+	} {
+		if err := Check(post, Verbatim(post, out), "zh-Hans"); err == nil {
+			t.Errorf("Verbatim let %+q through", out)
+		}
+	}
+	// and the model's answer, through Translate, is kept as the post spells it
+	f := &fakeOllama{levels: true, answer: func(string) (int, string) { return 200, answer }}
+	if out, err := newFake(t, f).Translate(context.Background(), post, "en", "zh-Hans", ""); err != nil || out != want {
+		t.Fatalf("Translate = %+q, %v", out, err)
+	}
+}
+
 // TestTidy: at start the rule runs over what was kept before it, and
 // rewrites only a translation it changes that still passes Check.
 func TestTidy(t *testing.T) {

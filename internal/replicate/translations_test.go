@@ -170,6 +170,24 @@ func TestPullTranslations(t *testing.T) {
 	}
 }
 
+// TestPullTranslationComposed: a peer's translation that has a code
+// span in composed form, where the post spelled it decomposed, is kept
+// with the post's own spelling, as this hub's translator would have
+// kept it (lang.Verbatim), not refused for a span that reads the same.
+func TestPullTranslationComposed(t *testing.T) {
+	r := newRig(t)
+	peer := newServingHub(t)
+	id := r.post("Test a decomposed `e\u0301` and copy it back.", "en", r.st, peer.st)
+	peer.st.SetTranslation(id, "zh-Hans", "测试一个分解的 `\u00e9`，再把它复制回来。", "glm", true)
+	if err := r.p.pullTranslations(peer.peer(0)); err != nil {
+		t.Fatal(err)
+	}
+	trs, _ := r.st.Translations([]string{id}, "zh-Hans")
+	if got := trs[id].Text; got != "测试一个分解的 `e\u0301`，再把它复制回来。" {
+		t.Errorf("taken = %+q, want the post's own span", got)
+	}
+}
+
 // TestPullTranslationsOldPeerAndBadPage: a peer from before
 // /v1/translations answers 404 and is left alone, no error; a page
 // signed by another key, or for another purpose, is refused whole.

@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/text/language"
 	"golang.org/x/text/language/display"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Targets are the languages the hub keeps every post in (see PLAN.md,
@@ -94,11 +95,43 @@ func (d *Model) Translate(ctx context.Context, text, from, to, note string) (str
 	if err != nil {
 		return "", err
 	}
-	out := Tidy(to, strings.TrimSpace(answer)) // the model's one habit, set right by rule
+	out := Verbatim(text, Tidy(to, strings.TrimSpace(answer))) // the model's habits, set right by rule
 	if err := Check(text, out, to); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrAnswer, err)
 	}
 	return out, nil
+}
+
+// Verbatim sets the post's own code spans back into out where out has
+// them encoded another way: the same characters, as Unicode counts
+// canonical equivalence, in other code points. The model answers in
+// composed form whatever it is given, so a post about Unicode that wrote
+// an e and a combining accent in backticks came back with the one é
+// every time, a span Check holds different, and the post was never
+// translated (2026-11-19). The post's bytes are what a code span stands
+// for, so they go back in: the spans that read alike are taken in order,
+// the post's first for out's first, and only where out has as many of
+// them as the post; a span gained, lost or changed in anything more is
+// left for Check. Links need no such care: card.URL never takes a
+// combining mark into one.
+func Verbatim(text, out string) string {
+	own, has := map[string][]string{}, map[string]int{}
+	for _, s := range card.Code.FindAllString(text, -1) {
+		k := norm.NFC.String(s)
+		own[k] = append(own[k], s)
+	}
+	for _, s := range card.Code.FindAllString(out, -1) {
+		has[norm.NFC.String(s)]++
+	}
+	next := map[string]int{}
+	return card.Code.ReplaceAllStringFunc(out, func(s string) string {
+		k := norm.NFC.String(s)
+		if has[k] != len(own[k]) {
+			return s
+		}
+		next[k]++
+		return own[k][next[k]-1]
+	})
 }
 
 // Check says why out is no translation of text to keep, or nil. It

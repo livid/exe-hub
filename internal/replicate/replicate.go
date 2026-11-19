@@ -333,7 +333,7 @@ func (p *Puller) take(hub string, t store.SharedTranslation) taking {
 	if from == t.Lang {
 		return passed // the post is in that language already
 	}
-	t.Text = lang.Tidy(t.Lang, t.Text) // the punctuation rule for its language, as the maker would have run it
+	t.Text = lang.Verbatim(src, lang.Tidy(t.Lang, t.Text)) // the punctuation rule for its language and the post's own spans, as the maker would have run them
 	if err := lang.Check(src, t.Text, t.Lang); err != nil {
 		log.Printf("replicate %s: translation of %s to %s refused: %v", hub, t.Post, t.Lang, err)
 		return passed
@@ -856,7 +856,7 @@ func (p *Puller) takeSummary(hub string, m store.SharedSummary) taking {
 		if orig.Lang == m.Lang {
 			return passed
 		}
-		m.Text = lang.Tidy(m.Lang, m.Text)
+		m.Text = lang.Verbatim(orig.Text, lang.Tidy(m.Lang, m.Text))
 		if err := lang.Check(orig.Text, m.Text, m.Lang); err != nil {
 			log.Printf("replicate %s: summary of %s at %d into %s refused: %v", hub, m.Post, m.Step, m.Lang, err)
 			return passed

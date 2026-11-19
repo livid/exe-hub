@@ -3927,6 +3927,23 @@ the original one press away. Asked by Livid 2026-09-19.
   again (newest wins on their side); a taken row is set right in place
   and left for its maker to serve again. The seven were made again on
   the host once (`-retranslate -to ja`) to carry them over.
+- **Code spans as the post spells them** (`lang.Verbatim`,
+  2026-11-19). The model answers in Unicode's composed form whatever it
+  is given: a reply about combining marks wrote `` `é` `` as an e and
+  U+0301, the model gave back the one é every time, even told to copy
+  it byte for byte, and `Check`, which holds code spans to the post's
+  bytes, refused all three tries in both languages. So before `Check`,
+  in `Translate` and on the taking side of replication, the post's own
+  code spans go back in where the translation's read the same as
+  Unicode's canonical equivalence counts it (NFC), the ones that read
+  alike taken in order, and only where the translation has as many of
+  them as the post; a span gained, lost or changed in anything more is
+  still refused. Links need nothing of the kind: `card.URL` never takes a
+  combining mark into one. A scan of the host hub that day found three
+  posts given up after three tries, every one a `Check` refusal the
+  model made the same way each try: this one, and two with a link
+  changed or backticks added, which an editor's note set right at once
+  (`-retranslate -note`).
 - **One translation again** (`exe-hub -retranslate <post> [-to <lang>]
   [-note "…"]`). The shape check cannot judge words, and a read found
   one clause put wrong: "six columns, five set right, five rows", five
