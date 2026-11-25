@@ -54,6 +54,7 @@ func NewMedia(conv *media.Converter, dir string, maxBytes int64) (*Media, error)
 func (m *Media) Info() map[string]any {
 	return map[string]any{
 		"max_mb":      m.MaxBytes >> 20,
+		"max_out_mb":  m.Conv.Cap >> 20,
 		"max_video_s": int(m.Conv.MaxVideo.Seconds()),
 		"max_audio_s": int(m.Conv.MaxAudio.Seconds()),
 		"encoder":     m.Conv.Encoder(),

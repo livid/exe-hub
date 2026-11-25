@@ -7,6 +7,7 @@
 package replicate
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -37,8 +38,8 @@ import (
 const (
 	interval  = 30 * time.Second
 	pageLimit = 200
-	embedMax  = 8 << 20   // mirrors the upload cap
-	healMax   = time.Hour // the longest wait between two rounds for one file
+	embedMax  = media.MaxOutput // the largest embed a hub makes: a converted video
+	healMax   = time.Hour       // the longest wait between two rounds for one file
 )
 
 type Puller struct {
@@ -531,7 +532,7 @@ func (p *Puller) mirror(base, cid string, avatar, late bool) error {
 	if err != nil || len(body) > embedMax {
 		return errors.New("oversized or truncated")
 	}
-	got, err := p.IPFS.Add(strings.NewReader(string(body)), envelope.MsgID(body))
+	got, err := p.IPFS.Add(bytes.NewReader(body), envelope.MsgID(body))
 	if err != nil {
 		var ue *url.Error
 		if errors.As(err, &ue) {

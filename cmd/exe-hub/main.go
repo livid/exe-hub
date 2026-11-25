@@ -346,12 +346,13 @@ func serve(cfgPath, stateDir, pidPath string) error {
 		} else {
 			conv.MaxVideo = time.Duration(m.MaxVideo) * time.Second
 			conv.MaxAudio = time.Duration(m.MaxAudio) * time.Second
+			conv.Cap = int64(m.MaxOutMB) << 20
 			conv.Log = log.Printf
 			if srv.Media, err = api.NewMedia(conv, filepath.Join(stateDir, "media"), int64(m.MaxMB)<<20); err != nil {
 				return err
 			}
 			go srv.RunMedia()
-			log.Printf("media: converting with %s (%s), inputs to %d MB", conv.Encoder(), conv.FFmpeg, m.MaxMB)
+			log.Printf("media: converting with %s (%s), inputs to %d MB, outputs to %d MB", conv.Encoder(), conv.FFmpeg, m.MaxMB, m.MaxOutMB)
 		}
 	}
 	// Stats: the pages' own analytics (PLAN.md, Stats) — page views

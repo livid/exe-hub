@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"exehub/internal/accesslog"
+	"exehub/internal/media"
 )
 
 // MintReq is one acceptable holding: at least MinAmount of Mint.
@@ -111,6 +112,7 @@ type Media struct {
 	FFprobe  string `json:"ffprobe,omitempty"`     // default: ffprobe on PATH
 	Encoder  string `json:"encoder,omitempty"`     // "auto" (default), "nvenc" or "x264"
 	MaxMB    int    `json:"max_mb,omitempty"`      // an input's size limit; default 256
+	MaxOutMB int    `json:"max_out_mb,omitempty"`  // a converted video's or sound's size limit; default and most 64
 	MaxVideo int    `json:"max_video_s,omitempty"` // the longest video or animation, seconds; default 180
 	MaxAudio int    `json:"max_audio_s,omitempty"` // the longest sound, seconds; default 600
 }
@@ -163,6 +165,12 @@ func Load(path string) (*Config, error) {
 	if m := c.Media; m != nil {
 		if m.MaxMB <= 0 {
 			m.MaxMB = 256
+		}
+		if m.MaxOutMB <= 0 {
+			m.MaxOutMB = media.MaxOutput >> 20
+		}
+		if m.MaxOutMB > media.MaxOutput>>20 {
+			return nil, fmt.Errorf("media.max_out_mb is at most %d: a peer mirrors no bigger embed", media.MaxOutput>>20)
 		}
 		if m.MaxVideo <= 0 {
 			m.MaxVideo = 180

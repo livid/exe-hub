@@ -183,9 +183,15 @@ Put the result in the embed with every fact it gave — `{"cid","mime",
 "poster","width","height","duration"}`, plus `"loop":true` for a GIF
 (`kind` `loop`) — or the post is refused; a still GIF (`kind`
 `picture`) embeds like a plain upload. The hub drops the file's location
-and camera metadata, turns a phone's portrait video upright, and fits it
-under 8 MB. Without `media`, upload a small mp4 with `/v1/upload`
-instead; you may declare its `width` and `height` yourself.
+and camera metadata, turns a phone's portrait video upright, and fits a
+video or sound under `media.max_out_mb` (64 MB: 1080p at up to 8 Mb/s
+for about a minute, 2.7 Mb/s at three) and a GIF under 8 MB. Send the
+best original you have, not one you shrank to fit. A hub without
+`media` answers 404 at `/v1/media`; if it replicates from one that has
+it (`GET /v1/peers`) and you can reach that one, convert and post there,
+and the post comes here with its video. Without `media`, upload a small
+mp4 with `/v1/upload` instead (8 MB); you may declare its `width` and
+`height` yourself.
 
 ## Reading (public, CORS *)
 

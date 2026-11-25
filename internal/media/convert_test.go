@@ -288,21 +288,63 @@ func TestConvertFitsTheCap(t *testing.T) {
 func TestTierFit(t *testing.T) {
 	for _, c := range []struct {
 		w, h   int
-		d      float64
+		bps    int
 		ww, wh int
 	}{
-		{3840, 2160, 20, 1920, 1080},
-		{2160, 3840, 20, 1080, 1920},
-		{1920, 1080, 45, 1280, 720},
-		{1080, 1920, 90, 480, 854},
-		{640, 480, 10, 640, 480}, // never enlarged
-		{3000, 1000, 10, 1920, 640},
-		{721, 405, 50, 722, 406}, // even sides
+		{3840, 2160, 8_000_000, 1920, 1080},
+		{2160, 3840, 2_000_000, 1080, 1920},
+		{1920, 1080, 1_999_999, 1280, 720},
+		{1080, 1920, 999_999, 480, 854},
+		{640, 480, 8_000_000, 640, 480}, // never enlarged
+		{3000, 1000, 8_000_000, 1920, 640},
+		{721, 405, 1_500_000, 722, 406}, // even sides
 	} {
-		long, short, _ := Tier(c.d)
+		long, short, _ := Tier(c.bps)
 		if w, h := Fit(c.w, c.h, long, short); w != c.ww || h != c.wh {
-			t.Errorf("%dx%d at %gs: %dx%d, want %dx%d", c.w, c.h, c.d, w, h, c.ww, c.wh)
+			t.Errorf("%dx%d at %d b/s: %dx%d, want %dx%d", c.w, c.h, c.bps, w, h, c.ww, c.wh)
 		}
+	}
+}
+
+// The numbers PLAN.md gives (Media): at 64 MB every video up to three
+// minutes is 1080p, 8 Mb/s to about a minute and 60 fps while the rate
+// holds 6 Mb/s; a loop keeps the 7.6 MB cap and the boxes it had by
+// length (1080p to about 30 s, 720p to about a minute, 480p beyond).
+func TestPlan(t *testing.T) {
+	c := &Converter{Cap: MaxOutput, LoopCap: loopCap}
+	for _, k := range []struct {
+		d              float64
+		audio, loop    bool
+		limit          int64
+		short, fps     int
+		minBPS, maxBPS int
+	}{
+		{10, true, false, MaxOutput, 1080, 60, 8_000_000, 8_000_000},
+		{30, true, false, MaxOutput, 1080, 60, 8_000_000, 8_000_000},
+		{60, true, false, MaxOutput, 1080, 60, 8_000_000, 8_000_000},
+		{80, true, false, MaxOutput, 1080, 60, 6_000_000, 6_400_000},
+		{120, true, false, MaxOutput, 1080, 30, 4_050_000, 4_150_000},
+		{180, true, false, MaxOutput, 1080, 30, 2_650_000, 2_750_000},
+		{180, false, false, MaxOutput, 1080, 30, 2_750_000, 2_850_000},
+		{10, false, true, loopCap, 1080, 30, 5_600_000, 5_800_000},
+		{40, false, true, loopCap, 720, 30, 1_400_000, 1_450_000},
+		{70, false, true, loopCap, 480, 30, 800_000, 830_000},
+	} {
+		limit, _, short, vbps, abps, fps, err := c.plan(k.d, k.audio, k.loop)
+		if err != nil {
+			t.Fatalf("%gs: %v", k.d, err)
+		}
+		if limit != k.limit || short != k.short || fps != k.fps || vbps < k.minBPS || vbps > k.maxBPS || (abps > 0) != k.audio {
+			t.Errorf("%gs audio=%v loop=%v: cap %d, %dp at %d fps, %d b/s video, %d b/s sound", k.d, k.audio, k.loop, limit, short, fps, vbps, abps)
+		}
+	}
+	// a loop too long for its cap is refused by the cap it has
+	if _, _, _, _, _, _, err := c.plan(600, false, true); err == nil || !strings.Contains(err.Error(), "8 MB") {
+		t.Errorf("a 10-minute loop: %v", err)
+	}
+	c.Cap = 1 << 20
+	if _, _, _, _, _, _, err := c.plan(180, true, false); err == nil || !strings.Contains(err.Error(), "1 MB") {
+		t.Errorf("3 minutes in 1 MB: %v", err)
 	}
 }
 

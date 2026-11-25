@@ -44,9 +44,21 @@ type Converter struct {
 	NVENC, Vulkan bool
 	MaxVideo      time.Duration // longest video or animation accepted
 	MaxAudio      time.Duration // longest sound accepted
-	Cap           int64         // an output file's size limit, under the hub's 8 MB embed cap
+	Cap           int64         // a video's or sound's size limit (media.max_out_mb), at most MaxOutput
+	LoopCap       int64         // a looping or still GIF's size limit, under the hub's 8 MB picture cap
 	Log           func(format string, args ...any)
 }
+
+// MaxOutput is the largest file a converter writes, and so the largest
+// embed a hub mirrors from a peer (PLAN.md, Media).
+const MaxOutput = 64 << 20
+
+// loopCap keeps what plays by itself, or is a picture, as small as
+// pictures are: a loop is fetched whole (preload="auto").
+const loopCap = 7_600_000
+
+// sizeMB says a size limit the way the hub says its caps: 7.6e6 is 8 MB.
+func sizeMB(n int64) int64 { return (n + 1<<20 - 1) >> 20 }
 
 // Encoder names what encodes the video, for /v1/hub and the log.
 func (c *Converter) Encoder() string {
@@ -63,7 +75,7 @@ func (c *Converter) Encoder() string {
 // NVENC and the Vulkan filters with a tiny test run of each, "nvenc"
 // requires NVENC, "x264" uses the CPU alone.
 func New(ffmpeg, ffprobe, encoder string) (*Converter, error) {
-	c := &Converter{MaxVideo: 3 * time.Minute, MaxAudio: 10 * time.Minute, Cap: 7_600_000, Log: func(string, ...any) {}}
+	c := &Converter{MaxVideo: 3 * time.Minute, MaxAudio: 10 * time.Minute, Cap: MaxOutput, LoopCap: loopCap, Log: func(string, ...any) {}}
 	var err error
 	if c.FFmpeg, err = exec.LookPath(or(ffmpeg, "ffmpeg")); err != nil {
 		return nil, err
@@ -243,8 +255,8 @@ func (c *Converter) Convert(ctx context.Context, in, dir string, progress func(f
 			if err != nil {
 				return nil, err
 			}
-			if st.Size() > c.Cap {
-				return nil, errors.New("a still GIF over 8 MB: save it as a PNG or JPEG")
+			if st.Size() > c.LoopCap {
+				return nil, fmt.Errorf("a still GIF over %d MB: save it as a PNG or JPEG", sizeMB(c.LoopCap))
 			}
 			w, h := p.Video.Shown()
 			return &Result{Kind: Picture, File: in, MIME: "image/gif", Width: w, Height: h}, nil
@@ -258,14 +270,14 @@ func (c *Converter) Convert(ctx context.Context, in, dir string, progress func(f
 	return nil, errors.New("no picture or sound in this file")
 }
 
-// Tier is the largest frame a video of a given length gets, so its
-// bitrate under the cap stays watchable: 1080p up to 30 s, 720p up to a
-// minute, 480p beyond.
-func Tier(d float64) (long, short, maxBPS int) {
+// Tier is the largest frame a video gets for the rate its cap leaves it,
+// so the picture stays watchable, and the ceiling of that frame's rate:
+// 1080p from 2 Mb/s, 720p from 1 Mb/s, 480p below.
+func Tier(bps int) (long, short, maxBPS int) {
 	switch {
-	case d <= 30:
+	case bps >= 2_000_000:
 		return 1920, 1080, 8_000_000
-	case d <= 60:
+	case bps >= 1_000_000:
 		return 1280, 720, 4_000_000
 	}
 	return 854, 480, 2_000_000
@@ -278,10 +290,36 @@ func Fit(w, h, long, short int) (int, int) {
 	return even(float64(w) * f), even(float64(h) * f)
 }
 
-// budget is the bits a second the cap allows over d seconds, less the
-// mp4's own overhead.
-func (c *Converter) budget(d float64) int {
-	return int(float64(c.Cap) * 8 * 0.94 / math.Max(d, 1))
+// budget is the bits a second a size limit allows over d seconds, less
+// the mp4's own overhead.
+func budget(limit int64, d float64) int {
+	return int(float64(limit) * 8 * 0.94 / math.Max(d, 1))
+}
+
+// plan settles a video's size limit, frame box, rates and frame rate
+// from its length: the cap's rate picks the box, and 60 fps needs 6 Mb/s.
+func (c *Converter) plan(d float64, audio, loop bool) (limit int64, long, short, vbps, abps, fps int, err error) {
+	limit = c.Cap
+	if loop {
+		limit = c.LoopCap
+	}
+	if audio {
+		abps = 128_000
+		if d > 60 {
+			abps = 96_000
+		}
+	}
+	room := budget(limit, d) - abps
+	if room < 100_000 {
+		return 0, 0, 0, 0, 0, 0, fmt.Errorf("too long to fit %d MB", sizeMB(limit))
+	}
+	long, short, maxBPS := Tier(room)
+	vbps = min(maxBPS, room)
+	fps = 30
+	if !loop && vbps >= 6_000_000 {
+		fps = 60
+	}
+	return limit, long, short, vbps, abps, fps, nil
 }
 
 func (c *Converter) video(ctx context.Context, in, dir string, p *Probe, loop bool, progress func(float64)) (*Result, error) {
@@ -300,25 +338,13 @@ func (c *Converter) video(ctx context.Context, in, dir string, p *Probe, loop bo
 	if v.Width <= 0 || v.Height <= 0 || v.Width*v.Height > 8192*8192 {
 		return nil, fmt.Errorf("a %d×%d picture is out of range", v.Width, v.Height)
 	}
-	long, short, maxBPS := Tier(p.Duration)
+	limit, long, short, vbps, abps, fps, err := c.plan(p.Duration, p.Audio && !loop, loop)
+	if err != nil {
+		return nil, err
+	}
+	first := vbps
 	sw, sh := v.Shown()
 	w, h := Fit(sw, sh, long, short)
-	audio := p.Audio && !loop
-	abps := 0
-	if audio {
-		abps = 128_000
-		if p.Duration > 60 {
-			abps = 96_000
-		}
-	}
-	vbps := min(maxBPS, c.budget(p.Duration)-abps)
-	if vbps < 100_000 {
-		return nil, errors.New("too long to fit 8 MB")
-	}
-	fps := 60
-	if p.Duration > 30 || loop {
-		fps = 30
-	}
 	out := filepath.Join(dir, "out.mp4")
 	// the GPU chain decodes what phones record; anything else, or a GPU
 	// run that fails, goes through the CPU
@@ -347,21 +373,21 @@ func (c *Converter) video(ctx context.Context, in, dir string, p *Probe, loop bo
 		if err != nil {
 			return nil, err
 		}
-		if st.Size() <= c.Cap {
+		if st.Size() <= limit {
 			break
 		}
 		if try == 3 {
-			return nil, errors.New("could not fit this video in 8 MB")
+			return nil, fmt.Errorf("could not fit this video in %d MB", sizeMB(limit))
 		}
 		// overshot: aim under by the ratio it missed by, and a margin.
 		// NVENC has a floor it will not go under on grainy video (even
 		// QP 51 writes megabytes of noise), so a second miss goes to x264
-		vbps = int(float64(vbps) * float64(c.Cap) / float64(st.Size()) * 0.9)
+		vbps = int(float64(vbps) * float64(limit) / float64(st.Size()) * 0.9)
 		if try == 1 && nvenc {
 			nvenc = false
-			vbps = min(maxBPS, c.budget(p.Duration)-abps)
+			vbps = first
 		}
-		c.Log("media: %d bytes over a %d cap; again at %d b/s (nvenc=%v)", st.Size(), c.Cap, vbps, nvenc)
+		c.Log("media: %d bytes over a %d cap; again at %d b/s (nvenc=%v)", st.Size(), limit, vbps, nvenc)
 	}
 	poster := filepath.Join(dir, "poster.jpg")
 	pf := "thumbnail=n=48"
@@ -456,7 +482,7 @@ func (c *Converter) audio(ctx context.Context, in, dir string, p *Probe, progres
 		defer cancel()
 		return c.run(ctx, watch, args...)
 	}
-	abps := min(160_000, c.budget(p.Duration))
+	abps := min(160_000, budget(c.Cap, p.Duration))
 	out := filepath.Join(dir, "out.m4a")
 	if err := run(c.progress(p.Duration, progress), "-protocol_whitelist", "file", "-format_whitelist", Formats, "-i", in,
 		"-map", "0:a:0", "-vn", "-c:a", "aac", "-b:a", strconv.Itoa(abps), "-ac", "2",

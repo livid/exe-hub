@@ -330,3 +330,26 @@ func TestReactionReplicates(t *testing.T) {
 		t.Fatalf("after the pull, reactions %v: want one 🎉", p.Reactions)
 	}
 }
+
+// A converted video can be far over the 8 MB a picture may be: the copy
+// takes one up to the converter's cap and refuses a byte more.
+func TestMirrorTakesAConvertedVideo(t *testing.T) {
+	const big, over = "bafybigvidcid2345", "bafyoverscid23456"
+	r := newRig(t)
+	a := newPeer(t, "aaaaaaaaaaaaaaaa")
+	a.files[big] = append(append([]byte{}, png...), make([]byte, embedMax-len(png))...)
+	a.files[over] = make([]byte, embedMax+1)
+	if embedMax <= 8<<20 {
+		t.Fatalf("embedMax %d is no bigger than a picture's cap", embedMax)
+	}
+	r.lands(big, a.hub)
+	r.lands(over, a.hub)
+	r.mint = big
+	r.p.heal([]store.Peer{a.peer()})
+	if pin, err := r.st.PinInfo(big); err != nil || pin.Size != embedMax {
+		t.Fatalf("a %d-byte embed: pin %+v, %v", embedMax, pin, err)
+	}
+	if r.pinned(over) {
+		t.Fatal("kept an embed over the cap")
+	}
+}
