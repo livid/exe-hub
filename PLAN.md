@@ -3313,8 +3313,8 @@ ffmpeg) does not, and draws what it mirrors all the same.
   minute), and at most 8 Mb/s. The frame fits a box by that rate — 1920×1080
   from 2 Mb/s, 1280×720 from 1 Mb/s (ceiling 4 Mb/s), 854×480 below
   (ceiling 2 Mb/s); never enlarged, even sides — at up to 60 fps when the
-  rate is 6 Mb/s or more, else 30. At 64 MB every video up to 3 minutes is
-  1080p: 8 Mb/s up to about a minute, 4.1 Mb/s at 2 minutes, 2.7 Mb/s at 3.
+  rate is 6 Mb/s or more, else 30. At 64 MB every video up to 3 minutes gets
+  the 1080p box: 8 Mb/s up to about a minute, 4.1 Mb/s at 2 minutes, 2.7 Mb/s at 3.
   An easy picture comes out far under the cap: filling an 8 MB cap
   outright wrote an iPhone Air's 12 s 4K night clip as 7.25 MB at SSIM
   0.9980; cq 26 wrote 2.5 MB at 0.9969. An output over the cap is

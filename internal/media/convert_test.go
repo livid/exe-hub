@@ -350,12 +350,17 @@ func TestPlan(t *testing.T) {
 
 // MEDIA_TEST_FILE=/path/to/clip.mov go test -run ConvertFile -v converts a
 // real file and reports what came out, for trying one from a phone.
+// MEDIA_TEST_CPU=1 converts it the way a hub without a GPU does.
 func TestConvertFile(t *testing.T) {
 	in := os.Getenv("MEDIA_TEST_FILE")
 	if in == "" {
 		t.Skip("MEDIA_TEST_FILE not set")
 	}
 	c := testConverter(t)
+	if os.Getenv("MEDIA_TEST_CPU") != "" {
+		c.NVENC, c.Vulkan = false, false
+	}
+	c.Log = t.Logf
 	dir := os.Getenv("MEDIA_TEST_OUT")
 	if dir == "" {
 		dir = t.TempDir()
